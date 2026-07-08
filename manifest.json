@@ -1,0 +1,16 @@
+{
+  "name": "HELI NAV 飛行支援",
+  "short_name": "HELI NAV",
+  "description": "ヘリコプター運航向けナビゲーション補助(プロトタイプ)",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a1420",
+  "theme_color": "#0a1420",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

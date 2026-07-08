@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a1420">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>HELI NAV v6 — 飛行支援</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a1420;--panel:#101f30;--panel2:#0d1a29;--line:#1e3550;
+    --txt:#d7e3ee;--dim:#7d93a8;
+    --grn:#38e07b;--amb:#ffb02e;--mag:#ff3df5;--cyn:#3df5ff;--red:#ff5c5c;--blu:#4da3ff;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --sans:'Noto Sans JP',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--txt);font-family:var(--sans);display:flex;flex-direction:column}
+
+  header{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .logo{font-family:var(--mono);font-weight:600;letter-spacing:.18em;font-size:15px;color:var(--grn)}
+  .logo small{color:var(--dim);letter-spacing:.08em;font-weight:400;margin-left:8px;font-size:11px}
+  .clocks{margin-left:auto;display:flex;gap:16px;font-family:var(--mono);font-size:13px}
+  .clocks span b{color:var(--dim);font-weight:400;font-size:10px;margin-right:5px}
+
+  .strip{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+  .cell{flex:1 1 100px;background:var(--panel2);padding:7px 11px;min-width:96px}
+  .cell b{display:block;font-size:10px;color:var(--dim);letter-spacing:.12em;font-weight:500}
+  .cell span{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--grn)}
+  .cell.mag span{color:var(--mag)}
+  .cell.fuel span,.cell.fuel input{color:var(--amb)}
+  .cell.live span{color:var(--cyn)}
+  .cell input{width:60px;background:none;border:none;border-bottom:1px solid var(--line);color:var(--grn);font-family:var(--mono);font-size:18px;font-weight:600;outline:none}
+  .cell.timer span{color:var(--amb)}
+  .cell small{font-size:11px}
+  .livebtn{display:inline-block;margin-left:8px;background:none;border:1px solid var(--line);color:var(--dim);border-radius:4px;font-size:10px;padding:2px 8px;cursor:pointer;vertical-align:3px;font-family:var(--sans)}
+  .livebtn.on{border-color:var(--cyn);color:var(--cyn)}
+  .livetag{font-size:9px;border:1px solid var(--cyn);color:var(--cyn);border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:3px;font-family:var(--sans);display:none}
+
+  .mapwrap{position:relative;flex:1;display:flex}
+  #map{flex:1;min-height:300px;background:#08101a}
+  .maptools{position:absolute;z-index:900;right:12px;top:12px;display:flex;flex-direction:column;gap:8px}
+  .maptools button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--sans)}
+  .maptools button.on{border-color:var(--grn);color:var(--grn)}
+  .legend{position:absolute;z-index:900;left:12px;top:12px;background:rgba(13,26,41,.9);border:1px solid var(--line);border-radius:6px;padding:7px 11px;font-size:11px;display:none}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+  #dctCard{position:absolute;z-index:950;left:12px;bottom:12px;background:rgba(13,26,41,.94);
+    border:1px solid var(--cyn);border-radius:8px;padding:10px 14px;display:none;min-width:250px;
+    box-shadow:0 4px 18px rgba(0,0,0,.5)}
+  #dctCard h4{font-family:var(--mono);font-size:12px;color:var(--cyn);letter-spacing:.14em;display:flex;align-items:center}
+  #dctCard h4 button{margin-left:auto;background:none;border:1px solid var(--line);color:var(--dim);border-radius:4px;font-size:10px;padding:2px 8px;cursor:pointer}
+  .dctRow{display:flex;gap:14px;margin-top:6px}
+  .dctRow div b{display:block;font-size:9px;color:var(--dim);letter-spacing:.12em}
+  .dctRow div span{font-family:var(--mono);font-size:19px;font-weight:600;color:var(--cyn)}
+  #dctSrc{font-size:10px;color:var(--dim);margin-top:6px}
+
+  .panel{background:var(--panel);border-top:1px solid var(--line);max-height:44vh;display:flex;flex-direction:column}
+  .tabs{display:flex;border-bottom:1px solid var(--line)}
+  .tabs button{flex:1;background:none;border:none;color:var(--dim);padding:10px 4px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;font-family:var(--sans)}
+  .tabs button.active{color:var(--grn);border-bottom-color:var(--grn)}
+  .tabbody{overflow:auto;padding:12px 16px;flex:1}
+  .hint{color:var(--dim);font-size:12px;margin-bottom:8px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{color:var(--dim);font-weight:500;text-align:left;padding:6px 5px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.04em}
+  td{padding:6px 5px;border-bottom:1px solid var(--line);font-family:var(--mono);white-space:nowrap}
+  td.jp{font-family:var(--sans)}
+  td input{background:none;border:none;border-bottom:1px dashed var(--line);color:var(--txt);font-family:var(--sans);font-size:12.5px;width:86px;outline:none}
+  .del{background:none;border:1px solid var(--line);color:var(--red);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px}
+  .dct{background:none;border:1px solid var(--cyn);color:var(--cyn);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;font-family:var(--mono);margin-right:5px}
+  tr.total td{border-top:2px solid var(--line);color:var(--amb);font-weight:600}
+  .btnrow{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:9px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-family:var(--sans)}
+  .btn.go{border-color:var(--grn);color:var(--grn)}
+  .btn.stop{border-color:var(--amb);color:var(--amb)}
+  .btn.sh{border-color:var(--blu);color:var(--blu);font-size:12px;padding:7px 12px}
+  .btn:disabled{opacity:.35;cursor:default}
+  .tag{font-size:10px;border:1px solid var(--amb);color:var(--amb);border-radius:4px;padding:1px 6px;margin-left:8px;vertical-align:2px}
+  textarea#shareBox{width:100%;height:64px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--txt);font-family:var(--mono);font-size:11px;padding:8px;outline:none;display:none;margin-bottom:10px}
+  footer{padding:8px 16px;font-size:11px;color:var(--dim);background:var(--panel2);border-top:1px solid var(--line)}
+  .wp-ico{font-family:var(--mono);font-size:10px;font-weight:600;color:#fff;background:var(--mag);border-radius:4px;padding:1px 4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+  .wp-ico.dctOn{background:var(--cyn);color:#04222a}
+  .own-ico{width:14px;height:14px;border-radius:50%;background:var(--grn);border:2.5px solid #fff;box-shadow:0 0 10px rgba(56,224,123,.8)}
+  .ac-ico svg{filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))}
+  .ap-ico{font-family:var(--mono);font-size:9px;font-weight:600;color:#0a1420;background:var(--grn);border-radius:3px;padding:1px 3px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.5);opacity:.92}
+  .leaflet-popup-content-wrapper{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px}
+  .leaflet-popup-tip{background:var(--panel)}
+  .apPop{font-size:12px;min-width:190px}
+  .apPop h5{font-family:var(--mono);color:var(--grn);font-size:13px;margin-bottom:4px}
+  .apPop dl{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;margin:4px 0}
+  .apPop dt{color:var(--dim)}
+  .apPop dd{font-family:var(--mono)}
+  .apPop .note{color:var(--dim);font-size:10px;margin-top:4px}
+  .apPop .row{display:flex;gap:6px;margin-top:7px}
+  .apPop button{flex:1;background:none;border:1px solid var(--cyn);color:var(--cyn);border-radius:4px;font-size:11px;padding:4px;cursor:pointer;font-family:var(--sans)}
+  .apPop button.add{border-color:var(--mag);color:var(--mag)}
+  @media(max-width:640px){.clocks{gap:10px;font-size:11px}.cell span{font-size:15px}.cell input{font-size:15px;width:52px}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">HELI&nbsp;NAV<small>v6 PWA</small></div>
+  <div class="clocks">
+    <span><b>JST</b><span id="jst">--:--:--</span></span>
+    <span><b>UTC</b><span id="utc">--:--:--</span></span>
+  </div>
+</header>
+
+<div class="strip">
+  <div class="cell mag"><b>ROUTE DIST</b><span id="dDist">0.0 <small>NM</small></span></div>
+  <div class="cell"><b>TAS</b><input id="tas" type="number" value="100"> <span><small>kt</small></span></div>
+  <div class="cell"><b>風向 (真)</b><input id="wDir" type="number" value="270"> <span><small>°T</small></span></div>
+  <div class="cell"><b>風速</b><input id="wSpd" type="number" value="0"> <span><small>kt</small></span></div>
+  <div class="cell"><b>偏差 (西偏)</b><input id="varW" type="number" step="0.5" value="8"> <span><small>°W</small></span></div>
+  <div class="cell mag"><b>ROUTE ETE<span class="livetag" id="tagEte">LIVE</span></b><span id="dEte">--:--</span></div>
+  <div class="cell timer"><b>FLIGHT TIME</b><span id="dTimer">00:00:00</span></div>
+</div>
+<div class="strip">
+  <div class="cell live"><b>GS 実測 (GPS)<button class="livebtn" id="btnLive">連動 OFF</button></b><span id="dGsLive">—</span></div>
+  <div class="cell fuel"><b>燃料流量 FF</b><input id="ff" type="number" value="120"> <span><small>L/h</small></span></div>
+  <div class="cell fuel"><b>搭載燃料 FOB</b><input id="fob" type="number" value="500"> <span><small>L</small></span></div>
+  <div class="cell fuel"><b>必要燃料<span class="livetag" id="tagFuel">LIVE</span></b><span id="dReq">0 <small>L</small></span></div>
+  <div class="cell fuel"><b>着陸時残 (予測)</b><span id="dRem">— <small>L</small></span></div>
+  <div class="cell fuel"><b>ENDURANCE</b><span id="dEnd">--:--</span></div>
+</div>
+
+<div class="mapwrap">
+  <div id="map"></div>
+  <div class="maptools">
+    <button id="btnAsp">◍ 空域</button>
+    <button id="btnAp">✈ 飛行場</button>
+    <button id="btnRain">☂ 雨雲</button>
+    <button id="btnBase">地図: 淡色</button>
+    <button id="btnGPS">◎ GPS</button>
+    <button id="btnClear">経路クリア</button>
+  </div>
+  <div class="legend" id="legend">
+    <div><i style="background:var(--blu)"></i>管制圏 <span style="color:var(--dim)">(概略・半径9km)</span></div>
+    <div><i style="background:var(--amb)"></i>情報圏 <span style="color:var(--dim)">(概略・半径9km)</span></div>
+  </div>
+
+  <div id="dctCard">
+    <h4>D→ <span id="dctName" style="margin-left:6px"></span><button id="dctOff">解除</button></h4>
+    <div class="dctRow">
+      <div><b>MC</b><span id="dctMc">---°</span></div>
+      <div><b>MH (WCA)</b><span id="dctMh">---°</span></div>
+    </div>
+    <div class="dctRow">
+      <div><b>DIST</b><span id="dctDist">--.-</span></div>
+      <div><b>GS</b><span id="dctGs">---</span></div>
+      <div><b>ETE</b><span id="dctEte">--:--</span></div>
+    </div>
+    <div id="dctSrc"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="tabs">
+    <button class="active" data-tab="wp">ポイント</button>
+    <button data-tab="log">飛行ログ</button>
+    <button data-tab="tfc">他機情報</button>
+  </div>
+
+  <div class="tabbody" id="tab-wp">
+    <div class="btnrow">
+      <button class="btn sh" id="btnShare">共有コード生成</button>
+      <button class="btn sh" id="btnLoad">コード読込</button>
+      <button class="btn sh" id="btnGpx">GPX書出</button>
+      <button class="btn sh" id="btnJson">JSON書出</button>
+      <button class="btn sh" id="btnJsonIn">JSON読込</button>
+      <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
+    </div>
+    <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
+    <div class="hint">地図タップで登録。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
+    <table>
+      <thead><tr><th>#</th><th>名称</th><th>MC</th><th>MH (WCA)</th><th>GS</th><th>NM</th><th>ETE</th><th>燃料 L</th><th></th></tr></thead>
+      <tbody id="wpBody"></tbody>
+    </table>
+  </div>
+
+  <div class="tabbody" id="tab-log" style="display:none">
+    <div class="btnrow">
+      <button class="btn go" id="btnTO">▲ 離陸 (OFF)</button>
+      <button class="btn stop" id="btnLDG" disabled>▼ 着陸 (ON)</button>
+      <button class="btn" id="btnCSV">CSV書き出し</button>
+      <button class="btn" id="btnLogClr">ログ全消去</button>
+    </div>
+    <table><thead><tr><th>日付</th><th>OFF</th><th>ON</th><th>飛行時間</th><th>経路</th></tr></thead>
+    <tbody id="logBody"></tbody></table>
+  </div>
+
+  <div class="tabbody" id="tab-tfc" style="display:none">
+    <div class="btnrow">
+      <button class="btn" id="btnTfc">周辺の機体を取得</button>
+      <span id="tfcStatus" class="hint" style="align-self:center"></span>
+    </div>
+    <table><thead><tr><th>C/S</th><th>高度 ft</th><th>速度 kt</th><th>方位</th><th>距離 NM</th></tr></thead>
+    <tbody id="tfcBody"></tbody></table>
+  </div>
+</div>
+
+<footer>※ 開発中プロトタイプ。参考値であり正式な航法情報源としては使用不可。空域表示は主要飛行場のサンプルデータによる<b>概略の円表示</b>です(実際の水平・垂直限界は空港ごとに異なります)。<b>必ず最新のAIP・エンルートチャートで確認してください。</b>風向は真方位(°T)で入力(タワー/ATISの風は磁方位)。</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ───────── PWA: Service Worker 登録 ───────── */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+/* ───────── 端末保存(localStorage / 使えない環境では自動で無効) ───────── */
+const store={
+  get(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch(e){return null}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},
+  del(k){try{localStorage.removeItem(k)}catch(e){}}
+};
+
+/* ───────── util ───────── */
+function pad(n){return String(n).padStart(2,'0')}
+const R_NM=3440.065, D=Math.PI/180;
+function distNM(a,b){
+  const dLat=(b.lat-a.lat)*D,dLng=(b.lng-a.lng)*D;
+  const h=Math.sin(dLat/2)**2+Math.cos(a.lat*D)*Math.cos(b.lat*D)*Math.sin(dLng/2)**2;
+  return 2*R_NM*Math.asin(Math.sqrt(h));
+}
+function trueBrg(a,b){
+  const y=Math.sin((b.lng-a.lng)*D)*Math.cos(b.lat*D);
+  const x=Math.cos(a.lat*D)*Math.sin(b.lat*D)-Math.sin(a.lat*D)*Math.cos(b.lat*D)*Math.cos((b.lng-a.lng)*D);
+  return (Math.atan2(y,x)/D+360)%360;
+}
+function num(id){return parseFloat(document.getElementById(id).value)||0}
+function magOf(t){return (t+num('varW')+360)%360}
+function fmt3(deg){const d=Math.round(deg)%360;return pad(d===0?360:d).padStart(3,'0')}
+function fmtHM(h){if(!isFinite(h)||h<=0)return'--:--';const m=Math.round(h*60);return pad(Math.floor(m/60))+':'+pad(m%60)}
+function fmtHMS(ms){const s=Math.floor(ms/1000);return pad(Math.floor(s/3600))+':'+pad(Math.floor(s/60)%60)+':'+pad(s%60)}
+
+/* ───────── 風三角 ───────── */
+function windTri(tc){
+  const tas=num('tas'),wd=num('wDir'),ws=num('wSpd');
+  if(tas<=0)return null;
+  const rel=(wd-tc)*D;
+  const xw=ws*Math.sin(rel),hw=ws*Math.cos(rel);
+  const s=xw/tas;
+  if(Math.abs(s)>=1)return{bad:true};
+  const wca=Math.asin(s)/D;
+  const gs=tas*Math.cos(wca*D)-hw;
+  if(gs<=0)return{bad:true};
+  return{wca,gs,th:(tc+wca+360)%360};
+}
+function fmtWca(w){const r=Math.round(w);return(r>=0?'+':'−')+Math.abs(r)}
+
+/* ───────── 実測GS ───────── */
+let liveMode=false,ownSpdKt=null;
+function liveGsActive(){return liveMode&&ownSpdKt!==null&&ownSpdKt>2}
+function effGs(planGs){return liveGsActive()?ownSpdKt:planGs}
+document.getElementById('btnLive').onclick=function(){
+  liveMode=!liveMode;
+  this.textContent='連動 '+(liveMode?'ON':'OFF');
+  this.classList.toggle('on',liveMode);
+  if(liveMode&&ownSpdKt===null)alert('GPSがOFFか速度未取得です。取得までは計画値(TAS+風)で計算します。');
+  redraw();
+};
+function renderLiveGs(){
+  document.getElementById('dGsLive').innerHTML=ownSpdKt!==null?Math.round(ownSpdKt)+' <small>kt</small>':'—';
+  const on=liveGsActive();
+  document.getElementById('tagEte').style.display=on?'inline':'none';
+  document.getElementById('tagFuel').style.display=on?'inline':'none';
+}
+
+/* ───────── clock ───────── */
+function tick(){const d=new Date();
+  document.getElementById('jst').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  document.getElementById('utc').textContent=pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+':'+pad(d.getUTCSeconds());
+}
+setInterval(tick,1000);tick();
+
+/* ───────── map(淡色 → 航空写真 → OSM 切替) ───────── */
+const map=L.map('map').setView([35.55,139.78],9);
+const BASES=[
+  {n:'淡色',ly:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{attribution:'国土地理院',maxZoom:18})},
+  {n:'写真',ly:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{attribution:'国土地理院(全国最新写真)',maxZoom:18})},
+  {n:'OSM',ly:L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19})},
+];
+let baseIdx=store.get('hnav.base')||0;
+if(baseIdx>=BASES.length)baseIdx=0;
+BASES[baseIdx].ly.addTo(map);
+document.getElementById('btnBase').textContent='地図: '+BASES[baseIdx].n;
+document.getElementById('btnBase').onclick=function(){
+  map.removeLayer(BASES[baseIdx].ly);
+  baseIdx=(baseIdx+1)%BASES.length;
+  BASES[baseIdx].ly.addTo(map);
+  this.textContent='地図: '+BASES[baseIdx].n;
+  store.set('hnav.base',baseIdx);
+};
+
+/* ───────── 空域レイヤー(サンプルデータ・概略表示) ─────────
+   ※AIP ENR 2.1 / 5.5 の正式座標を入手後、ポリゴンデータに置換予定 */
+const ASP=[
+  {n:'新千歳',icao:'RJCC',t:'ctr',lat:42.775,lng:141.692,elev:82,rwy:'01L/19R・01R/19L 各3000m'},
+  {n:'札幌丘珠',icao:'RJCO',t:'ctr',lat:43.117,lng:141.381,elev:87,rwy:'14/32 1500m'},
+  {n:'函館',icao:'RJCH',t:'ctr',lat:41.770,lng:140.822,elev:151,rwy:'12/30 3000m'},
+  {n:'旭川',icao:'RJEC',t:'ctr',lat:43.671,lng:142.447,elev:721,rwy:'16/34 2500m'},
+  {n:'釧路',icao:'RJCK',t:'ctr',lat:43.041,lng:144.193,elev:327,rwy:'17/35 2500m'},
+  {n:'仙台',icao:'RJSS',t:'ctr',lat:38.140,lng:140.917,elev:15,rwy:'09/27 3000m・12/30 1200m'},
+  {n:'百里(茨城)',icao:'RJAH',t:'ctr',lat:36.181,lng:140.415,elev:105,rwy:'03R/21L 2700m'},
+  {n:'成田',icao:'RJAA',t:'ctr',lat:35.765,lng:140.386,elev:135,rwy:'16R/34L 4000m・16L/34R 2500m'},
+  {n:'東京(羽田)',icao:'RJTT',t:'ctr',lat:35.549,lng:139.780,elev:21,rwy:'16R/34L 3000m・16L/34R 3360m・04/22 2500m・05/23 2500m'},
+  {n:'横田',icao:'RJTY',t:'ctr',lat:35.749,lng:139.349,elev:463,rwy:'18/36 3350m'},
+  {n:'厚木',icao:'RJTA',t:'ctr',lat:35.455,lng:139.450,elev:205,rwy:'01/19 2438m'},
+  {n:'入間',icao:'RJTJ',t:'ctr',lat:35.842,lng:139.411,elev:295,rwy:'17/35 2000m'},
+  {n:'立川',icao:'RJTC',t:'ctr',lat:35.711,lng:139.403,elev:312,rwy:'01/19 900m'},
+  {n:'木更津',icao:'RJTK',t:'ctr',lat:35.398,lng:139.910,elev:10,rwy:'02/20 1830m'},
+  {n:'新潟',icao:'RJSN',t:'ctr',lat:37.956,lng:139.121,elev:29,rwy:'10/28 2500m・04/22 1314m'},
+  {n:'小松',icao:'RJNK',t:'ctr',lat:36.394,lng:136.407,elev:36,rwy:'06/24 2700m'},
+  {n:'名古屋(小牧)',icao:'RJNA',t:'ctr',lat:35.255,lng:136.924,elev:52,rwy:'16/34 2740m'},
+  {n:'中部',icao:'RJGG',t:'ctr',lat:34.858,lng:136.805,elev:15,rwy:'18/36 3500m'},
+  {n:'浜松',icao:'RJNH',t:'ctr',lat:34.750,lng:137.703,elev:150,rwy:'09/27 2550m'},
+  {n:'大阪(伊丹)',icao:'RJOO',t:'ctr',lat:34.785,lng:135.438,elev:50,rwy:'14R/32L 3000m・14L/32R 1828m'},
+  {n:'関西',icao:'RJBB',t:'ctr',lat:34.427,lng:135.244,elev:17,rwy:'06R/24L 3500m・06L/24R 4000m'},
+  {n:'神戸',icao:'RJBE',t:'ctr',lat:34.633,lng:135.224,elev:22,rwy:'09/27 2500m'},
+  {n:'八尾',icao:'RJOY',t:'ctr',lat:34.596,lng:135.603,r:5,elev:39,rwy:'09/27 1490m・13/31 1200m'},
+  {n:'広島',icao:'RJOA',t:'ctr',lat:34.436,lng:132.919,elev:1088,rwy:'10/28 3000m'},
+  {n:'岩国',icao:'RJOI',t:'ctr',lat:34.144,lng:132.236,elev:8,rwy:'02/20 2440m'},
+  {n:'美保(米子)',icao:'RJOH',t:'ctr',lat:35.492,lng:133.236,elev:20,rwy:'07/25 2500m'},
+  {n:'高松',icao:'RJOT',t:'ctr',lat:34.214,lng:134.016,elev:607,rwy:'08/26 2500m'},
+  {n:'松山',icao:'RJOM',t:'ctr',lat:33.827,lng:132.700,elev:24,rwy:'14/32 2500m'},
+  {n:'高知',icao:'RJOK',t:'ctr',lat:33.546,lng:133.669,elev:31,rwy:'14/32 2500m'},
+  {n:'徳島',icao:'RJOS',t:'ctr',lat:34.133,lng:134.607,elev:26,rwy:'11/29 2500m'},
+  {n:'福岡',icao:'RJFF',t:'ctr',lat:33.586,lng:130.451,elev:30,rwy:'16/34 2800m ほか(増設RWYはAIP参照)'},
+  {n:'北九州',icao:'RJFR',t:'ctr',lat:33.846,lng:131.035,elev:21,rwy:'18/36 2500m'},
+  {n:'長崎',icao:'RJFU',t:'ctr',lat:32.917,lng:129.914,elev:15,rwy:'14/32 3000m'},
+  {n:'熊本',icao:'RJFT',t:'ctr',lat:32.837,lng:130.855,elev:643,rwy:'07/25 3000m'},
+  {n:'大分',icao:'RJFO',t:'ctr',lat:33.479,lng:131.737,elev:19,rwy:'01/19 3000m'},
+  {n:'宮崎',icao:'RJFM',t:'ctr',lat:31.877,lng:131.449,elev:20,rwy:'09/27 2500m'},
+  {n:'鹿児島',icao:'RJFK',t:'ctr',lat:31.803,lng:130.719,elev:906,rwy:'16/34 3000m'},
+  {n:'那覇',icao:'ROAH',t:'ctr',lat:26.196,lng:127.646,elev:12,rwy:'18L/36R 3000m・18R/36L 2700m'},
+  {n:'嘉手納',icao:'RODN',t:'ctr',lat:26.356,lng:127.768,elev:143,rwy:'05L/23R・05R/23L'},
+  {n:'帯広',icao:'RJCB',t:'inf',lat:42.733,lng:143.217,elev:505,rwy:'17/35 2500m'},
+  {n:'女満別',icao:'RJCM',t:'inf',lat:43.881,lng:144.164,elev:135,rwy:'18/36 2500m'},
+  {n:'青森',icao:'RJSA',t:'inf',lat:40.735,lng:140.691,elev:664,rwy:'06/24 3000m'},
+  {n:'山形',icao:'RJSC',t:'inf',lat:38.412,lng:140.371,elev:353,rwy:'01/19 2000m'},
+  {n:'福島',icao:'RJSF',t:'inf',lat:37.227,lng:140.431,elev:1221,rwy:'01/19 2500m'},
+  {n:'富山',icao:'RJNT',t:'inf',lat:36.648,lng:137.188,elev:95,rwy:'02/20 2000m'},
+  {n:'能登',icao:'RJNW',t:'inf',lat:37.293,lng:136.962,elev:718,rwy:'07/25 2000m'},
+  {n:'松本',icao:'RJAF',t:'inf',lat:36.167,lng:137.923,elev:2182,rwy:'18/36 2000m'},
+  {n:'調布',icao:'RJTF',t:'inf',lat:35.672,lng:139.528,elev:141,rwy:'17/35 800m'},
+  {n:'南紀白浜',icao:'RJBD',t:'inf',lat:33.662,lng:135.364,elev:298,rwy:'15/33 2000m'},
+  {n:'鳥取',icao:'RJOR',t:'inf',lat:35.530,lng:134.167,elev:65,rwy:'10/28 2000m'},
+  {n:'出雲',icao:'RJOC',t:'inf',lat:35.414,lng:132.890,elev:15,rwy:'07/25 2000m'},
+  {n:'石見',icao:'RJOW',t:'inf',lat:34.676,lng:131.790,elev:184,rwy:'11/29 2000m'},
+  {n:'佐賀',icao:'RJFS',t:'inf',lat:33.150,lng:130.302,elev:6,rwy:'11/29 2000m'},
+  {n:'天草',icao:'RJDA',t:'inf',lat:32.482,lng:130.159,elev:340,rwy:'13/31 1000m'},
+  {n:'種子島',icao:'RJFG',t:'inf',lat:30.605,lng:130.991,elev:768,rwy:'13/31 2000m'},
+  {n:'屋久島',icao:'RJFC',t:'inf',lat:30.386,lng:130.659,elev:124,rwy:'14/32 1500m'},
+  {n:'奄美',icao:'RJKA',t:'inf',lat:28.431,lng:129.712,elev:27,rwy:'03/21 2000m'},
+  {n:'福江',icao:'RJFE',t:'inf',lat:32.666,lng:128.833,elev:273,rwy:'03/21 2000m'},
+  {n:'対馬',icao:'RJDT',t:'inf',lat:34.285,lng:129.331,elev:213,rwy:'14/32 1900m'},
+  {n:'新石垣',icao:'ROIG',t:'inf',lat:24.396,lng:124.245,elev:102,rwy:'04/22 2000m'},
+  {n:'宮古',icao:'ROMY',t:'inf',lat:24.783,lng:125.295,elev:150,rwy:'04/22 2000m'},
+  {n:'久米島',icao:'ROKJ',t:'inf',lat:26.363,lng:126.714,elev:23,rwy:'03/21 2000m'},
+];
+const aspLayer=L.layerGroup();
+ASP.forEach(a=>{
+  const ctr=a.t==='ctr';
+  L.circle([a.lat,a.lng],{
+    radius:(a.r||9)*1000,
+    color:ctr?'#4da3ff':'#ffb02e',
+    weight:1.6,dashArray:ctr?null:'6 5',
+    fillColor:ctr?'#4da3ff':'#ffb02e',fillOpacity:.07
+  }).bindTooltip(`${a.n} ${ctr?'管制圏':'情報圏'}(概略 半径${a.r||9}km)`,{direction:'top'})
+    .addTo(aspLayer);
+});
+let aspOn=false;
+document.getElementById('btnAsp').onclick=function(){
+  aspOn=!aspOn;
+  this.classList.toggle('on',aspOn);
+  document.getElementById('legend').style.display=aspOn?'block':'none';
+  if(aspOn)aspLayer.addTo(map);else map.removeLayer(aspLayer);
+};
+
+/* ───────── 飛行場情報レイヤー ─────────
+   タップで詳細ポップアップ(標高・滑走路)。D→ / ルート追加も可。
+   周波数・運用時間等はAIP AD編の正式データ入手後に追加予定 */
+const apLayer=L.layerGroup();
+ASP.forEach(a=>{
+  if(!a.icao)return;
+  const mk=L.marker([a.lat,a.lng],{
+    icon:L.divIcon({className:'',html:`<div class="ap-ico">${a.icao}</div>`,iconAnchor:[16,7]})
+  });
+  const el=document.createElement('div');
+  el.className='apPop';
+  el.innerHTML=`<h5>${a.icao} ${a.n}</h5>
+    <dl>
+      <dt>種別</dt><dd>${a.t==='ctr'?'管制圏(タワー)':'情報圏(レディオ/リモート)'}</dd>
+      <dt>標高</dt><dd>${a.elev!==undefined?a.elev+' ft':'AIP参照'}</dd>
+      <dt>滑走路</dt><dd style="white-space:normal">${a.rwy||'AIP参照'}</dd>
+      <dt>位置</dt><dd>${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}</dd>
+      <dt>周波数</dt><dd>AIP AD参照</dd>
+    </dl>
+    <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>
+    <div class="note">※サンプルデータ。数値は必ずAIP/最新チャートで確認</div>`;
+  el.querySelector('.apDct').onclick=()=>{setDct({name:a.icao,lat:a.lat,lng:a.lng,isWp:false});mk.closePopup()};
+  el.querySelector('.add').onclick=()=>{addWp(a.lat,a.lng,a.icao);redraw();mk.closePopup()};
+  mk.bindPopup(el);
+  mk.addTo(apLayer);
+});
+let apOn=false;
+document.getElementById('btnAp').onclick=function(){
+  apOn=!apOn;
+  this.classList.toggle('on',apOn);
+  if(apOn)apLayer.addTo(map);else map.removeLayer(apLayer);
+};
+
+/* ───────── rain ───────── */
+let rainLayer=null,rainOn=false;
+async function rainTs(){
+  try{const r=await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const j=await r.json();const p=j.radar&&j.radar.past;
+    if(p&&p.length)return p[p.length-1].time;
+  }catch(e){}
+  return Math.floor(Date.now()/1000/600)*600-600;
+}
+document.getElementById('btnRain').onclick=async function(){
+  if(rainOn){map.removeLayer(rainLayer);rainOn=false;this.classList.remove('on');return}
+  const ts=await rainTs();
+  rainLayer=L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${ts}/256/{z}/{x}/{y}/4/1_1.png`,{opacity:.65,attribution:'RainViewer'});
+  rainLayer.addTo(map);rainOn=true;this.classList.add('on');
+};
+
+/* ───────── GPS ───────── */
+let ownPos=null,ownMarker=null,gpsWatch=null;
+document.getElementById('btnGPS').onclick=function(){
+  if(gpsWatch!==null){navigator.geolocation.clearWatch(gpsWatch);gpsWatch=null;
+    ownPos=null;ownSpdKt=null;
+    if(ownMarker){map.removeLayer(ownMarker);ownMarker=null}
+    this.classList.remove('on');renderLiveGs();redraw();return}
+  if(!navigator.geolocation){alert('この環境では位置情報が使えません。');return}
+  gpsWatch=navigator.geolocation.watchPosition(p=>{
+    ownPos={lat:p.coords.latitude,lng:p.coords.longitude};
+    ownSpdKt=(p.coords.speed!==null&&!isNaN(p.coords.speed))?p.coords.speed*1.9438:null;
+    if(!ownMarker){ownMarker=L.marker(ownPos,{icon:L.divIcon({className:'',html:'<div class="own-ico"></div>',iconAnchor:[9,9]})}).addTo(map)}
+    else ownMarker.setLatLng(ownPos);
+    document.getElementById('btnGPS').classList.add('on');
+    renderLiveGs();redraw();
+  },()=>{alert('位置情報を取得できませんでした。');
+    navigator.geolocation.clearWatch(gpsWatch);gpsWatch=null;
+  },{enableHighAccuracy:true,maximumAge:2000});
+};
+
+/* ───────── waypoints & route ───────── */
+const wps=[];
+const routeLine=L.polyline([],{color:'#ff3df5',weight:3,opacity:.9}).addTo(map);
+function wpIcon(name,on){return L.divIcon({className:'',html:`<div class="wp-ico${on?' dctOn':''}">${name}</div>`,iconAnchor:[0,10]})}
+
+function addWp(lat,lng,name){
+  name=name||'WP'+(wps.length+1);
+  const marker=L.marker([lat,lng],{icon:wpIcon(name,false),draggable:true}).addTo(map);
+  const w={name,lat,lng,marker,isWp:true};
+  marker.bindTooltip(()=>`${w.name}  ${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}`,{direction:'top'});
+  marker.on('drag',ev=>{w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw()});
+  marker.on('click',()=>setDct(w));
+  wps.push(w);
+}
+function clearAllWp(){clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.length=0}
+
+function redraw(){
+  routeLine.setLatLngs(wps.map(w=>[w.lat,w.lng]));
+  const body=document.getElementById('wpBody');body.innerHTML='';
+  const ff=num('ff');
+  let totD=0,totH=0,totF=0,anyBad=false;
+  wps.forEach((w,i)=>{
+    let mc='—',mh='—',gsS='—',leg='—',ete='—',fuel='—';
+    if(i>0){
+      const d=distNM(wps[i-1],w);totD+=d;leg=d.toFixed(1);
+      const tc=trueBrg(wps[i-1],w);
+      mc=fmt3(magOf(tc))+'°';
+      const tri=windTri(tc);
+      if(tri&&!tri.bad){
+        mh=fmt3(magOf(tri.th))+'° ('+fmtWca(tri.wca)+')';
+        const g=effGs(tri.gs);
+        gsS=Math.round(g);
+        const h=d/g;totH+=h;ete=fmtHM(h);
+        if(ff>0){const f=h*ff;totF+=f;fuel=f.toFixed(0)}
+      }else{mh='<span style="color:var(--red)">不可</span>';anyBad=true}
+    }
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${i+1}</td>
+      <td class="jp"><input value="${w.name}"></td>
+      <td>${mc}</td><td>${mh}</td><td>${gsS}</td><td>${leg}</td><td>${ete}</td><td>${fuel}</td>
+      <td><button class="dct">D→</button><button class="del">削除</button></td>`;
+    tr.querySelector('input').oninput=e=>{w.name=e.target.value;w.marker.setIcon(wpIcon(w.name,dctTarget===w));saveState()};
+    tr.querySelector('.del').onclick=()=>{
+      if(dctTarget===w)clearDct();
+      map.removeLayer(w.marker);wps.splice(i,1);redraw()};
+    tr.querySelector('.dct').onclick=()=>setDct(w);
+    body.appendChild(tr);
+  });
+  if(wps.length>1){
+    const trT=document.createElement('tr');trT.className='total';
+    trT.innerHTML=`<td></td><td class="jp">合計</td><td></td><td></td><td></td>
+      <td>${totD.toFixed(1)}</td><td>${anyBad?'—':fmtHM(totH)}</td><td>${num('ff')>0&&!anyBad?totF.toFixed(0):'—'}</td><td></td>`;
+    body.appendChild(trT);
+  }
+  document.getElementById('dDist').innerHTML=totD.toFixed(1)+' <small>NM</small>';
+  document.getElementById('dEte').textContent=(!anyBad&&totH>0)?fmtHM(totH):'--:--';
+  const req=(!anyBad&&num('ff')>0)?totF:0;
+  document.getElementById('dReq').innerHTML=req.toFixed(0)+' <small>L</small>';
+  const fob=num('fob');
+  document.getElementById('dRem').innerHTML=(fob>0&&req>0)?(fob-req).toFixed(0)+' <small>L</small>':'— <small>L</small>';
+  document.getElementById('dRem').style.color=(fob>0&&req>0&&fob-req<num('ff')*0.5)?'var(--red)':'';
+  document.getElementById('dEnd').textContent=(fob>0&&num('ff')>0)?fmtHM(fob/num('ff')):'--:--';
+  renderLiveGs();
+  updateDct();
+  saveState();
+}
+map.on('click',e=>{addWp(e.latlng.lat,e.latlng.lng);redraw()});
+['tas','wDir','wSpd','varW','ff','fob'].forEach(id=>document.getElementById(id).oninput=redraw);
+document.getElementById('btnClear').onclick=()=>{clearAllWp();redraw()};
+
+/* ───────── 保存/復元 ───────── */
+function routeObj(){
+  return {v:1,
+    set:{tas:num('tas'),wDir:num('wDir'),wSpd:num('wSpd'),varW:num('varW'),ff:num('ff'),fob:num('fob')},
+    wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name])};
+}
+function saveState(){store.set('hnav.route',routeObj())}
+function loadRouteObj(o,fit){
+  if(!o||!Array.isArray(o.wp))throw new Error('bad');
+  clearAllWp();
+  o.wp.forEach(w=>addWp(w[0],w[1],w[2]));
+  if(o.set){['tas','wDir','wSpd','varW','ff','fob'].forEach(k=>{
+    if(o.set[k]!==undefined)document.getElementById(k).value=o.set[k]})}
+  redraw();
+  if(fit&&wps.length>1)map.fitBounds(routeLine.getBounds().pad(0.3));
+  else if(fit&&wps.length===1)map.setView([wps[0].lat,wps[0].lng],10);
+}
+
+/* ───────── 共有(コード / JSON / GPX) ───────── */
+const shareBox=document.getElementById('shareBox');
+document.getElementById('btnShare').onclick=async ()=>{
+  if(!wps.length){alert('ポイントがありません');return}
+  const code='HNAV1.'+btoa(unescape(encodeURIComponent(JSON.stringify(routeObj()))));
+  shareBox.style.display='block';shareBox.value=code;shareBox.select();
+  try{await navigator.clipboard.writeText(code);alert('共有コードをコピーしました。相手はこのコードを貼り付けて「コード読込」で復元できます。')}
+  catch(e){alert('コードを表示しました。手動でコピーしてください。')}
+};
+document.getElementById('btnLoad').onclick=()=>{
+  if(shareBox.style.display!=='block'){shareBox.style.display='block';shareBox.value='';shareBox.focus();return}
+  const t=shareBox.value.trim();
+  if(!t){alert('コードを貼り付けてください');return}
+  try{
+    const b64=t.startsWith('HNAV1.')?t.slice(6):t;
+    loadRouteObj(JSON.parse(decodeURIComponent(escape(atob(b64)))),true);
+    shareBox.style.display='none';
+  }catch(e){alert('コードを読み込めませんでした。形式を確認してください。')}
+};
+function dl(name,mime,text){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:mime}));
+  a.download=name;a.click();
+}
+document.getElementById('btnJson').onclick=()=>{
+  if(!wps.length){alert('ポイントがありません');return}
+  dl('heli_route.json','application/json',JSON.stringify(routeObj(),null,1));
+};
+document.getElementById('btnGpx').onclick=()=>{
+  if(!wps.length){alert('ポイントがありません');return}
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const pts=wps.map(w=>`  <wpt lat="${w.lat.toFixed(6)}" lon="${w.lng.toFixed(6)}"><name>${esc(w.name)}</name></wpt>`).join('\n');
+  const rte=wps.map(w=>`    <rtept lat="${w.lat.toFixed(6)}" lon="${w.lng.toFixed(6)}"><name>${esc(w.name)}</name></rtept>`).join('\n');
+  dl('heli_route.gpx','application/gpx+xml',
+`<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="HELI NAV" xmlns="http://www.topografix.com/GPX/1/1">
+${pts}
+  <rte><name>HELI NAV route</name>
+${rte}
+  </rte>
+</gpx>`);
+};
+document.getElementById('btnJsonIn').onclick=()=>document.getElementById('fileIn').click();
+document.getElementById('fileIn').onchange=function(){
+  const f=this.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const txt=rd.result;
+      if(f.name.toLowerCase().endsWith('.gpx')){
+        const doc=new DOMParser().parseFromString(txt,'application/xml');
+        let pts=[...doc.querySelectorAll('rtept')];
+        if(!pts.length)pts=[...doc.querySelectorAll('wpt')];
+        if(!pts.length)throw new Error('no pts');
+        clearAllWp();
+        pts.forEach((p,i)=>addWp(parseFloat(p.getAttribute('lat')),parseFloat(p.getAttribute('lon')),
+          (p.querySelector('name')||{}).textContent||('WP'+(i+1))));
+        redraw();map.fitBounds(routeLine.getBounds().pad(0.3));
+      }else{
+        loadRouteObj(JSON.parse(txt),true);
+      }
+    }catch(e){alert('ファイルを読み込めませんでした')}
+    this.value='';
+  };
+  rd.readAsText(f);
+};
+
+/* ───────── Direct-To ───────── */
+let dctTarget=null;
+const dctLine=L.polyline([],{color:'#3df5ff',weight:3,dashArray:'8 7',opacity:.95}).addTo(map);
+function setDct(w){
+  if(dctTarget&&dctTarget.isWp)dctTarget.marker.setIcon(wpIcon(dctTarget.name,false));
+  dctTarget=w;
+  if(w.isWp)w.marker.setIcon(wpIcon(w.name,true));
+  document.getElementById('dctCard').style.display='block';
+  updateDct();
+}
+function clearDct(){
+  if(dctTarget&&dctTarget.isWp)dctTarget.marker.setIcon(wpIcon(dctTarget.name,false));
+  dctTarget=null;dctLine.setLatLngs([]);
+  document.getElementById('dctCard').style.display='none';
+}
+document.getElementById('dctOff').onclick=clearDct;
+function updateDct(){
+  if(!dctTarget)return;
+  const o=ownPos||map.getCenter(),t={lat:dctTarget.lat,lng:dctTarget.lng};
+  dctLine.setLatLngs([[o.lat,o.lng],[t.lat,t.lng]]);
+  const d=distNM({lat:o.lat,lng:o.lng},t);
+  const tc=trueBrg({lat:o.lat,lng:o.lng},t);
+  document.getElementById('dctName').textContent=dctTarget.name;
+  document.getElementById('dctMc').textContent=fmt3(magOf(tc))+'°';
+  document.getElementById('dctDist').textContent=d.toFixed(1)+' NM';
+  const tri=windTri(tc);
+  if(tri&&!tri.bad){
+    document.getElementById('dctMh').textContent=fmt3(magOf(tri.th))+'° ('+fmtWca(tri.wca)+')';
+    const g=effGs(tri.gs);
+    document.getElementById('dctGs').textContent=Math.round(g)+' kt';
+    document.getElementById('dctEte').textContent=fmtHM(d/g);
+  }else{
+    document.getElementById('dctMh').textContent='不可';
+    document.getElementById('dctGs').textContent='—';
+    document.getElementById('dctEte').textContent='--:--';
+  }
+  document.getElementById('dctSrc').textContent=
+    (ownPos?'基準: GPS現在地(自動更新)':'基準: 地図中心 ※GPSボタンで現在地連動')
+    +(liveGsActive()?' / GS: 実測連動':' / GS: 計画値(TAS+風)');
+}
+map.on('move',()=>{if(!ownPos)updateDct()});
+
+/* ───────── flight timer & log ───────── */
+let offTime=null,timerId=null;const logs=[];
+function saveLogs(){store.set('hnav.logs',logs)}
+document.getElementById('btnTO').onclick=function(){
+  offTime=new Date();this.disabled=true;
+  document.getElementById('btnLDG').disabled=false;
+  timerId=setInterval(()=>{document.getElementById('dTimer').textContent=fmtHMS(Date.now()-offTime)},1000);
+};
+document.getElementById('btnLDG').onclick=function(){
+  clearInterval(timerId);
+  const on=new Date();
+  logs.push({date:offTime.toLocaleDateString('ja-JP'),
+    off:pad(offTime.getHours())+':'+pad(offTime.getMinutes()),
+    on:pad(on.getHours())+':'+pad(on.getMinutes()),
+    dur:fmtHMS(on-offTime).slice(0,5),
+    route:wps.map(w=>w.name).join('→')||'—'});
+  renderLogs();saveLogs();
+  offTime=null;this.disabled=true;
+  document.getElementById('btnTO').disabled=false;
+  document.getElementById('dTimer').textContent='00:00:00';
+};
+function renderLogs(){
+  const b=document.getElementById('logBody');b.innerHTML='';
+  logs.forEach(l=>{const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${l.date}</td><td>${l.off}</td><td>${l.on}</td><td>${l.dur}</td><td class="jp">${l.route}</td>`;
+    b.appendChild(tr)});
+}
+document.getElementById('btnCSV').onclick=()=>{
+  if(!logs.length){alert('ログがありません');return}
+  const csv='日付,OFF,ON,飛行時間,経路\n'+logs.map(l=>[l.date,l.off,l.on,l.dur,l.route].join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv'}));
+  a.download='flight_log.csv';a.click();
+};
+document.getElementById('btnLogClr').onclick=()=>{
+  if(!logs.length)return;
+  if(confirm('保存されている飛行ログを全て消去します。よろしいですか?(CSV書き出しを先に行うことをおすすめします)')){
+    logs.length=0;renderLogs();saveLogs();
+  }
+};
+
+/* ───────── traffic ───────── */
+const acLayer=L.layerGroup().addTo(map);
+function acIcon(track){return L.divIcon({className:'ac-ico',iconAnchor:[10,10],
+  html:`<svg width="20" height="20" viewBox="0 0 20 20" style="transform:rotate(${track||0}deg)">
+    <path d="M10 1 L12 8 L18 11 L18 13 L12 11.5 L11.5 16 L14 18 L14 19 L10 18 L6 19 L6 18 L8.5 16 L8 11.5 L2 13 L2 11 L8 8 Z" fill="#38e07b"/></svg>`})}
+function showTraffic(list,demo){
+  acLayer.clearLayers();
+  const body=document.getElementById('tfcBody');body.innerHTML='';
+  const c=map.getCenter();
+  list.forEach(a=>{
+    L.marker([a.lat,a.lng],{icon:acIcon(a.trk)}).addTo(acLayer).bindTooltip(`${a.cs} ${a.alt}ft`,{direction:'top'});
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${a.cs}</td><td>${a.alt}</td><td>${a.spd}</td><td>${Math.round(a.trk)}°</td>
+      <td>${distNM({lat:c.lat,lng:c.lng},{lat:a.lat,lng:a.lng}).toFixed(1)}</td>`;
+    body.appendChild(tr);
+  });
+  document.getElementById('tfcStatus').innerHTML=demo
+    ?'API未接続のためデモ表示<span class="tag">DEMO</span>'
+    :'OpenSky Network 受信データ(ADS-B搭載機のみ)';
+}
+document.getElementById('btnTfc').onclick=async ()=>{
+  document.getElementById('tfcStatus').textContent='取得中…';
+  const b=map.getBounds();
+  try{
+    const r=await fetch(`https://opensky-network.org/api/states/all?lamin=${b.getSouth()}&lomin=${b.getWest()}&lamax=${b.getNorth()}&lomax=${b.getEast()}`);
+    const j=await r.json();
+    if(!j.states||!j.states.length)throw new Error('empty');
+    showTraffic(j.states.slice(0,25).map(s=>({
+      cs:(s[1]||'').trim()||s[0],lat:s[6],lng:s[5],
+      alt:s[7]?Math.round(s[7]*3.281):0,spd:s[9]?Math.round(s[9]*1.944):0,trk:s[10]||0
+    })).filter(a=>a.lat&&a.lng),false);
+  }catch(e){
+    const c=map.getCenter();
+    showTraffic([
+      {cs:'JA9612',lat:c.lat+.12,lng:c.lng+.08,alt:1500,spd:110,trk:225},
+      {cs:'JA02TV',lat:c.lat-.07,lng:c.lng+.15,alt:2000,spd:120,trk:310},
+      {cs:'ANA857',lat:c.lat+.20,lng:c.lng-.18,alt:12000,spd:280,trk:40},
+      {cs:'JA119T',lat:c.lat-.15,lng:c.lng-.05,alt:800,spd:95,trk:170},
+    ],true);
+  }
+};
+
+/* ───────── tabs ───────── */
+document.querySelectorAll('.tabs button').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    ['wp','log','tfc'].forEach(t=>document.getElementById('tab-'+t).style.display=(t===btn.dataset.tab)?'':'none');
+  };
+});
+
+/* ───────── 起動時復元 ───────── */
+(function init(){
+  const sl=store.get('hnav.logs');
+  if(Array.isArray(sl)&&sl.length){sl.forEach(l=>logs.push(l));renderLogs()}
+  const sv=store.get('hnav.route');
+  if(sv&&Array.isArray(sv.wp)&&sv.wp.length){
+    try{loadRouteObj(sv,true);return}catch(e){}
+  }
+  redraw();
+})();
+</script>
+</body>
+</html>
