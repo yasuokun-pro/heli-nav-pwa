@@ -1,6 +1,6 @@
 {
-  "name": "HELI NAV 飛行支援",
-  "short_name": "HELI NAV",
+  "name": "yasuokun-pro",
+  "short_name": "yasuokun-pro",
   "description": "ヘリコプター運航向けナビゲーション補助(プロトタイプ)",
   "start_url": ".",
   "scope": ".",

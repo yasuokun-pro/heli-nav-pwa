@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>HELI NAV v6 — 飛行支援</title>
+<title>yasuokun-pro — 飛行支援</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -26,17 +26,17 @@
   header{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
   .logo{font-family:var(--mono);font-weight:600;letter-spacing:.18em;font-size:15px;color:var(--grn)}
   .logo small{color:var(--dim);letter-spacing:.08em;font-weight:400;margin-left:8px;font-size:11px}
-  .clocks{margin-left:auto;display:flex;gap:16px;font-family:var(--mono);font-size:13px}
-  .clocks span b{color:var(--dim);font-weight:400;font-size:10px;margin-right:5px}
+  .clocks{margin-left:auto;display:flex;gap:16px;font-family:var(--mono);font-size:18px;font-weight:600}
+  .clocks span b{color:var(--dim);font-weight:400;font-size:11px;margin-right:5px}
 
   .strip{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
   .cell{flex:1 1 100px;background:var(--panel2);padding:7px 11px;min-width:96px}
   .cell b{display:block;font-size:10px;color:var(--dim);letter-spacing:.12em;font-weight:500}
-  .cell span{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--grn)}
+  .cell span{font-family:var(--mono);font-size:23px;font-weight:600;color:var(--grn)}
   .cell.mag span{color:var(--mag)}
   .cell.fuel span,.cell.fuel input{color:var(--amb)}
   .cell.live span{color:var(--cyn)}
-  .cell input{width:60px;background:none;border:none;border-bottom:1px solid var(--line);color:var(--grn);font-family:var(--mono);font-size:18px;font-weight:600;outline:none}
+  .cell input{width:76px;background:none;border:none;border-bottom:1px solid var(--line);color:var(--grn);font-family:var(--mono);font-size:23px;font-weight:600;outline:none}
   .cell.timer span{color:var(--amb)}
   .cell small{font-size:11px}
   .livebtn{display:inline-block;margin-left:8px;background:none;border:1px solid var(--line);color:var(--dim);border-radius:4px;font-size:10px;padding:2px 8px;cursor:pointer;vertical-align:3px;font-family:var(--sans)}
@@ -60,6 +60,13 @@
   tr.flying td:first-child::before{content:'● ';color:var(--grn)}
   tr.nextwp td{background:rgba(61,213,243,.12);border-bottom:1px solid var(--cyn)}
   tr.nextwp td.grip::before{content:'▶';color:var(--cyn);margin-right:2px}
+  tr.dctOnRow td{background:rgba(61,213,243,.08)}
+  .dct.on{background:var(--cyn);color:#04222a;font-weight:600}
+  .lib-ico{font-size:12px;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.8);white-space:nowrap;font-family:var(--mono)}
+  .lib-ico span{font-size:9px;margin-left:3px;color:inherit;opacity:.9}
+  .libFolder{color:var(--dim);font-size:11px;letter-spacing:.1em;margin:10px 0 2px}
+  .eye{background:none;border:1px solid var(--line);border-radius:4px;font-size:12px;padding:2px 7px;cursor:pointer;opacity:.4;color:var(--txt)}
+  .eye.on{opacity:1;border-color:var(--grn);color:var(--grn)}
   #logBody tr{cursor:pointer}
   tr.logdet td{background:var(--panel2);font-family:var(--sans);white-space:normal;cursor:default}
   .logdetbox{font-size:12px;line-height:1.8;padding:2px 4px}
@@ -129,7 +136,7 @@
   .apPop .row{display:flex;gap:6px;margin-top:7px}
   .apPop button{flex:1;background:none;border:1px solid var(--cyn);color:var(--cyn);border-radius:4px;font-size:11px;padding:4px;cursor:pointer;font-family:var(--sans)}
   .apPop button.add{border-color:var(--mag);color:var(--mag)}
-  @media(max-width:640px){.clocks{gap:10px;font-size:11px}.cell span{font-size:15px}.cell input{font-size:15px;width:52px}}
+  @media(max-width:640px){.clocks{gap:10px;font-size:15px}.cell span{font-size:19px}.cell input{font-size:19px;width:64px}}
 </style>
 </head>
 <body>
@@ -171,6 +178,7 @@
   <div id="map"></div>
   <div class="maptools">
     <button id="btnFull">⛶ 地図のみ</button>
+    <button id="btnFollow">➤ 追尾</button>
     <button id="btnAsp">◍ 空域</button>
     <button id="btnAp">✈ 飛行場</button>
     <button id="btnRain">☂ 雨雲</button>
@@ -257,6 +265,7 @@
 </div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.min.js"></script>
 <script>
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -332,7 +341,8 @@ function tick(){const d=new Date();
 setInterval(tick,1000);tick();
 
 /* ───────── map(淡色 → 航空写真 → OSM 切替) ───────── */
-const map=L.map('map').setView([35.55,139.78],9);
+const map=L.map('map',{rotate:true,touchRotate:false,rotateControl:false,fadeAnimation:false}).setView([35.55,139.78],9); // fadeAnimation: leaflet-rotateとの相性問題で無効化
+map.attributionControl.setPosition('bottomleft'); // 右下は操作ボタンと重なるため
 const BASES=[
   {n:'淡色',ly:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{attribution:'国土地理院',maxZoom:18})},
   {n:'写真',ly:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{attribution:'国土地理院(全国最新写真)',maxZoom:18})},
@@ -521,19 +531,38 @@ document.getElementById('btnRain').onclick=async function(){
   rainLayer.addTo(map);rainOn=true;this.classList.add('on');
 };
 
-/* ───────── GPS ───────── */
-let ownPos=null,ownMarker=null,gpsWatch=null;
+/* ───────── GPS / 追尾(自機中心+進行方向上) ───────── */
+let ownPos=null,ownMarker=null,gpsWatch=null,follow=false;
+function setFollow(on){
+  follow=on;
+  document.getElementById('btnFollow').classList.toggle('on',on);
+  if(!on&&map.setBearing)map.setBearing(0); // 追尾解除でノースアップに戻す
+  if(on&&ownPos)map.setView(ownPos,Math.max(map.getZoom(),11),{animate:false});
+}
+document.getElementById('btnFollow').onclick=()=>{
+  if(!ownPos){alert('先に ◎GPS をONにしてください(追尾はGPS連動時のみ)。');return}
+  setFollow(!follow);
+};
+map.on('dragstart',()=>{if(follow)setFollow(false)}); // 手でパンしたら追尾解除
 document.getElementById('btnGPS').onclick=function(){
   if(gpsWatch!==null){navigator.geolocation.clearWatch(gpsWatch);gpsWatch=null;
-    ownPos=null;ownSpdKt=null;
+    ownPos=null;ownSpdKt=null;setFollow(false);
     if(ownMarker){map.removeLayer(ownMarker);ownMarker=null}
     this.classList.remove('on');renderLiveGs();redraw();return}
   if(!navigator.geolocation){alert('この環境では位置情報が使えません。');return}
+  let firstFix=true;
   gpsWatch=navigator.geolocation.watchPosition(p=>{
     ownPos={lat:p.coords.latitude,lng:p.coords.longitude};
     ownSpdKt=(p.coords.speed!==null&&!isNaN(p.coords.speed))?p.coords.speed*1.9438:null;
     if(!ownMarker){ownMarker=L.marker(ownPos,{icon:L.divIcon({className:'',html:'<div class="own-ico"></div>',iconAnchor:[9,9]})}).addTo(map)}
     else ownMarker.setLatLng(ownPos);
+    if(firstFix){firstFix=false;setFollow(true)} // GPS開始時は自動で追尾ON
+    if(follow){
+      map.setView(ownPos,map.getZoom(),{animate:false});
+      const hdg=p.coords.heading; // 対地トラック(°)
+      if(map.setBearing&&hdg!==null&&!isNaN(hdg)&&ownSpdKt!==null&&ownSpdKt>5)
+        map.setBearing(-hdg); // トラックアップ
+    }
     updateNext();
     document.getElementById('btnGPS').classList.add('on');
     renderLiveGs();redraw();
@@ -547,8 +576,10 @@ const wps=[];
 const routeLine=L.polyline([],{color:'#ff3df5',weight:3,opacity:.9}).addTo(map);
 function wpIcon(name,on){return L.divIcon({className:'',html:`<div class="wp-ico${on?' dctOn':''}">${name}</div>`,iconAnchor:[0,10]})}
 
+let wpSeq=0; // WP連番(途中削除しても番号は再利用しない)
 function addWp(lat,lng,name){
-  name=name||'WP'+(wps.length+1);
+  if(name){const m=/^WP(\d+)$/.exec(name);if(m)wpSeq=Math.max(wpSeq,+m[1]);}
+  else{wpSeq++;name='WP'+wpSeq;}
   const marker=L.marker([lat,lng],{icon:wpIcon(name,false),draggable:true,bubblingMouseEvents:false}).addTo(map);
   const w={name,lat,lng,marker,isWp:true};
   marker.bindTooltip(()=>`${w.name}  ${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}`,{direction:'top'});
@@ -563,7 +594,7 @@ function addWp(lat,lng,name){
   });
   wps.push(w);
 }
-function clearAllWp(){clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.length=0}
+function clearAllWp(){clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.length=0;wpSeq=0}
 
 function redraw(){
   routeLine.setLatLngs(wps.map(w=>[w.lat,w.lng]));
@@ -616,6 +647,7 @@ function redraw(){
   renderLiveGs();
   updateDct();
   updateNext();
+  syncDctUi();
   saveState();
 }
 map.on('contextmenu',e=>{addWp(e.latlng.lat,e.latlng.lng);redraw()}); // 長押し(iOS)/右クリックで登録(誤タップ防止)
@@ -650,53 +682,112 @@ function attachDrag(grip,tr,idx){
   grip.addEventListener('pointercancel',fin);
 }
 
-/* ───────── お気に入りポイント / 名前付きルート(端末保存) ───────── */
+/* ───────── お気に入りポイント / 名前付きルート(フォルダ管理・地図表示) ─────────
+   pts: {name,lat,lng,folder,icon,color,show} / routes: {name,o,folder,color,show}
+   show=true のものは libLayer で地図に常時表示(WPとは別の小さめ表示) */
+const LIB_COLORS=[['#ff3df5','1マゼンタ'],['#3df5ff','2シアン'],['#38e07b','3緑'],['#ffb02e','4アンバー'],['#ff5a5a','5赤'],['#e8f1fb','6白']];
+const LIB_ICONS=['●','▲','■','◆','★','Ｈ'];
+function libPtsGet(){const a=store.get('hnav.pts')||[];a.forEach(p=>{p.folder=p.folder||'';p.icon=p.icon||'●';p.color=p.color||'#3df5ff';p.show=!!p.show});return a}
+function libRtsGet(){const a=store.get('hnav.routes')||[];a.forEach(r=>{r.folder=r.folder||'';r.color=r.color||'#3df5ff';r.show=!!r.show});return a}
+const libLayer=L.layerGroup().addTo(map);
+function rebuildLibLayer(){
+  libLayer.clearLayers();
+  libPtsGet().forEach(p=>{
+    if(!p.show)return;
+    const mk=L.marker([p.lat,p.lng],{bubblingMouseEvents:false,
+      icon:L.divIcon({className:'',html:`<div class="lib-ico" style="color:${p.color}">${p.icon}<span>${p.name}</span></div>`,iconAnchor:[6,6]})});
+    const el=document.createElement('div');el.className='apPop';
+    el.innerHTML=`<h5 style="color:${p.color}">${p.icon} ${p.name}</h5>
+      <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>`;
+    el.querySelector('.apDct').onclick=()=>{setDct({name:p.name,lat:p.lat,lng:p.lng,isWp:false});mk.closePopup()};
+    el.querySelector('.add').onclick=()=>{addWp(p.lat,p.lng,p.name);redraw();mk.closePopup()};
+    mk.bindPopup(el);mk.addTo(libLayer);
+  });
+  libRtsGet().forEach(r=>{
+    if(!r.show)return;
+    L.polyline(r.o.wp.map(w=>[w[0],w[1]]),{color:r.color,weight:2,dashArray:'5 6',opacity:.75})
+      .bindTooltip('ルート: '+r.name,{sticky:true}).addTo(libLayer);
+  });
+}
 function savePoint(name,lat,lng){
-  const pts=store.get('hnav.pts')||[];
+  const pts=libPtsGet();
   const i=pts.findIndex(p=>p.name===name);
-  const rec={name,lat:+lat.toFixed(5),lng:+lng.toFixed(5)};
+  const old=i>=0?pts[i]:{};
+  const rec={name,lat:+lat.toFixed(5),lng:+lng.toFixed(5),
+    folder:old.folder||'',icon:old.icon||'●',color:old.color||'#3df5ff',show:!!old.show};
   if(i>=0)pts[i]=rec;else pts.push(rec);
-  store.set('hnav.pts',pts);
+  store.set('hnav.pts',pts);rebuildLibLayer();
   alert('お気に入りに保存: '+name);
 }
 document.getElementById('btnRtSave').onclick=()=>{
   if(!wps.length){alert('ポイントがありません');return}
   const name=(prompt('ルート名を入力',wps[0].name+'→'+wps[wps.length-1].name)||'').trim();
   if(!name)return;
-  const rts=store.get('hnav.routes')||[];
+  const rts=libRtsGet();
   const i=rts.findIndex(r=>r.name===name);
-  const rec={name,o:routeObj()};
+  const old=i>=0?rts[i]:{};
+  const rec={name,o:routeObj(),folder:old.folder||'',color:old.color||'#3df5ff',show:!!old.show};
   if(i>=0){if(!confirm('同名ルートを上書きしますか?'))return;rts[i]=rec}else rts.push(rec);
-  store.set('hnav.routes',rts);
+  store.set('hnav.routes',rts);rebuildLibLayer();
   alert('ルートを保存: '+name);
 };
 const libModal=document.getElementById('libModal');
+function editLibMeta(x,isRoute){ // フォルダ/アイコン/色をprompt連続で編集
+  const f=prompt('フォルダ名(空欄=未分類)',x.folder||'');
+  if(f===null)return false;
+  x.folder=f.trim();
+  if(!isRoute){
+    const ic=prompt('アイコン番号: 1● 2▲ 3■ 4◆ 5★ 6Ｈ',String((LIB_ICONS.indexOf(x.icon)+1)||1));
+    if(ic&&LIB_ICONS[+ic-1])x.icon=LIB_ICONS[+ic-1];
+  }
+  const cur=LIB_COLORS.findIndex(q=>q[0]===x.color)+1;
+  const c=prompt('色番号: '+LIB_COLORS.map(q=>q[1]).join(' '),String(cur||2));
+  if(c&&LIB_COLORS[+c-1])x.color=LIB_COLORS[+c-1][0];
+  return true;
+}
 function renderLib(){
-  const rts=store.get('hnav.routes')||[],pts=store.get('hnav.pts')||[];
-  const rEl=document.getElementById('libRoutes'),pEl=document.getElementById('libPts');
-  rEl.innerHTML=rts.length?'':'<div class="libEmpty">保存済みルートはありません(「ルート保存」で登録)</div>';
-  rts.forEach((r,i)=>{
+  const rts=libRtsGet(),pts=libPtsGet();
+  const saveR=()=>{store.set('hnav.routes',rts);renderLib();rebuildLibLayer()};
+  const saveP=()=>{store.set('hnav.pts',pts);renderLib();rebuildLibLayer()};
+  const fill=(el,items,empty,makeRow)=>{
+    el.innerHTML='';
+    if(!items.length){el.innerHTML=`<div class="libEmpty">${empty}</div>`;return}
+    const g={};items.forEach((x,i)=>{(g[x.folder||'']=g[x.folder||'']||[]).push([x,i])});
+    Object.keys(g).sort().forEach(f=>{
+      if(f!==''||Object.keys(g).length>1){
+        const h=document.createElement('div');h.className='libFolder';
+        h.textContent='📁 '+(f||'未分類');el.appendChild(h);
+      }
+      g[f].forEach(([x,i])=>el.appendChild(makeRow(x,i)));
+    });
+  };
+  fill(document.getElementById('libRoutes'),rts,'保存済みルートはありません(「ルート保存」で登録)',(r,i)=>{
     const d=document.createElement('div');d.className='libRow';
-    d.innerHTML=`<span class="nm">${r.name}</span><small>${r.o.wp.length}pt</small>
-      <button class="use">読込</button><button class="del2">削除</button>`;
+    d.innerHTML=`<button class="eye${r.show?' on':''}">👁</button>
+      <span style="color:${r.color};font-family:var(--mono)">―</span>
+      <span class="nm">${r.name}</span><small>${r.o.wp.length}pt</small>
+      <button class="use">読込</button><button class="gear">⚙</button><button class="del2">削除</button>`;
+    d.querySelector('.eye').onclick=()=>{r.show=!r.show;saveR()};
     d.querySelector('.use').onclick=()=>{
       if(wps.length&&!confirm('現在のルートを置き換えます。よろしいですか?'))return;
       loadRouteObj(r.o,true);libModal.style.display='none'};
+    d.querySelector('.gear').onclick=()=>{if(editLibMeta(r,true))saveR()};
     d.querySelector('.del2').onclick=()=>{
-      if(!confirm('削除: '+r.name+' ?'))return;
-      rts.splice(i,1);store.set('hnav.routes',rts);renderLib()};
-    rEl.appendChild(d);
+      if(!confirm('削除: '+r.name+' ?'))return;rts.splice(i,1);saveR()};
+    return d;
   });
-  pEl.innerHTML=pts.length?'':'<div class="libEmpty">お気に入りはありません(表の★ か下のボタンで登録)</div>';
-  pts.forEach((p,i)=>{
+  fill(document.getElementById('libPts'),pts,'お気に入りはありません(表の★ か下のボタンで登録)',(p,i)=>{
     const d=document.createElement('div');d.className='libRow';
-    d.innerHTML=`<span class="nm">${p.name}</span><small>${p.lat.toFixed(3)},${p.lng.toFixed(3)}</small>
-      <button class="use">ルートに追加</button><button class="del2">削除</button>`;
+    d.innerHTML=`<button class="eye${p.show?' on':''}">👁</button>
+      <span style="color:${p.color}">${p.icon}</span>
+      <span class="nm">${p.name}</span><small>${p.lat.toFixed(3)},${p.lng.toFixed(3)}</small>
+      <button class="use">追加</button><button class="gear">⚙</button><button class="del2">削除</button>`;
+    d.querySelector('.eye').onclick=()=>{p.show=!p.show;saveP()};
     d.querySelector('.use').onclick=()=>{addWp(p.lat,p.lng,p.name);redraw();libModal.style.display='none'};
+    d.querySelector('.gear').onclick=()=>{if(editLibMeta(p,false))saveP()};
     d.querySelector('.del2').onclick=()=>{
-      if(!confirm('削除: '+p.name+' ?'))return;
-      pts.splice(i,1);store.set('hnav.pts',pts);renderLib()};
-    pEl.appendChild(d);
+      if(!confirm('削除: '+p.name+' ?'))return;pts.splice(i,1);saveP()};
+    return d;
   });
 }
 document.getElementById('btnLib').onclick=()=>{renderLib();libModal.style.display='flex'};
@@ -707,6 +798,7 @@ document.getElementById('btnPtHere').onclick=()=>{
   if(!name)return;
   const c=map.getCenter();savePoint(name,c.lat,c.lng);renderLib();
 };
+rebuildLibLayer(); // 起動時: 表示ONのポイント/ルートを地図へ
 
 /* ───────── 保存/復元 ───────── */
 function routeObj(){
@@ -796,17 +888,26 @@ document.getElementById('fileIn').onchange=function(){
 /* ───────── Direct-To ───────── */
 let dctTarget=null;
 const dctLine=L.polyline([],{color:'#3df5ff',weight:3,dashArray:'8 7',opacity:.95}).addTo(map);
+function syncDctUi(){ // 一覧表のD→対象行を強調
+  const rows=[...document.querySelectorAll('#wpBody tr:not(.total)')];
+  rows.forEach((r,k)=>{
+    const on=wps[k]&&dctTarget===wps[k];
+    r.classList.toggle('dctOnRow',on);
+    const b=r.querySelector('.dct');if(b)b.classList.toggle('on',on);
+  });
+}
 function setDct(w){
   if(dctTarget&&dctTarget.isWp)dctTarget.marker.setIcon(wpIcon(dctTarget.name,false));
   dctTarget=w;
   if(w.isWp)w.marker.setIcon(wpIcon(w.name,true));
   document.getElementById('dctCard').style.display='block';
-  updateDct();
+  updateDct();syncDctUi();
 }
 function clearDct(){
   if(dctTarget&&dctTarget.isWp)dctTarget.marker.setIcon(wpIcon(dctTarget.name,false));
   dctTarget=null;dctLine.setLatLngs([]);
   document.getElementById('dctCard').style.display='none';
+  syncDctUi();
 }
 document.getElementById('dctOff').onclick=clearDct;
 function updateDct(){
