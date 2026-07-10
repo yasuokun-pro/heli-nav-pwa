@@ -59,6 +59,10 @@
   tr.flying td:first-child::before{content:'● ';color:var(--grn)}
   tr.nextwp td{background:rgba(61,213,243,.12);border-bottom:1px solid var(--cyn)}
   tr.nextwp td.grip::before{content:'▶';color:var(--cyn);margin-right:2px}
+  #logBody tr{cursor:pointer}
+  tr.logdet td{background:var(--panel2);font-family:var(--sans);white-space:normal;cursor:default}
+  .logdetbox{font-size:12px;line-height:1.8;padding:2px 4px}
+  .logdetbox b{color:var(--cyn);font-weight:500}
   .grip{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--dim)}
   tr.dragging{opacity:.55;background:var(--panel2)}
   tr.dragging td{border-top:1px solid var(--cyn)}
@@ -191,13 +195,22 @@
 
 <div class="panel">
   <div class="tabs">
-    <button class="active" data-tab="wp">ポイント</button>
-    <button data-tab="log">飛行ログ</button>
+    <button class="active" data-tab="wp">飛行ログ</button>
+    <button data-tab="log">飛行記録</button>
     <button data-tab="tfc">他機情報</button>
   </div>
 
   <div class="tabbody" id="tab-wp">
     <div class="btnrow">
+      <button class="btn go" id="btnTO">▲ Takeoff (T/O)</button>
+      <button class="btn stop" id="btnLDG" disabled>▼ Landing (L/D)</button>
+      <button class="btn" id="btnLogFull">⛶ ログのみ</button>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>名称</th><th>MC</th><th>MH (WCA)</th><th>GS</th><th>NM</th><th>ETE</th><th>燃料 L</th><th></th></tr></thead>
+      <tbody id="wpBody"></tbody>
+    </table>
+    <div class="btnrow" style="margin-top:16px">
       <button class="btn sh" id="btnShare">共有コード生成</button>
       <button class="btn sh" id="btnLoad">コード読込</button>
       <button class="btn sh" id="btnGpx">GPX書出</button>
@@ -209,22 +222,16 @@
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
     <div class="hint">地図タップで登録、<b>マーカー長押しで削除</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>、★でお気に入り保存。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
-    <table>
-      <thead><tr><th>#</th><th>名称</th><th>MC</th><th>MH (WCA)</th><th>GS</th><th>NM</th><th>ETE</th><th>燃料 L</th><th></th></tr></thead>
-      <tbody id="wpBody"></tbody>
-    </table>
   </div>
 
   <div class="tabbody" id="tab-log" style="display:none">
-    <div class="btnrow">
-      <button class="btn go" id="btnTO">▲ Takeoff (T/O)</button>
-      <button class="btn stop" id="btnLDG" disabled>▼ Landing (L/D)</button>
-      <button class="btn" id="btnCSV">CSV書き出し</button>
-      <button class="btn" id="btnLogClr">ログ全消去</button>
-      <button class="btn" id="btnLogFull">⛶ ログのみ</button>
-    </div>
+    <div class="hint">行をタップすると経路と時間の実績を表示します。</div>
     <table><thead><tr><th>日付</th><th>T/O</th><th>L/D</th><th>飛行時間</th><th>経路</th></tr></thead>
     <tbody id="logBody"></tbody></table>
+    <div class="btnrow" style="margin-top:16px">
+      <button class="btn" id="btnCSV">CSV書き出し</button>
+      <button class="btn" id="btnLogClr">ログ全消去</button>
+    </div>
   </div>
 
   <div class="tabbody" id="tab-tfc" style="display:none">
@@ -876,7 +883,8 @@ document.getElementById('btnLDG').onclick=function(){
     off:pad(offTime.getHours())+':'+pad(offTime.getMinutes()),
     on:pad(on.getHours())+':'+pad(on.getMinutes()),
     dur:fmtHMS(on-offTime).slice(0,5),
-    route:wps.map(w=>w.name).join('→')||'—'});
+    route:wps.map(w=>w.name).join('→')||'—',
+    wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name])});
   offTime=null;
   renderLogs();saveLogs();
   this.disabled=true;
@@ -895,6 +903,28 @@ function renderLogs(){
   }
   logs.forEach(l=>{const tr=document.createElement('tr');
     tr.innerHTML=`<td>${l.date}</td><td>${l.off}</td><td>${l.on}</td><td>${l.dur}</td><td class="jp">${l.route}</td>`;
+    tr.onclick=()=>{ // タップで実績詳細を開閉
+      const nx=tr.nextElementSibling;
+      if(nx&&nx.classList.contains('logdet')){nx.remove();return}
+      document.querySelectorAll('#logBody tr.logdet').forEach(x=>x.remove());
+      const d=document.createElement('tr');d.className='logdet';
+      d.innerHTML=`<td colspan="5"><div class="logdetbox">
+        <div><b>実績</b> T/O ${l.off} → L/D ${l.on}(飛行時間 ${l.dur})</div>
+        <div><b>経路</b> ${l.route}</div>
+        ${l.wp&&l.wp.length?'<button class="btn sh" style="margin-top:6px" id="logShowRt">この経路を地図に表示</button>'
+          :'<div style="color:var(--dim)">経路の座標データなし(旧形式のログ)</div>'}
+      </div></td>`;
+      const sb=d.querySelector('#logShowRt');
+      if(sb)sb.onclick=e=>{e.stopPropagation();
+        if(wps.length&&!confirm('現在のルートを置き換えて表示します。よろしいですか?'))return;
+        loadRouteObj({wp:l.wp},true);
+        document.body.classList.remove('logonly');
+        const bl=document.getElementById('btnLogFull');bl.classList.remove('on');bl.textContent='⛶ ログのみ';
+        document.querySelector('.tabs button[data-tab="wp"]').click();
+        setTimeout(()=>map.invalidateSize(),60);
+      };
+      tr.after(d);
+    };
     b.appendChild(tr)});
 }
 document.getElementById('btnLogFull').onclick=function(){
