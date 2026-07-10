@@ -50,6 +50,13 @@
   .maptools button.on{border-color:var(--grn);color:var(--grn)}
   body.maponly header,body.maponly .strip,body.maponly .panel,body.maponly footer{display:none}
   body.maponly .mapwrap{height:100%}
+  .nextstrip .cell span{color:var(--cyn)}
+  .nextstrip .cell b{color:var(--cyn);opacity:.75}
+  body.maponly .nextstrip{display:flex}
+  body.logonly header,body.logonly .strip,body.logonly .mapwrap,body.logonly footer{display:none}
+  body.logonly .panel{max-height:none;flex:1}
+  tr.flying td{color:var(--grn);background:rgba(56,224,123,.08);border-bottom:1px solid var(--grn)}
+  tr.flying td:first-child::before{content:'● ';color:var(--grn)}
   .grip{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--dim)}
   tr.dragging{opacity:.55;background:var(--panel2)}
   tr.dragging td{border-top:1px solid var(--cyn)}
@@ -145,6 +152,13 @@
   <div class="cell fuel"><b>着陸時残 (予測)</b><span id="dRem">— <small>L</small></span></div>
   <div class="cell fuel"><b>ENDURANCE</b><span id="dEnd">--:--</span></div>
 </div>
+<div class="strip nextstrip" id="nextStrip" style="display:none">
+  <div class="cell"><b>NEXT<span class="livetag" id="tagNx">LIVE</span></b><span id="nxName" class="jp">—</span></div>
+  <div class="cell"><b>方位 (磁)</b><span id="nxBrg">---°</span></div>
+  <div class="cell"><b>距離</b><span id="nxDist">— <small>NM</small></span></div>
+  <div class="cell"><b>ETE</b><span id="nxEte">--:--</span></div>
+  <div class="cell" style="flex:0 0 auto"><b>&nbsp;</b><button class="livebtn" id="nxSkip" style="vertical-align:0">スキップ ▶</button></div>
+</div>
 
 <div class="mapwrap">
   <div id="map"></div>
@@ -192,7 +206,7 @@
       <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
-    <div class="hint">地図タップで登録。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>、★でお気に入り保存。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
+    <div class="hint">地図タップで登録、<b>マーカー長押しで削除</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>、★でお気に入り保存。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
     <table>
       <thead><tr><th>#</th><th>名称</th><th>MC</th><th>MH (WCA)</th><th>GS</th><th>NM</th><th>ETE</th><th>燃料 L</th><th></th></tr></thead>
       <tbody id="wpBody"></tbody>
@@ -205,6 +219,7 @@
       <button class="btn stop" id="btnLDG" disabled>▼ 着陸 (ON)</button>
       <button class="btn" id="btnCSV">CSV書き出し</button>
       <button class="btn" id="btnLogClr">ログ全消去</button>
+      <button class="btn" id="btnLogFull">⛶ ログのみ</button>
     </div>
     <table><thead><tr><th>日付</th><th>OFF</th><th>ON</th><th>飛行時間</th><th>経路</th></tr></thead>
     <tbody id="logBody"></tbody></table>
@@ -439,6 +454,8 @@ document.getElementById('btnAsp').onclick=function(){
 
 /* ── 地図のみ表示(飛行中ビュー) ── */
 document.getElementById('btnFull').onclick=function(){
+  document.body.classList.remove('logonly');
+  const bl=document.getElementById('btnLogFull');bl.classList.remove('on');bl.textContent='⛶ ログのみ';
   const on=document.body.classList.toggle('maponly');
   this.classList.toggle('on',on);
   this.textContent=on?'⛶ 全表示':'⛶ 地図のみ';
@@ -507,6 +524,7 @@ document.getElementById('btnGPS').onclick=function(){
     ownSpdKt=(p.coords.speed!==null&&!isNaN(p.coords.speed))?p.coords.speed*1.9438:null;
     if(!ownMarker){ownMarker=L.marker(ownPos,{icon:L.divIcon({className:'',html:'<div class="own-ico"></div>',iconAnchor:[9,9]})}).addTo(map)}
     else ownMarker.setLatLng(ownPos);
+    updateNext();
     document.getElementById('btnGPS').classList.add('on');
     renderLiveGs();redraw();
   },()=>{alert('位置情報を取得できませんでした。');
@@ -526,6 +544,13 @@ function addWp(lat,lng,name){
   marker.bindTooltip(()=>`${w.name}  ${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}`,{direction:'top'});
   marker.on('drag',ev=>{w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw()});
   marker.on('click',()=>setDct(w));
+  marker.on('contextmenu',()=>{ // 長押し(iOS)・右クリックで削除
+    if(!confirm('ポイント「'+w.name+'」を削除しますか?'))return;
+    if(dctTarget===w)clearDct();
+    map.removeLayer(w.marker);
+    const i=wps.indexOf(w);if(i>=0)wps.splice(i,1);
+    redraw();
+  });
   wps.push(w);
 }
 function clearAllWp(){clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.length=0}
@@ -580,6 +605,7 @@ function redraw(){
   document.getElementById('dEnd').textContent=(fob>0&&num('ff')>0)?fmtHM(fob/num('ff')):'--:--';
   renderLiveGs();
   updateDct();
+  updateNext();
   saveState();
 }
 map.on('click',e=>{addWp(e.latlng.lat,e.latlng.lng);redraw()});
@@ -799,13 +825,45 @@ function updateDct(){
 }
 map.on('move',()=>{if(!ownPos)updateDct()});
 
+/* ───────── NEXTポイント表示(ルート順・GPSで自動シーケンス) ───────── */
+let nextIdx=0;
+function updateNext(){
+  const el=document.getElementById('nextStrip');
+  if(!wps.length){el.style.display='none';nextIdx=0;return}
+  el.style.display='flex';
+  if(nextIdx>=wps.length)nextIdx=wps.length-1;
+  const w=wps[nextIdx];
+  const from=ownPos||(nextIdx>0?wps[nextIdx-1]:null);
+  document.getElementById('nxName').textContent=(nextIdx+1)+'. '+w.name;
+  document.getElementById('tagNx').style.display=ownPos?'inline':'none';
+  if(!from){
+    document.getElementById('nxBrg').textContent='---°';
+    document.getElementById('nxDist').innerHTML='— <small>NM</small>';
+    document.getElementById('nxEte').textContent='--:--';
+    return;
+  }
+  const tc=trueBrg(from,w),d=distNM(from,w);
+  if(ownPos&&d<0.4&&nextIdx<wps.length-1){nextIdx++;updateNext();return} // 0.4nm以内で自動送り
+  document.getElementById('nxBrg').textContent=fmt3(magOf(tc))+'°';
+  document.getElementById('nxDist').innerHTML=d.toFixed(1)+' <small>NM</small>';
+  const tri=windTri(tc),g=(tri&&!tri.bad)?effGs(tri.gs):null;
+  document.getElementById('nxEte').textContent=(g&&g>0)?fmtHM(d/g):'--:--';
+}
+document.getElementById('nxSkip').onclick=()=>{
+  if(wps.length){nextIdx=(nextIdx+1)%wps.length;updateNext()}};
+
 /* ───────── flight timer & log ───────── */
 let offTime=null,timerId=null;const logs=[];
 function saveLogs(){store.set('hnav.logs',logs)}
 document.getElementById('btnTO').onclick=function(){
   offTime=new Date();this.disabled=true;
   document.getElementById('btnLDG').disabled=false;
-  timerId=setInterval(()=>{document.getElementById('dTimer').textContent=fmtHMS(Date.now()-offTime)},1000);
+  timerId=setInterval(()=>{
+    document.getElementById('dTimer').textContent=fmtHMS(Date.now()-offTime);
+    const f=document.getElementById('flyDur');
+    if(f)f.textContent=fmtHMS(Date.now()-offTime).slice(0,5);
+  },1000);
+  renderLogs();
 };
 document.getElementById('btnLDG').onclick=function(){
   clearInterval(timerId);
@@ -815,17 +873,34 @@ document.getElementById('btnLDG').onclick=function(){
     on:pad(on.getHours())+':'+pad(on.getMinutes()),
     dur:fmtHMS(on-offTime).slice(0,5),
     route:wps.map(w=>w.name).join('→')||'—'});
+  offTime=null;
   renderLogs();saveLogs();
-  offTime=null;this.disabled=true;
+  this.disabled=true;
   document.getElementById('btnTO').disabled=false;
   document.getElementById('dTimer').textContent='00:00:00';
 };
 function renderLogs(){
   const b=document.getElementById('logBody');b.innerHTML='';
+  if(offTime){ // 飛行中の行を先頭に強調表示
+    const tr=document.createElement('tr');tr.className='flying';
+    tr.innerHTML=`<td>${offTime.toLocaleDateString('ja-JP')}</td>
+      <td>${pad(offTime.getHours())}:${pad(offTime.getMinutes())}</td><td>飛行中</td>
+      <td id="flyDur">${fmtHMS(Date.now()-offTime).slice(0,5)}</td>
+      <td class="jp">${wps.map(w=>w.name).join('→')||'—'}</td>`;
+    b.appendChild(tr);
+  }
   logs.forEach(l=>{const tr=document.createElement('tr');
     tr.innerHTML=`<td>${l.date}</td><td>${l.off}</td><td>${l.on}</td><td>${l.dur}</td><td class="jp">${l.route}</td>`;
     b.appendChild(tr)});
 }
+document.getElementById('btnLogFull').onclick=function(){
+  document.body.classList.remove('maponly');
+  const bf=document.getElementById('btnFull');bf.classList.remove('on');bf.textContent='⛶ 地図のみ';
+  const on=document.body.classList.toggle('logonly');
+  this.classList.toggle('on',on);
+  this.textContent=on?'⛶ 全表示':'⛶ ログのみ';
+  if(!on)setTimeout(()=>map.invalidateSize(),60);
+};
 document.getElementById('btnCSV').onclick=()=>{
   if(!logs.length){alert('ログがありません');return}
   const csv='日付,OFF,ON,飛行時間,経路\n'+logs.map(l=>[l.date,l.off,l.on,l.dur,l.route].join(',')).join('\n');
