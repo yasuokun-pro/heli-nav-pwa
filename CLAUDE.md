@@ -35,7 +35,10 @@ heli-nav-pwa/            … 場所: ~/Claudeディレクトリ/heli-nav-pwa (gi
 ```
 
 デプロイ: GitHub Pages(main / root)。**index.html等を変更したら sw.js 先頭の
-`const VER = 'hnav-v6-1'` を必ずインクリメント**(しないと既存端末に更新が届かない)。
+`const VER` を必ずインクリメント**(しないと既存端末に更新が届かない)。
+**ローカルプレビューでも同じ**: Service Workerが古いindex.htmlをキャッシュして
+配り続けるため、編集後の動作確認前に必ずVERを上げ、リロードを2回行うこと
+(1回目でSW更新、2回目で新キャッシュから表示)。
 
 ## 3. 技術スタック
 
