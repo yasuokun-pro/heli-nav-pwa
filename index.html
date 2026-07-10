@@ -44,7 +44,8 @@
   .livetag{font-size:9px;border:1px solid var(--cyn);color:var(--cyn);border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:3px;font-family:var(--sans);display:none}
 
   .mapwrap{position:relative;flex:1;display:flex}
-  #map{flex:1;min-height:300px;background:#08101a}
+  #map{flex:1;min-height:300px;background:#08101a;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  #btnTO,#btnLDG{min-width:104px;padding-left:8px;padding-right:8px;text-align:center}
   .maptools{position:absolute;z-index:900;right:12px;top:12px;display:flex;flex-direction:column;gap:8px}
   .maptools button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--sans)}
   .maptools button.on{border-color:var(--grn);color:var(--grn)}
@@ -221,7 +222,7 @@
       <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
-    <div class="hint">地図タップで登録、<b>マーカー長押しで削除</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>、★でお気に入り保存。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
+    <div class="hint"><b>地図を長押しでポイント登録、マーカー長押しで削除</b>(誤タップ防止のためタップでは登録されません)。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>、★でお気に入り保存。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
   </div>
 
   <div class="tabbody" id="tab-log" style="display:none">
@@ -548,7 +549,7 @@ function wpIcon(name,on){return L.divIcon({className:'',html:`<div class="wp-ico
 
 function addWp(lat,lng,name){
   name=name||'WP'+(wps.length+1);
-  const marker=L.marker([lat,lng],{icon:wpIcon(name,false),draggable:true}).addTo(map);
+  const marker=L.marker([lat,lng],{icon:wpIcon(name,false),draggable:true,bubblingMouseEvents:false}).addTo(map);
   const w={name,lat,lng,marker,isWp:true};
   marker.bindTooltip(()=>`${w.name}  ${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}`,{direction:'top'});
   marker.on('drag',ev=>{w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw()});
@@ -617,7 +618,7 @@ function redraw(){
   updateNext();
   saveState();
 }
-map.on('click',e=>{addWp(e.latlng.lat,e.latlng.lng);redraw()});
+map.on('contextmenu',e=>{addWp(e.latlng.lat,e.latlng.lng);redraw()}); // 長押し(iOS)/右クリックで登録(誤タップ防止)
 ['tas','wDir','wSpd','varW','ff','fob'].forEach(id=>document.getElementById(id).oninput=redraw);
 document.getElementById('btnClear').onclick=()=>{clearAllWp();redraw()};
 
