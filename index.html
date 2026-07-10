@@ -57,6 +57,8 @@
   body.logonly .panel{max-height:none;flex:1}
   tr.flying td{color:var(--grn);background:rgba(56,224,123,.08);border-bottom:1px solid var(--grn)}
   tr.flying td:first-child::before{content:'● ';color:var(--grn)}
+  tr.nextwp td{background:rgba(61,213,243,.12);border-bottom:1px solid var(--cyn)}
+  tr.nextwp td.grip::before{content:'▶';color:var(--cyn);margin-right:2px}
   .grip{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--dim)}
   tr.dragging{opacity:.55;background:var(--panel2)}
   tr.dragging td{border-top:1px solid var(--cyn)}
@@ -215,13 +217,13 @@
 
   <div class="tabbody" id="tab-log" style="display:none">
     <div class="btnrow">
-      <button class="btn go" id="btnTO">▲ 離陸 (OFF)</button>
-      <button class="btn stop" id="btnLDG" disabled>▼ 着陸 (ON)</button>
+      <button class="btn go" id="btnTO">▲ Takeoff (T/O)</button>
+      <button class="btn stop" id="btnLDG" disabled>▼ Landing (L/D)</button>
       <button class="btn" id="btnCSV">CSV書き出し</button>
       <button class="btn" id="btnLogClr">ログ全消去</button>
       <button class="btn" id="btnLogFull">⛶ ログのみ</button>
     </div>
-    <table><thead><tr><th>日付</th><th>OFF</th><th>ON</th><th>飛行時間</th><th>経路</th></tr></thead>
+    <table><thead><tr><th>日付</th><th>T/O</th><th>L/D</th><th>飛行時間</th><th>経路</th></tr></thead>
     <tbody id="logBody"></tbody></table>
   </div>
 
@@ -833,6 +835,8 @@ function updateNext(){
   el.style.display='flex';
   if(nextIdx>=wps.length)nextIdx=wps.length-1;
   const w=wps[nextIdx];
+  // ポイント一覧の「今向かっている行」をハイライト
+  document.querySelectorAll('#wpBody tr:not(.total)').forEach((r,k)=>r.classList.toggle('nextwp',k===nextIdx));
   const from=ownPos||(nextIdx>0?wps[nextIdx-1]:null);
   document.getElementById('nxName').textContent=(nextIdx+1)+'. '+w.name;
   document.getElementById('tagNx').style.display=ownPos?'inline':'none';
@@ -903,7 +907,7 @@ document.getElementById('btnLogFull').onclick=function(){
 };
 document.getElementById('btnCSV').onclick=()=>{
   if(!logs.length){alert('ログがありません');return}
-  const csv='日付,OFF,ON,飛行時間,経路\n'+logs.map(l=>[l.date,l.off,l.on,l.dur,l.route].join(',')).join('\n');
+  const csv='日付,T/O,L/D,飛行時間,経路\n'+logs.map(l=>[l.date,l.off,l.on,l.dur,l.route].join(',')).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv'}));
   a.download='flight_log.csv';a.click();
