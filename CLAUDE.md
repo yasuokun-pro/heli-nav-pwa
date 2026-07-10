@@ -34,8 +34,12 @@ heli-nav-pwa/            … 場所: ~/Claudeディレクトリ/heli-nav-pwa (gi
    └─ asp_poly.gen.js  … 生成物のコピー(参照用)
 ```
 
-デプロイ: GitHub Pages(main / root)。**index.html等を変更したら sw.js 先頭の
-`const VER` を必ずインクリメント**(しないと既存端末に更新が届かない)。
+デプロイ: GitHub Pages(main / root)。**2026-07-10公開済み**
+- リポジトリ: https://github.com/yasuokun-pro/heli-nav-pwa (public)
+- 公開URL: **https://yasuokun-pro.github.io/heli-nav-pwa/** (iPhoneはこれをホーム画面に追加)
+- 更新手順: コミット → `git push` するだけ(1〜2分で反映)。
+  **index.html等を変更したら sw.js 先頭の `const VER` を必ずインクリメント**
+  (しないと既存端末に更新が届かない)。gh CLIで認証済み(アカウント yasuokun-pro)
 **ローカルプレビューでも同じ**: Service Workerが古いindex.htmlをキャッシュして
 配り続けるため、編集後の動作確認前に必ずVERを上げ、リロードを2回行うこと
 (1回目でSW更新、2回目で新キャッシュから表示)。
