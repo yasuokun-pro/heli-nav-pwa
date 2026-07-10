@@ -48,8 +48,23 @@
   .maptools{position:absolute;z-index:900;right:12px;top:12px;display:flex;flex-direction:column;gap:8px}
   .maptools button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--sans)}
   .maptools button.on{border-color:var(--grn);color:var(--grn)}
-  .legend{position:absolute;z-index:900;left:56px;top:12px;background:rgba(13,26,41,.9);border:1px solid var(--line);border-radius:6px;padding:7px 11px;font-size:11px;display:none;max-width:calc(100% - 130px)}
-  .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  body.maponly header,body.maponly .strip,body.maponly .panel,body.maponly footer{display:none}
+  body.maponly .mapwrap{height:100%}
+  .grip{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--dim)}
+  tr.dragging{opacity:.55;background:var(--panel2)}
+  tr.dragging td{border-top:1px solid var(--cyn)}
+  .fav{background:none;border:1px solid var(--amb);color:var(--amb);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;margin-right:5px}
+  #libModal{position:fixed;inset:0;z-index:2000;background:rgba(4,10,18,.72);display:none;align-items:flex-end;justify-content:center}
+  #libModal .sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 0 0;width:100%;max-width:560px;max-height:78vh;overflow:auto;padding:16px}
+  #libModal h4{font-size:12px;color:var(--dim);letter-spacing:.12em;margin:14px 0 6px}
+  #libModal h4:first-child{margin-top:0}
+  .libRow{display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px}
+  .libRow .nm{flex:1;font-family:var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .libRow small{color:var(--dim);font-family:var(--mono)}
+  .libRow button{background:none;border:1px solid var(--line);border-radius:4px;cursor:pointer;font-size:11px;padding:3px 9px;color:var(--txt)}
+  .libRow button.use{border-color:var(--grn);color:var(--grn)}
+  .libRow button.del2{border-color:var(--red);color:var(--red)}
+  .libEmpty{color:var(--dim);font-size:12px;padding:6px 2px}
 
   #dctCard{position:absolute;z-index:950;left:12px;bottom:12px;background:rgba(13,26,41,.94);
     border:1px solid var(--cyn);border-radius:8px;padding:10px 14px;display:none;min-width:250px;
@@ -134,18 +149,13 @@
 <div class="mapwrap">
   <div id="map"></div>
   <div class="maptools">
+    <button id="btnFull">⛶ 地図のみ</button>
     <button id="btnAsp">◍ 空域</button>
     <button id="btnAp">✈ 飛行場</button>
     <button id="btnRain">☂ 雨雲</button>
     <button id="btnBase">地図: 淡色</button>
     <button id="btnGPS">◎ GPS</button>
     <button id="btnClear">経路クリア</button>
-  </div>
-  <div class="legend" id="legend">
-    <div><i style="background:var(--blu)"></i>管制圏 <span style="color:var(--dim)">(関東=AIP形状)</span></div>
-    <div><i style="background:var(--amb)"></i>情報圏 <span style="color:var(--dim)">(関東=AIP形状)</span></div>
-    <div><i style="background:var(--red)"></i>特別管制区 <span style="color:var(--dim)">(東京/成田PCA)</span></div>
-    <div style="color:var(--dim);margin-top:2px">関東: AIP 2026-07-09現在 / 他地域: ※概略円</div>
   </div>
 
   <div id="dctCard">
@@ -177,10 +187,12 @@
       <button class="btn sh" id="btnGpx">GPX書出</button>
       <button class="btn sh" id="btnJson">JSON書出</button>
       <button class="btn sh" id="btnJsonIn">JSON読込</button>
+      <button class="btn go" id="btnRtSave">ルート保存</button>
+      <button class="btn" id="btnLib">保存一覧</button>
       <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
-    <div class="hint">地図タップで登録。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
+    <div class="hint">地図タップで登録。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>、★でお気に入り保存。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
     <table>
       <thead><tr><th>#</th><th>名称</th><th>MC</th><th>MH (WCA)</th><th>GS</th><th>NM</th><th>ETE</th><th>燃料 L</th><th></th></tr></thead>
       <tbody id="wpBody"></tbody>
@@ -208,7 +220,16 @@
   </div>
 </div>
 
-<footer>※ 開発中プロトタイプ。参考値であり正式な航法情報源としては使用不可。空域表示は主要飛行場のサンプルデータによる<b>概略の円表示</b>です(実際の水平・垂直限界は空港ごとに異なります)。<b>必ず最新のAIP・エンルートチャートで確認してください。</b>風向は真方位(°T)で入力(タワー/ATISの風は磁方位)。</footer>
+<footer>※ 開発中プロトタイプ。参考値であり正式な航法情報源としては使用不可。空域表示: 関東=AIP 2026-07-09現在の形状(タップで上下限・周波数)、関東以外=<b>サンプルデータの概略円</b>。<b>必ず最新のAIP・エンルートチャートで確認してください。</b>風向は真方位(°T)で入力(タワー/ATISの風は磁方位)。</footer>
+
+<div id="libModal"><div class="sheet">
+  <h4>保存済みルート</h4><div id="libRoutes"></div>
+  <h4>お気に入りポイント</h4><div id="libPts"></div>
+  <div class="btnrow" style="margin-top:14px">
+    <button class="btn" id="btnPtHere">地図中心をポイント登録</button>
+    <button class="btn" id="btnLibClose">閉じる</button>
+  </div>
+</div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
@@ -413,8 +434,15 @@ let aspOn=false;
 document.getElementById('btnAsp').onclick=function(){
   aspOn=!aspOn;
   this.classList.toggle('on',aspOn);
-  document.getElementById('legend').style.display=aspOn?'block':'none';
   if(aspOn)aspLayer.addTo(map);else map.removeLayer(aspLayer);
+};
+
+/* ── 地図のみ表示(飛行中ビュー) ── */
+document.getElementById('btnFull').onclick=function(){
+  const on=document.body.classList.toggle('maponly');
+  this.classList.toggle('on',on);
+  this.textContent=on?'⛶ 全表示':'⛶ 地図のみ';
+  setTimeout(()=>map.invalidateSize(),60);
 };
 
 /* ───────── 飛行場情報レイヤー ─────────
@@ -523,15 +551,17 @@ function redraw(){
       }else{mh='<span style="color:var(--red)">不可</span>';anyBad=true}
     }
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${i+1}</td>
+    tr.innerHTML=`<td class="grip">≡ ${i+1}</td>
       <td class="jp"><input value="${w.name}"></td>
       <td>${mc}</td><td>${mh}</td><td>${gsS}</td><td>${leg}</td><td>${ete}</td><td>${fuel}</td>
-      <td><button class="dct">D→</button><button class="del">削除</button></td>`;
+      <td><button class="dct">D→</button><button class="fav">★</button><button class="del">削除</button></td>`;
     tr.querySelector('input').oninput=e=>{w.name=e.target.value;w.marker.setIcon(wpIcon(w.name,dctTarget===w));saveState()};
     tr.querySelector('.del').onclick=()=>{
       if(dctTarget===w)clearDct();
       map.removeLayer(w.marker);wps.splice(i,1);redraw()};
     tr.querySelector('.dct').onclick=()=>setDct(w);
+    tr.querySelector('.fav').onclick=()=>{savePoint(w.name,w.lat,w.lng)};
+    attachDrag(tr.querySelector('.grip'),tr,i);
     body.appendChild(tr);
   });
   if(wps.length>1){
@@ -555,6 +585,92 @@ function redraw(){
 map.on('click',e=>{addWp(e.latlng.lat,e.latlng.lng);redraw()});
 ['tas','wDir','wSpd','varW','ff','fob'].forEach(id=>document.getElementById(id).oninput=redraw);
 document.getElementById('btnClear').onclick=()=>{clearAllWp();redraw()};
+
+/* ───────── ポイント並べ替え(≡を長押しドラッグ) ───────── */
+let dragRow=null,dragIdx=-1;
+function attachDrag(grip,tr,idx){
+  grip.addEventListener('pointerdown',e=>{
+    e.preventDefault();
+    dragRow=tr;dragIdx=idx;tr.classList.add('dragging');
+    grip.setPointerCapture(e.pointerId);
+  });
+  grip.addEventListener('pointermove',e=>{
+    if(!dragRow)return;
+    const rows=[...document.querySelectorAll('#wpBody tr:not(.total)')];
+    const over=rows.find(r=>{const b=r.getBoundingClientRect();return e.clientY>=b.top&&e.clientY<b.bottom});
+    if(over&&over!==dragRow){
+      if(rows.indexOf(over)>rows.indexOf(dragRow))over.after(dragRow);
+      else over.before(dragRow);
+    }
+  });
+  const fin=()=>{
+    if(!dragRow)return;
+    const rows=[...document.querySelectorAll('#wpBody tr:not(.total)')];
+    const ni=rows.indexOf(dragRow);
+    dragRow.classList.remove('dragging');dragRow=null;
+    if(ni>=0&&ni!==dragIdx){const[m]=wps.splice(dragIdx,1);wps.splice(ni,0,m);redraw()}
+  };
+  grip.addEventListener('pointerup',fin);
+  grip.addEventListener('pointercancel',fin);
+}
+
+/* ───────── お気に入りポイント / 名前付きルート(端末保存) ───────── */
+function savePoint(name,lat,lng){
+  const pts=store.get('hnav.pts')||[];
+  const i=pts.findIndex(p=>p.name===name);
+  const rec={name,lat:+lat.toFixed(5),lng:+lng.toFixed(5)};
+  if(i>=0)pts[i]=rec;else pts.push(rec);
+  store.set('hnav.pts',pts);
+  alert('お気に入りに保存: '+name);
+}
+document.getElementById('btnRtSave').onclick=()=>{
+  if(!wps.length){alert('ポイントがありません');return}
+  const name=(prompt('ルート名を入力',wps[0].name+'→'+wps[wps.length-1].name)||'').trim();
+  if(!name)return;
+  const rts=store.get('hnav.routes')||[];
+  const i=rts.findIndex(r=>r.name===name);
+  const rec={name,o:routeObj()};
+  if(i>=0){if(!confirm('同名ルートを上書きしますか?'))return;rts[i]=rec}else rts.push(rec);
+  store.set('hnav.routes',rts);
+  alert('ルートを保存: '+name);
+};
+const libModal=document.getElementById('libModal');
+function renderLib(){
+  const rts=store.get('hnav.routes')||[],pts=store.get('hnav.pts')||[];
+  const rEl=document.getElementById('libRoutes'),pEl=document.getElementById('libPts');
+  rEl.innerHTML=rts.length?'':'<div class="libEmpty">保存済みルートはありません(「ルート保存」で登録)</div>';
+  rts.forEach((r,i)=>{
+    const d=document.createElement('div');d.className='libRow';
+    d.innerHTML=`<span class="nm">${r.name}</span><small>${r.o.wp.length}pt</small>
+      <button class="use">読込</button><button class="del2">削除</button>`;
+    d.querySelector('.use').onclick=()=>{
+      if(wps.length&&!confirm('現在のルートを置き換えます。よろしいですか?'))return;
+      loadRouteObj(r.o,true);libModal.style.display='none'};
+    d.querySelector('.del2').onclick=()=>{
+      if(!confirm('削除: '+r.name+' ?'))return;
+      rts.splice(i,1);store.set('hnav.routes',rts);renderLib()};
+    rEl.appendChild(d);
+  });
+  pEl.innerHTML=pts.length?'':'<div class="libEmpty">お気に入りはありません(表の★ か下のボタンで登録)</div>';
+  pts.forEach((p,i)=>{
+    const d=document.createElement('div');d.className='libRow';
+    d.innerHTML=`<span class="nm">${p.name}</span><small>${p.lat.toFixed(3)},${p.lng.toFixed(3)}</small>
+      <button class="use">ルートに追加</button><button class="del2">削除</button>`;
+    d.querySelector('.use').onclick=()=>{addWp(p.lat,p.lng,p.name);redraw();libModal.style.display='none'};
+    d.querySelector('.del2').onclick=()=>{
+      if(!confirm('削除: '+p.name+' ?'))return;
+      pts.splice(i,1);store.set('hnav.pts',pts);renderLib()};
+    pEl.appendChild(d);
+  });
+}
+document.getElementById('btnLib').onclick=()=>{renderLib();libModal.style.display='flex'};
+document.getElementById('btnLibClose').onclick=()=>libModal.style.display='none';
+libModal.addEventListener('click',e=>{if(e.target===libModal)libModal.style.display='none'});
+document.getElementById('btnPtHere').onclick=()=>{
+  const name=(prompt('ポイント名を入力')||'').trim();
+  if(!name)return;
+  const c=map.getCenter();savePoint(name,c.lat,c.lng);renderLib();
+};
 
 /* ───────── 保存/復元 ───────── */
 function routeObj(){
