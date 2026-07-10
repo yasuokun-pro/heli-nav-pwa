@@ -202,8 +202,8 @@
 
   <div class="tabbody" id="tab-wp">
     <div class="btnrow">
-      <button class="btn go" id="btnTO">▲ Takeoff (T/O)</button>
-      <button class="btn stop" id="btnLDG" disabled>▼ Landing (L/D)</button>
+      <button class="btn go" id="btnTO">▲ T/O</button>
+      <button class="btn stop" id="btnLDG" disabled>▼ L/D</button>
       <button class="btn" id="btnLogFull">⛶ ログのみ</button>
     </div>
     <table>
@@ -863,41 +863,60 @@ function updateNext(){
 document.getElementById('nxSkip').onclick=()=>{
   if(wps.length){nextIdx=(nextIdx+1)%wps.length;updateNext()}};
 
-/* ───────── flight timer & log ───────── */
-let offTime=null,timerId=null;const logs=[];
+/* ───────── flight timer & log (寄港・マルチレグ対応) ─────────
+   状態: null=待機 / legOffあり=飛行中 / legOffなし=一時着陸中(地上)
+   L/D 1回目=一時着陸(レグ確定)、地上でT/O=再出発、地上でL/D=FLT終了(記録確定)
+   飛行時間は空中時間の積算(地上待機は含まない) */
+let flt=null,timerId=null;const logs=[]; // flt={firstOff,legOff,accMs,legs:[{off,on}]}
 function saveLogs(){store.set('hnav.logs',logs)}
+const hm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
+function fltDurMs(){return flt?flt.accMs+(flt.legOff?Date.now()-flt.legOff:0):0}
+function tickTimer(){
+  document.getElementById('dTimer').textContent=fmtHMS(fltDurMs());
+  const f=document.getElementById('flyDur');
+  if(f)f.textContent=fmtHMS(fltDurMs()).slice(0,5);
+}
+function setFltButtons(){
+  const to=document.getElementById('btnTO'),ld=document.getElementById('btnLDG');
+  if(!flt){to.textContent='▲ T/O';to.disabled=false;ld.textContent='▼ L/D';ld.disabled=true}
+  else if(flt.legOff){to.textContent='▲ T/O';to.disabled=true;ld.textContent='▼ L/D';ld.disabled=false}
+  else{to.textContent='▲ 再出発';to.disabled=false;ld.textContent='■ FLT終了';ld.disabled=false}
+}
 document.getElementById('btnTO').onclick=function(){
-  offTime=new Date();this.disabled=true;
-  document.getElementById('btnLDG').disabled=false;
-  timerId=setInterval(()=>{
-    document.getElementById('dTimer').textContent=fmtHMS(Date.now()-offTime);
-    const f=document.getElementById('flyDur');
-    if(f)f.textContent=fmtHMS(Date.now()-offTime).slice(0,5);
-  },1000);
-  renderLogs();
+  const now=new Date();
+  if(!flt)flt={firstOff:now,legOff:now,accMs:0,legs:[]};
+  else flt.legOff=now; // 再出発
+  clearInterval(timerId);timerId=setInterval(tickTimer,1000);
+  setFltButtons();renderLogs();
 };
 document.getElementById('btnLDG').onclick=function(){
-  clearInterval(timerId);
-  const on=new Date();
-  logs.push({date:offTime.toLocaleDateString('ja-JP'),
-    off:pad(offTime.getHours())+':'+pad(offTime.getMinutes()),
-    on:pad(on.getHours())+':'+pad(on.getMinutes()),
-    dur:fmtHMS(on-offTime).slice(0,5),
-    route:wps.map(w=>w.name).join('→')||'—',
-    wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name])});
-  offTime=null;
-  renderLogs();saveLogs();
-  this.disabled=true;
-  document.getElementById('btnTO').disabled=false;
-  document.getElementById('dTimer').textContent='00:00:00';
+  const now=new Date();
+  if(flt.legOff){ // 空中 → 一時着陸(レグ確定)
+    flt.accMs+=now-flt.legOff;
+    flt.legs.push({off:hm(flt.legOff),on:hm(now)});
+    flt.legOff=null;
+    clearInterval(timerId);tickTimer();
+    setFltButtons();renderLogs();
+  }else{ // 地上 → FLT終了(記録確定)
+    logs.push({date:flt.firstOff.toLocaleDateString('ja-JP'),
+      off:hm(flt.firstOff),
+      on:flt.legs.length?flt.legs[flt.legs.length-1].on:hm(now),
+      dur:fmtHMS(flt.accMs).slice(0,5),
+      route:wps.map(w=>w.name).join('→')||'—',
+      wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name]),
+      legs:flt.legs});
+    flt=null;clearInterval(timerId);
+    document.getElementById('dTimer').textContent='00:00:00';
+    setFltButtons();renderLogs();saveLogs();
+  }
 };
 function renderLogs(){
   const b=document.getElementById('logBody');b.innerHTML='';
-  if(offTime){ // 飛行中の行を先頭に強調表示
+  if(flt){ // 進行中フライトの行を先頭に強調表示
     const tr=document.createElement('tr');tr.className='flying';
-    tr.innerHTML=`<td>${offTime.toLocaleDateString('ja-JP')}</td>
-      <td>${pad(offTime.getHours())}:${pad(offTime.getMinutes())}</td><td>飛行中</td>
-      <td id="flyDur">${fmtHMS(Date.now()-offTime).slice(0,5)}</td>
+    tr.innerHTML=`<td>${flt.firstOff.toLocaleDateString('ja-JP')}</td>
+      <td>${hm(flt.firstOff)}</td><td>${flt.legOff?'飛行中':'一時着陸中'}</td>
+      <td id="flyDur">${fmtHMS(fltDurMs()).slice(0,5)}</td>
       <td class="jp">${wps.map(w=>w.name).join('→')||'—'}</td>`;
     b.appendChild(tr);
   }
@@ -909,7 +928,8 @@ function renderLogs(){
       document.querySelectorAll('#logBody tr.logdet').forEach(x=>x.remove());
       const d=document.createElement('tr');d.className='logdet';
       d.innerHTML=`<td colspan="5"><div class="logdetbox">
-        <div><b>実績</b> T/O ${l.off} → L/D ${l.on}(飛行時間 ${l.dur})</div>
+        <div><b>実績</b> T/O ${l.off} → L/D ${l.on}(飛行時間 ${l.dur}${l.legs&&l.legs.length>1?'・'+l.legs.length+'レグ':''})</div>
+        ${l.legs&&l.legs.length>1?'<div><b>レグ</b> '+l.legs.map((g,k)=>(k+1)+') '+g.off+'→'+g.on).join(' / ')+'</div>':''}
         <div><b>経路</b> ${l.route}</div>
         ${l.wp&&l.wp.length?'<button class="btn sh" style="margin-top:6px" id="logShowRt">この経路を地図に表示</button>'
           :'<div style="color:var(--dim)">経路の座標データなし(旧形式のログ)</div>'}
