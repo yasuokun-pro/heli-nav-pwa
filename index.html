@@ -69,7 +69,9 @@
   .eye.on{opacity:1;border-color:var(--grn);color:var(--grn)}
   .zbtn{position:absolute;z-index:900;left:10px;width:34px;height:34px;padding:0;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:15px;cursor:pointer}
   .zbtn.on{border-color:var(--grn);color:var(--grn)}
-  #btnFollow{top:92px}#btnFull{top:132px}#btnGoLog{top:172px}#btnSearch{top:212px}
+  #btnFollow{top:92px}#btnMapOnly{top:132px}#btnGoLog{top:172px}#btnHome{top:212px}#btnSearch{top:252px}
+  .navbtn{width:36px;height:38px;padding:0;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:15px;cursor:pointer}
+  .navbtn.on{border-color:var(--grn);color:var(--grn)}
   #searchBar{position:absolute;z-index:960;left:52px;top:12px;width:min(72%,380px);display:none}
   #searchBar input{width:100%;background:rgba(13,26,41,.96);border:1px solid var(--cyn);border-radius:6px;color:var(--txt);padding:9px 11px;font-size:14px;outline:none;font-family:var(--sans)}
   #searchResults{background:rgba(13,26,41,.97);border:1px solid var(--line);border-radius:6px;margin-top:4px;max-height:40vh;overflow:auto}
@@ -188,14 +190,15 @@
   <div class="cell"><b>方位 (磁)</b><span id="nxBrg">---°</span></div>
   <div class="cell"><b>距離</b><span id="nxDist">— <small>NM</small></span></div>
   <div class="cell"><b>ETE</b><span id="nxEte">--:--</span></div>
-  <div class="cell" style="flex:0 0 auto"><b>&nbsp;</b><button class="livebtn" id="nxSkip" style="vertical-align:0">スキップ ▶</button></div>
+  <div class="cell" style="flex:0 0 auto"><b>&nbsp;</b><button class="livebtn" id="nxPrev" style="vertical-align:0">◀ 前</button> <button class="livebtn" id="nxSkip" style="vertical-align:0">次 ▶</button></div>
 </div>
 
 <div class="mapwrap">
   <div id="map"></div>
   <button id="btnFollow" class="zbtn" title="追尾(GPS)">➤</button>
-  <button id="btnFull" class="zbtn" title="地図のみ⇔全表示">⛶</button>
-  <button id="btnGoLog" class="zbtn" title="ログのみ画面へ">▤</button>
+  <button id="btnMapOnly" class="zbtn" title="地図のみ画面">🗺</button>
+  <button id="btnGoLog" class="zbtn" title="ログのみ画面">▤</button>
+  <button id="btnHome" class="zbtn" title="ホーム(全表示)">🏠</button>
   <button id="btnSearch" class="zbtn" title="地名検索">🔍</button>
   <div id="searchBar">
     <input id="searchInput" type="search" placeholder="地名・住所・駅名を検索してEnter" autocomplete="off">
@@ -236,8 +239,9 @@
     <div class="btnrow">
       <button class="btn go" id="btnTO">▲ T/O</button>
       <button class="btn stop" id="btnLDG" disabled>▼ L/D</button>
-      <button class="btn" id="btnLogFull">⛶ ログのみ</button>
-      <button class="btn" id="btnGoMap">🗺 地図のみ</button>
+      <button class="navbtn" id="btnLogT" title="ログのみ画面">▤</button>
+      <button class="navbtn" id="btnMapT" title="地図のみ画面">🗺</button>
+      <button class="navbtn" id="btnHomeT" title="ホーム(全表示)">🏠</button>
     </div>
     <table>
       <thead><tr><th>#</th><th>名称</th><th>MC</th><th>MH (WCA)</th><th>GS</th><th>NM</th><th>ETE</th><th>燃料 lbs</th><th></th></tr></thead>
@@ -496,21 +500,20 @@ document.getElementById('btnAsp').onclick=function(){
   if(aspOn)aspLayer.addTo(map);else map.removeLayer(aspLayer);
 };
 
-/* ── 画面モード切替(全表示/地図のみ/ログのみ) ── */
-document.getElementById('btnFull').onclick=function(){
-  document.body.classList.remove('logonly');
-  const bl=document.getElementById('btnLogFull');bl.classList.remove('on');bl.textContent='⛶ ログのみ';
-  const on=document.body.classList.toggle('maponly');
-  this.classList.toggle('on',on);
-  setTimeout(()=>map.invalidateSize(),60);
-};
-document.getElementById('btnGoLog').onclick=()=>{ // 地図画面→ログのみ
-  if(!document.body.classList.contains('logonly'))document.getElementById('btnLogFull').click();
-};
-document.getElementById('btnGoMap').onclick=()=>{ // ログのみ→地図のみ
-  if(document.body.classList.contains('logonly'))document.getElementById('btnLogFull').click();
-  if(!document.body.classList.contains('maponly'))document.getElementById('btnFull').click();
-};
+/* ── 画面切替(1ボタン=1画面): home=全表示 / map=地図のみ / log=ログのみ ── */
+function setScreen(mode){
+  document.body.classList.toggle('maponly',mode==='map');
+  document.body.classList.toggle('logonly',mode==='log');
+  ['btnMapOnly','btnMapT'].forEach(id=>document.getElementById(id).classList.toggle('on',mode==='map'));
+  ['btnGoLog','btnLogT'].forEach(id=>document.getElementById(id).classList.toggle('on',mode==='log'));
+  if(mode!=='log')setTimeout(()=>map.invalidateSize(),60);
+}
+document.getElementById('btnMapOnly').onclick=()=>setScreen('map');
+document.getElementById('btnMapT').onclick=()=>setScreen('map');
+document.getElementById('btnGoLog').onclick=()=>setScreen('log');
+document.getElementById('btnLogT').onclick=()=>setScreen('log');
+document.getElementById('btnHome').onclick=()=>setScreen('home');
+document.getElementById('btnHomeT').onclick=()=>setScreen('home');
 
 /* ───────── 地名検索(国土地理院ジオコーダ・APIキー不要) ───────── */
 let searchMarker=null;
@@ -666,7 +669,7 @@ function addWp(lat,lng,name){
   const w={name,lat,lng,marker,isWp:true};
   marker.bindTooltip(()=>`${w.name}  ${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}`,{direction:'top'});
   marker.on('drag',ev=>{w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw()});
-  marker.on('click',()=>setDct(w));
+  marker.on('click',()=>{dctTarget===w?clearDct():setDct(w)}); // 2回目タップで解除
   marker.on('contextmenu',()=>{ // 長押し(iOS)・右クリックで削除
     if(!confirm('ポイント「'+w.name+'」を削除しますか?'))return;
     if(dctTarget===w)clearDct();
@@ -707,7 +710,7 @@ function redraw(){
     tr.querySelector('.del').onclick=()=>{
       if(dctTarget===w)clearDct();
       map.removeLayer(w.marker);wps.splice(i,1);redraw()};
-    tr.querySelector('.dct').onclick=()=>setDct(w);
+    tr.querySelector('.dct').onclick=()=>{dctTarget===w?clearDct():setDct(w)}; // 2回目で解除
     tr.querySelector('.fav').onclick=()=>{savePoint(w.name,w.lat,w.lng)};
     attachDrag(tr.querySelector('.grip'),tr,i);
     body.appendChild(tr);
@@ -1056,7 +1059,9 @@ function updateNext(){
   document.getElementById('nxEte').textContent=(g&&g>0)?fmtHM(d/g):'--:--';
 }
 document.getElementById('nxSkip').onclick=()=>{
-  if(wps.length){nextIdx=(nextIdx+1)%wps.length;updateNext()}};
+  if(wps.length){nextIdx=Math.min(wps.length-1,nextIdx+1);updateNext()}};
+document.getElementById('nxPrev').onclick=()=>{
+  if(wps.length){nextIdx=Math.max(0,nextIdx-1);updateNext()}};
 
 /* ───────── flight timer & log (寄港・マルチレグ対応) ─────────
    状態: null=待機 / legOffあり=飛行中 / legOffなし=一時着陸中(地上)
@@ -1133,23 +1138,13 @@ function renderLogs(){
       if(sb)sb.onclick=e=>{e.stopPropagation();
         if(wps.length&&!confirm('現在のルートを置き換えて表示します。よろしいですか?'))return;
         loadRouteObj({wp:l.wp},true);
-        document.body.classList.remove('logonly');
-        const bl=document.getElementById('btnLogFull');bl.classList.remove('on');bl.textContent='⛶ ログのみ';
+        setScreen('home');
         document.querySelector('.tabs button[data-tab="wp"]').click();
-        setTimeout(()=>map.invalidateSize(),60);
       };
       tr.after(d);
     };
     b.appendChild(tr)});
 }
-document.getElementById('btnLogFull').onclick=function(){
-  document.body.classList.remove('maponly');
-  document.getElementById('btnFull').classList.remove('on');
-  const on=document.body.classList.toggle('logonly');
-  this.classList.toggle('on',on);
-  this.textContent=on?'⛶ 全表示':'⛶ ログのみ';
-  if(!on)setTimeout(()=>map.invalidateSize(),60);
-};
 document.getElementById('btnCSV').onclick=()=>{
   if(!logs.length){alert('ログがありません');return}
   const csv='日付,T/O,L/D,飛行時間,経路\n'+logs.map(l=>[l.date,l.off,l.on,l.dur,l.route].join(',')).join('\n');
