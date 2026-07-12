@@ -47,6 +47,8 @@
   #map{flex:1;min-height:300px;background:#08101a;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   #btnTO,#btnLDG{min-width:104px;padding-left:8px;padding-right:8px;text-align:center}
   .maptools{position:absolute;z-index:900;right:12px;top:calc(var(--ovlH) + 12px);display:flex;flex-direction:column;gap:8px}
+  #zmBtns{position:absolute;z-index:900;right:12px;bottom:16px;display:flex;gap:8px}
+  #zmBtns button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:10px 14px;border-radius:6px;font-size:13px;font-family:var(--mono);font-weight:600;cursor:pointer}
   .maptools button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--sans)}
   .maptools button.on{border-color:var(--grn);color:var(--grn)}
   html,body{overflow:hidden}
@@ -203,6 +205,10 @@
   <div id="searchBar">
     <input id="searchInput" type="search" placeholder="地名・住所・駅名を検索してEnter" autocomplete="off">
     <div id="searchResults"></div>
+  </div>
+  <div id="zmBtns">
+    <button id="btnZmNext" title="自機と次ポイントを表示">NXT PT</button>
+    <button id="btnZmAll" title="ルート全体を表示">ALL</button>
   </div>
   <div class="maptools">
     <button id="btnAsp">◍ 空域</button>
@@ -602,6 +608,25 @@ document.getElementById('searchInput').onkeydown=async e=>{
   }catch(err){box.innerHTML='<div class="srItem">検索できませんでした(オフライン?)</div>'}
 };
 
+/* ───────── 縮尺ボタン: NXT PT=自機+次ポイント拡大 / ALL=ルート全体 ───────── */
+function ovlPad(){ // 諸元パネルにかからないようfitBoundsへ余白を渡す
+  const oh=parseInt(getComputedStyle(document.querySelector('.mapwrap')).getPropertyValue('--ovlH'))||0;
+  return {paddingTopLeft:[46,oh+46],paddingBottomRight:[46,70]};
+}
+document.getElementById('btnZmNext').onclick=()=>{
+  if(!wps.length){alert('ポイントがありません');return}
+  const nx=wps[Math.min(nextIdx,wps.length-1)];
+  if(ownPos)map.fitBounds(L.latLngBounds([[ownPos.lat,ownPos.lng],[nx.lat,nx.lng]]),ovlPad());
+  else map.setView([nx.lat,nx.lng],12); // GPSなし時は次ポイント中心
+};
+document.getElementById('btnZmAll').onclick=()=>{
+  if(!wps.length){alert('ポイントがありません');return}
+  setFollow(false); // 全体表示中は追尾を解除
+  let b=routeLine.getBounds();
+  if(ownPos)b=b.extend([ownPos.lat,ownPos.lng]);
+  map.fitBounds(b.pad(0.08),ovlPad());
+};
+
 /* ───────── 飛行場情報レイヤー ─────────
    タップで詳細ポップアップ(標高・滑走路)。D→ / ルート追加も可。
    周波数・運用時間等はAIP AD編の正式データ入手後に追加予定 */
@@ -685,7 +710,8 @@ document.getElementById('btnGPS').onclick=function(){
     }
     updateNext();
     document.getElementById('btnGPS').classList.add('on');
-    renderLiveGs();redraw();
+    renderLiveGs();
+    if(liveGsActive())redraw();else updateDct(); // 表の毎秒再構築を抑制(名称編集の中断防止)
   },()=>{alert('位置情報を取得できませんでした。');
     navigator.geolocation.clearWatch(gpsWatch);gpsWatch=null;
   },{enableHighAccuracy:true,maximumAge:2000});
@@ -726,6 +752,13 @@ function clearAllWp(){clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.l
 
 function redraw(){
   routeLine.setLatLngs(wps.map(w=>[w.lat,w.lng]));
+  // 名称編集中に表を作り直すとフォーカスが切れるため、編集位置を記憶して復元する
+  let ed=null;
+  const ae=document.activeElement;
+  if(ae&&ae.tagName==='INPUT'&&ae.closest('#wpBody')){
+    const rows=[...document.querySelectorAll('#wpBody tr:not(.total)')];
+    ed={i:rows.indexOf(ae.closest('tr')),s:ae.selectionStart,e:ae.selectionEnd};
+  }
   const body=document.getElementById('wpBody');body.innerHTML='';
   const ff=num('ff');
   let totD=0,totH=0,totF=0,anyBad=false;
@@ -763,6 +796,11 @@ function redraw(){
     trT.innerHTML=`<td></td><td class="jp">合計</td><td></td><td></td><td></td>
       <td>${totD.toFixed(1)}</td><td>${anyBad?'—':fmtHM(totH)}</td><td>${num('ff')>0&&!anyBad?totF.toFixed(0):'—'}</td><td></td>`;
     body.appendChild(trT);
+  }
+  if(ed&&ed.i>=0){ // 編集中だった名称入力へフォーカスを戻す
+    const rows2=[...body.querySelectorAll('tr:not(.total)')];
+    const inp=rows2[ed.i]&&rows2[ed.i].querySelector('input');
+    if(inp){inp.focus();try{inp.setSelectionRange(ed.s,ed.e)}catch(_){}}
   }
   document.getElementById('dDist').innerHTML=totD.toFixed(1)+' <small>NM</small>';
   document.getElementById('dEte').textContent=(!anyBad&&totH>0)?fmtHM(totH):'--:--';
