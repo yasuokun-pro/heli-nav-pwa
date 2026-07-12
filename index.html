@@ -150,6 +150,7 @@
   .btn.stop{border-color:var(--amb);color:var(--amb)}
   .btn.sh{border-color:var(--blu);color:var(--blu);font-size:12px;padding:7px 12px}
   .btn:disabled{opacity:.35;cursor:default}
+  .btn.on{border-color:var(--grn);color:var(--grn)}
   .tag{font-size:10px;border:1px solid var(--amb);color:var(--amb);border-radius:4px;padding:1px 6px;margin-left:8px;vertical-align:2px}
   textarea#shareBox{width:100%;height:64px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--txt);font-family:var(--mono);font-size:11px;padding:8px;outline:none;display:none;margin-bottom:10px}
   footer{padding:8px 16px;font-size:11px;color:var(--dim);background:var(--panel2);border-top:1px solid var(--line)}
@@ -288,7 +289,7 @@
 
   <div class="tabbody" id="tab-tfc" style="display:none">
     <div class="btnrow">
-      <button class="btn" id="btnTfc">周辺の機体を取得</button>
+      <button class="btn" id="btnTfc">他機表示 開始</button>
       <span id="tfcStatus" class="hint" style="align-self:center"></span>
     </div>
     <table><thead><tr><th>C/S</th><th>高度 ft</th><th>速度 kt</th><th>方位</th><th>距離 NM</th></tr></thead>
@@ -660,20 +661,36 @@ document.getElementById('btnAp').onclick=function(){
   if(apOn)apLayer.addTo(map);else map.removeLayer(apLayer);
 };
 
-/* ───────── rain ───────── */
-let rainLayer=null,rainOn=false;
-async function rainTs(){
-  try{const r=await fetch('https://api.rainviewer.com/public/weather-maps.json');
-    const j=await r.json();const p=j.radar&&j.radar.past;
-    if(p&&p.length)return p[p.length-1].time;
+/* ───────── rain(気象庁ナウキャスト優先・RainViewerフォールバック) ───────── */
+let rainLayer=null,rainOn=false,rainTimer=null;
+async function rainTileUrl(){
+  try{ // 気象庁 高解像度降水ナウキャスト(国内・5分更新・キー不要)
+    const r=await fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json');
+    const bt=(await r.json())[0].basetime;
+    return {url:`https://www.jma.go.jp/bosai/jmatile/data/nowc/${bt}/none/${bt}/surf/hrpns/{z}/{x}/{y}.png`,
+            opt:{opacity:.62,attribution:'気象庁ナウキャスト',maxNativeZoom:10}};
   }catch(e){}
-  return Math.floor(Date.now()/1000/600)*600-600;
+  try{ // フォールバック: RainViewer(世界)
+    const r=await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const j=await r.json();const p=j.radar&&j.radar.past;
+    if(p&&p.length)return {url:`${j.host}${p[p.length-1].path}/256/{z}/{x}/{y}/4/1_1.png`,
+      opt:{opacity:.62,attribution:'RainViewer'}};
+  }catch(e){}
+  return null;
+}
+async function loadRain(){
+  const t=await rainTileUrl();
+  if(!t){alert('雨雲データを取得できませんでした(オフライン?)');return false}
+  if(rainLayer)map.removeLayer(rainLayer);
+  rainLayer=L.tileLayer(t.url,t.opt).addTo(map);
+  return true;
 }
 document.getElementById('btnRain').onclick=async function(){
-  if(rainOn){map.removeLayer(rainLayer);rainOn=false;this.classList.remove('on');return}
-  const ts=await rainTs();
-  rainLayer=L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${ts}/256/{z}/{x}/{y}/4/1_1.png`,{opacity:.65,attribution:'RainViewer'});
-  rainLayer.addTo(map);rainOn=true;this.classList.add('on');
+  if(rainOn){clearInterval(rainTimer);rainTimer=null;
+    if(rainLayer)map.removeLayer(rainLayer);rainOn=false;this.classList.remove('on');return}
+  if(!(await loadRain()))return;
+  rainTimer=setInterval(loadRain,5*60*1000); // 5分ごとに最新へ差し替え
+  rainOn=true;this.classList.add('on');
 };
 
 /* ───────── GPS / 追尾(自機中心+進行方向上) ───────── */
@@ -730,21 +747,26 @@ function addWp(lat,lng,name){
   const marker=L.marker([lat,lng],{icon:wpIcon(wps.length+1,false,false),draggable:true,bubblingMouseEvents:false}).addTo(map);
   const w={name,lat,lng,marker,isWp:true};
   marker.on('drag',ev=>{w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw()});
-  marker.bindPopup(()=>{ // タップで名称と操作を表示
+  marker.bindPopup(()=>{ // タップで名称+操作(D→/★/削除)。長押しはドラッグ移動専用
     const el=document.createElement('div');el.className='apPop';
     const k=wps.indexOf(w);
     el.innerHTML=`<h5>${k+1}. ${w.name}</h5>
       <dl><dt>位置</dt><dd>${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}</dd></dl>
-      <div class="row"><button class="apDct">${dctTarget===w?'D→ 解除':'D→ ここへ'}</button></div>`;
+      <div class="row">
+        <button class="apDct">${dctTarget===w?'D→ 解除':'D→'}</button>
+        <button class="fav2">★</button>
+        <button class="del3">削除</button>
+      </div>`;
     el.querySelector('.apDct').onclick=()=>{dctTarget===w?clearDct():setDct(w);marker.closePopup()};
+    el.querySelector('.fav2').onclick=()=>{savePoint(w.name,w.lat,w.lng);marker.closePopup()};
+    el.querySelector('.del3').onclick=()=>{
+      if(!confirm('ポイント「'+w.name+'」を削除しますか?'))return;
+      if(dctTarget===w)clearDct();
+      map.removeLayer(w.marker);
+      const i=wps.indexOf(w);if(i>=0)wps.splice(i,1);
+      redraw();
+    };
     return el;
-  });
-  marker.on('contextmenu',()=>{ // 長押し(iOS)・右クリックで削除
-    if(!confirm('ポイント「'+w.name+'」を削除しますか?'))return;
-    if(dctTarget===w)clearDct();
-    map.removeLayer(w.marker);
-    const i=wps.indexOf(w);if(i>=0)wps.splice(i,1);
-    redraw();
   });
   wps.push(w);
 }
@@ -1258,28 +1280,41 @@ function showTraffic(list,demo){
   });
   document.getElementById('tfcStatus').innerHTML=demo
     ?'API未接続のためデモ表示<span class="tag">DEMO</span>'
-    :'OpenSky Network 受信データ(ADS-B搭載機のみ)';
+    :'airplanes.live 受信データ(ADS-B/MLAT搭載機のみ・15s自動更新)';
 }
-document.getElementById('btnTfc').onclick=async ()=>{
-  document.getElementById('tfcStatus').textContent='取得中…';
-  const b=map.getBounds();
+async function fetchTraffic(){
+  const c=ownPos||map.getCenter(); // GPS中は自機中心、なければ地図中心
   try{
-    const r=await fetch(`https://opensky-network.org/api/states/all?lamin=${b.getSouth()}&lomin=${b.getWest()}&lamax=${b.getNorth()}&lomax=${b.getEast()}`);
+    const r=await fetch(`https://api.airplanes.live/v2/point/${c.lat.toFixed(4)}/${c.lng.toFixed(4)}/50`);
     const j=await r.json();
-    if(!j.states||!j.states.length)throw new Error('empty');
-    showTraffic(j.states.slice(0,25).map(s=>({
-      cs:(s[1]||'').trim()||s[0],lat:s[6],lng:s[5],
-      alt:s[7]?Math.round(s[7]*3.281):0,spd:s[9]?Math.round(s[9]*1.944):0,trk:s[10]||0
-    })).filter(a=>a.lat&&a.lng),false);
+    const ac=(j.ac||[]).filter(a=>a.lat&&a.lon).slice(0,30).map(a=>({
+      cs:(a.flight||'').trim()||a.r||a.hex,
+      lat:a.lat,lng:a.lon,
+      alt:a.alt_baro==='ground'?0:Math.round(a.alt_baro||0),
+      spd:Math.round(a.gs||0),trk:a.track||0
+    }));
+    if(!ac.length)throw new Error('empty');
+    showTraffic(ac,false);
   }catch(e){
-    const c=map.getCenter();
+    const c2=map.getCenter();
     showTraffic([
-      {cs:'JA9612',lat:c.lat+.12,lng:c.lng+.08,alt:1500,spd:110,trk:225},
-      {cs:'JA02TV',lat:c.lat-.07,lng:c.lng+.15,alt:2000,spd:120,trk:310},
-      {cs:'ANA857',lat:c.lat+.20,lng:c.lng-.18,alt:12000,spd:280,trk:40},
-      {cs:'JA119T',lat:c.lat-.15,lng:c.lng-.05,alt:800,spd:95,trk:170},
+      {cs:'JA9612',lat:c2.lat+.12,lng:c2.lng+.08,alt:1500,spd:110,trk:225},
+      {cs:'JA02TV',lat:c2.lat-.07,lng:c2.lng+.15,alt:2000,spd:120,trk:310},
+      {cs:'ANA857',lat:c2.lat+.20,lng:c2.lng-.18,alt:12000,spd:280,trk:40},
+      {cs:'JA119T',lat:c2.lat-.15,lng:c2.lng-.05,alt:800,spd:95,trk:170},
     ],true);
   }
+}
+let tfcTimer=null;
+document.getElementById('btnTfc').onclick=function(){ // トグル: 15秒ごと自動更新
+  if(tfcTimer){clearInterval(tfcTimer);tfcTimer=null;
+    acLayer.clearLayers();document.getElementById('tfcBody').innerHTML='';
+    document.getElementById('tfcStatus').textContent='';
+    this.textContent='他機表示 開始';this.classList.remove('on');return}
+  document.getElementById('tfcStatus').textContent='取得中…';
+  fetchTraffic();
+  tfcTimer=setInterval(fetchTraffic,15000);
+  this.textContent='他機表示 停止';this.classList.add('on');
 };
 
 /* ───────── tabs ───────── */
