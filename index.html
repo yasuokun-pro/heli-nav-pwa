@@ -112,6 +112,7 @@
   tr.dragging{opacity:.55;background:var(--panel2)}
   tr.dragging td{border-top:1px solid var(--cyn)}
   .fav{background:none;border:1px solid var(--amb);color:var(--amb);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;margin-right:5px}
+  .fav.on{background:var(--amb);color:#241500;opacity:1;cursor:default}
   #libModal{position:fixed;inset:0;z-index:2000;background:rgba(4,10,18,.72);display:none;align-items:flex-end;justify-content:center}
   #libModal .sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 0 0;width:100%;max-width:560px;max-height:78vh;overflow:auto;padding:16px}
   #libModal h4{font-size:12px;color:var(--dim);letter-spacing:.12em;margin:14px 0 6px}
@@ -218,6 +219,7 @@
     <span id="drawName"></span>
     <button id="drawPt" class="on">点</button>
     <button id="drawLn">線</button>
+    <button id="drawCi">円</button>
     <button id="drawUndo">↩ 戻す</button>
     <button id="drawEnd">終了</button>
   </div>
@@ -756,7 +758,10 @@ document.getElementById('btnGPS').onclick=function(){
 const wps=[];
 const routeLine=L.polyline([],{color:'#ff3df5',weight:3,opacity:.9}).addTo(map);
 function wpIcon(num,on,next){return L.divIcon({className:'',html:`<div class="wp-pin${on?' dctOn':''}${next?' nextOn':''}">${num}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}
-function syncWpIcons(){wps.forEach((w,k)=>w.marker.setIcon(wpIcon(k+1,dctTarget===w,k===nextIdx)))}
+function syncWpIcons(){wps.forEach((w,k)=>{
+  if(w.dragging)return; // ドラッグ中にsetIconすると要素が差し替わりドラッグが切れる
+  w.marker.setIcon(wpIcon(k+1,dctTarget===w,k===nextIdx));
+})}
 
 let wpSeq=0; // WP連番(途中削除しても番号は再利用しない)
 function addWp(lat,lng,name){
@@ -764,7 +769,9 @@ function addWp(lat,lng,name){
   else{wpSeq++;name='WP'+wpSeq;}
   const marker=L.marker([lat,lng],{icon:wpIcon(wps.length+1,false,false),draggable:true,bubblingMouseEvents:false}).addTo(map);
   const w={name,lat,lng,marker,isWp:true};
+  marker.on('dragstart',()=>{w.dragging=true});
   marker.on('drag',ev=>{w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw()});
+  marker.on('dragend',()=>{w.dragging=false;redraw()});
   marker.bindPopup(()=>{ // タップで名称+操作(D→/★/削除)。長押しはドラッグ移動専用
     const el=document.createElement('div');el.className='apPop';
     const k=wps.indexOf(w);
@@ -824,13 +831,16 @@ function redraw(){
     tr.innerHTML=`<td class="grip">≡ ${i+1}</td>
       <td class="jp"><input value="${w.name}"></td>
       <td>${mc}</td><td>${mh}</td><td>${gsS}</td><td>${leg}</td><td>${ete}</td><td>${fuel}</td>
-      <td><button class="dct">D→</button><button class="fav">★</button><button class="del">削除</button></td>`;
+      <td><button class="dct">D→</button><button class="fav${isFav(w.name)?' on':''}"${isFav(w.name)?' disabled':''}>★</button><button class="del">削除</button></td>`;
     tr.querySelector('input').oninput=e=>{w.name=e.target.value;syncWpIcons();saveState()};
     tr.querySelector('.del').onclick=()=>{
       if(dctTarget===w)clearDct();
       map.removeLayer(w.marker);wps.splice(i,1);redraw()};
     tr.querySelector('.dct').onclick=()=>{dctTarget===w?clearDct():setDct(w)}; // 2回目で解除
-    tr.querySelector('.fav').onclick=()=>{savePoint(w.name,w.lat,w.lng)};
+    tr.querySelector('.fav').onclick=function(){ // 確認なし・即強調(地図ポップアップと連動)
+      savePoint(w.name,w.lat,w.lng,true);
+      this.classList.add('on');this.disabled=true;
+    };
     attachDrag(tr.querySelector('.grip'),tr,i);
     body.appendChild(tr);
   });
@@ -1059,6 +1069,9 @@ function rebuildDrawLayer(){
       else if(it.k==='ln'&&it.pts.length>1)
         L.polyline(it.pts,{color:d.color,weight:2.5,opacity:.9,bubblingMouseEvents:false})
           .bindTooltip(d.name,{sticky:true}).addTo(drawLayer);
+      else if(it.k==='ci')
+        L.circle([it.lat,it.lng],{radius:it.r_m,color:d.color,weight:2,fillColor:d.color,fillOpacity:.05,bubblingMouseEvents:false})
+          .bindTooltip(`${d.name} r=${it.r_m>=926?(it.r_m/1852).toFixed(2)+'NM':Math.round(it.r_m)+'m'}`,{sticky:true}).addTo(drawLayer);
     });
   });
 }
@@ -1075,6 +1088,7 @@ function startDraw(i){
 function drawSubUi(){
   document.getElementById('drawPt').classList.toggle('on',!!drawMode&&drawMode.sub==='pt');
   document.getElementById('drawLn').classList.toggle('on',!!drawMode&&drawMode.sub==='ln');
+  document.getElementById('drawCi').classList.toggle('on',!!drawMode&&drawMode.sub==='ci');
 }
 function drawSave(){store.set('hnav.draws',drawMode.arr);rebuildDrawLayer()}
 document.getElementById('drawPt').onclick=()=>{drawMode.sub='pt';drawMode.line=null;drawSubUi()};
@@ -1082,6 +1096,7 @@ document.getElementById('drawLn').onclick=()=>{
   if(drawMode.sub==='ln')drawMode.line=null; // 線モード中に再度押すと新しい線を開始
   drawMode.sub='ln';drawSubUi();
 };
+document.getElementById('drawCi').onclick=()=>{drawMode.sub='ci';drawMode.line=null;drawSubUi()};
 document.getElementById('drawUndo').onclick=()=>{
   const items=drawMode.d.items;
   if(drawMode.line&&drawMode.line.pts.length){
@@ -1097,6 +1112,16 @@ document.getElementById('drawEnd').onclick=()=>{
 };
 function drawAdd(lat,lng){
   if(drawMode.sub==='pt')drawMode.d.items.push({k:'pt',lat:+lat.toFixed(5),lng:+lng.toFixed(5)});
+  else if(drawMode.sub==='ci'){ // 長押し位置=中心。半径を単位付きで入力
+    const s=(prompt('半径を入力 (例: 600m / 1.5NM / 2km)','1NM')||'').trim();
+    if(!s)return;
+    const m=/^([\d.]+)\s*(m|km|nm)?$/i.exec(s);
+    if(!m){alert('形式が読めません。例: 600m, 1.5NM, 2km');return}
+    const v=parseFloat(m[1]),u=(m[2]||'m').toLowerCase();
+    const r_m=Math.round(u==='nm'?v*1852:u==='km'?v*1000:v);
+    if(!(r_m>0)){alert('半径が不正です');return}
+    drawMode.d.items.push({k:'ci',lat:+lat.toFixed(5),lng:+lng.toFixed(5),r_m});
+  }
   else{
     if(!drawMode.line){drawMode.line={k:'ln',pts:[]};drawMode.d.items.push(drawMode.line)}
     drawMode.line.pts.push([+lat.toFixed(5),+lng.toFixed(5)]);
