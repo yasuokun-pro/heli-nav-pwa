@@ -70,10 +70,16 @@
   .wp-pin.nextOn{border-color:#0e7c3d;background:var(--grn);color:#03270f;box-shadow:0 0 10px rgba(56,224,123,.9)}
   #cfgWind summary{color:var(--dim);font-size:12px;cursor:pointer;margin:12px 0 6px}
   #cfgWind .strip{border:1px solid var(--line);border-radius:6px}
-  #drawBar{position:absolute;z-index:955;left:50%;transform:translateX(-50%);top:calc(var(--ovlH) + 12px);display:none;gap:6px;background:rgba(13,26,41,.95);border:1px solid var(--amb);border-radius:8px;padding:6px 8px;align-items:center}
-  #drawBar span{color:var(--amb);font-size:12px;margin-right:2px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #drawBar{position:absolute;z-index:955;left:50%;transform:translateX(-50%);top:calc(var(--ovlH) + 12px);display:none;flex-direction:column;gap:6px;background:rgba(13,26,41,.95);border:1px solid var(--amb);border-radius:8px;padding:6px 8px}
+  .dbRow{display:flex;gap:6px;align-items:center}
+  #drawBar span#drawName{color:var(--amb);font-size:12px;margin-right:2px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #drawBar button{background:none;border:1px solid var(--line);color:var(--txt);border-radius:5px;font-size:12px;padding:5px 10px;cursor:pointer}
   #drawBar button.on{border-color:var(--amb);color:var(--amb)}
+  #ciR{width:72px;background:none;border:1px solid var(--line);border-radius:5px;color:var(--txt);padding:4px 6px;font-family:var(--mono);font-size:13px;outline:none}
+  #ciU{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:5px;padding:4px;font-size:12px}
+  .ci-handle{width:22px;height:22px;border-radius:50%;background:rgba(10,20,32,.92);border:2px solid;display:flex;align-items:center;justify-content:center;font-size:11px;touch-action:none;cursor:ew-resize}
+  .apPop input.ciR2{width:74px;background:none;border:1px solid var(--line);border-radius:4px;color:var(--txt);padding:4px;font-family:var(--mono);outline:none}
+  .apPop select.ciU2{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:4px}
   tr.flying td{color:var(--grn);background:rgba(56,224,123,.08);border-bottom:1px solid var(--grn)}
   tr.flying td:first-child::before{content:'● ';color:var(--grn)}
   tr.nextwp td{background:rgba(61,213,243,.12);border-bottom:1px solid var(--cyn)}
@@ -216,12 +222,20 @@
     <div id="searchResults"></div>
   </div>
   <div id="drawBar">
-    <span id="drawName"></span>
-    <button id="drawPt" class="on">点</button>
-    <button id="drawLn">線</button>
-    <button id="drawCi">円</button>
-    <button id="drawUndo">↩ 戻す</button>
-    <button id="drawEnd">終了</button>
+    <div class="dbRow">
+      <span id="drawName"></span>
+      <button id="drawPt" class="on">点</button>
+      <button id="drawLn">線</button>
+      <button id="drawCi">円</button>
+      <button id="drawUndo">↩ 戻す</button>
+      <button id="drawEnd">終了</button>
+    </div>
+    <div class="dbRow" id="ciBar" style="display:none">
+      <span style="color:var(--dim);font-size:11px">半径</span>
+      <input type="number" id="ciR" value="1" step="0.1" min="0.01">
+      <select id="ciU"><option value="nm">NM</option><option value="m">m</option><option value="km">km</option></select>
+      <span style="color:var(--dim);font-size:11px">→ 地図を長押しで配置</span>
+    </div>
   </div>
   <div id="zmBtns">
     <button id="btnZmNext" title="自機と次ポイントを表示">NXT PT</button>
@@ -1024,7 +1038,7 @@ function renderLib(){
   fill(document.getElementById('libPts'),pts,'お気に入りはありません(表の★ か下のボタンで登録)',rowP);
   // 作図レイヤー
   const dws=drawsGet();
-  const saveD=()=>{store.set('hnav.draws',dws);renderLib();rebuildDrawLayer()};
+  const saveD=()=>{drawsPersist(dws);renderLib()};
   const dEl=document.getElementById('libDraws');dEl.innerHTML='';
   if(!dws.length)dEl.innerHTML='<div class="libEmpty">レイヤーはありません(「＋レイヤー作成」→「作図」で点・線を描けます)</div>';
   dws.forEach((d,i)=>{
@@ -1058,20 +1072,78 @@ rebuildLibLayer(); // 起動時: 表示ONのポイント/ルートを地図へ
 /* ───────── 作図レイヤー(点・線の自由描画・複数レイヤー・表示切替) ───────── */
 function drawsGet(){const a=store.get('hnav.draws')||[];a.forEach(d=>{d.color=d.color||'#3df5ff';d.show=d.show!==false;d.items=d.items||[];d.folder=d.folder||''});return a}
 const drawLayer=L.layerGroup().addTo(map);
+function fmtR(r_m){return r_m>=926?(r_m/1852).toFixed(2)+'NM ('+Math.round(r_m)+'m)':Math.round(r_m)+'m'}
+function distM(a,b){return distNM({lat:a.lat,lng:a.lng},{lat:b.lat,lng:b.lng})*1852}
+function eastPoint(lat,lng,r_m){return [lat, lng + r_m/(111320*Math.cos(lat*D))]} // 円の東端
+function drawsPersist(arr){ // 保存 + 作図モードの参照を新配列へ付け替え + 再描画
+  store.set('hnav.draws',arr);
+  if(drawMode){
+    const di=arr.findIndex(x=>x.name===drawMode.d.name);
+    if(di>=0){drawMode.arr=arr;drawMode.d=arr[di];drawMode.line=null}
+    else{drawMode=null;document.getElementById('drawBar').style.display='none'}
+  }
+  rebuildDrawLayer();
+}
+function ciPopup(arr,d,it,ii){ // 円タップ→半径の数値変更・削除
+  const el=document.createElement('div');el.className='apPop';
+  const isNm=it.r_m>=926;
+  el.innerHTML=`<h5 style="color:${d.color}">◯ ${d.name}</h5>
+    <dl><dt>半径</dt><dd>${fmtR(it.r_m)}</dd></dl>
+    <div class="row" style="align-items:center">
+      <input type="number" class="ciR2" step="0.01" min="0.01" value="${isNm?+(it.r_m/1852).toFixed(2):it.r_m}">
+      <select class="ciU2">
+        <option value="nm"${isNm?' selected':''}>NM</option>
+        <option value="m"${!isNm?' selected':''}>m</option>
+        <option value="km">km</option>
+      </select>
+      <button class="ap2">適用</button>
+    </div>
+    <div class="row"><button class="del3">円を削除</button></div>`;
+  el.querySelector('.ap2').onclick=()=>{
+    const v=parseFloat(el.querySelector('.ciR2').value),u=el.querySelector('.ciU2').value;
+    if(!(v>0))return;
+    it.r_m=Math.round(u==='nm'?v*1852:u==='km'?v*1000:v);
+    drawsPersist(arr);
+  };
+  el.querySelector('.del3').onclick=()=>{
+    if(!confirm('この円を削除しますか?'))return;
+    d.items.splice(ii,1);drawsPersist(arr);
+  };
+  return el;
+}
 function rebuildDrawLayer(){
   drawLayer.clearLayers();
-  drawsGet().forEach(d=>{
+  const arr=drawsGet();
+  arr.forEach(d=>{
     if(!d.show)return;
-    d.items.forEach(it=>{
+    const editing=!!drawMode&&drawMode.d&&drawMode.d.name===d.name;
+    d.items.forEach((it,ii)=>{
       if(it.k==='pt')L.marker([it.lat,it.lng],{bubblingMouseEvents:false,
         icon:L.divIcon({className:'',html:`<div class="lib-ico" style="color:${d.color}">●</div>`,iconAnchor:[5,6]})})
         .bindTooltip(d.name,{direction:'top'}).addTo(drawLayer);
       else if(it.k==='ln'&&it.pts.length>1)
         L.polyline(it.pts,{color:d.color,weight:2.5,opacity:.9,bubblingMouseEvents:false})
           .bindTooltip(d.name,{sticky:true}).addTo(drawLayer);
-      else if(it.k==='ci')
-        L.circle([it.lat,it.lng],{radius:it.r_m,color:d.color,weight:2,fillColor:d.color,fillOpacity:.05,bubblingMouseEvents:false})
-          .bindTooltip(`${d.name} r=${it.r_m>=926?(it.r_m/1852).toFixed(2)+'NM':Math.round(it.r_m)+'m'}`,{sticky:true}).addTo(drawLayer);
+      else if(it.k==='ci'){
+        const ci=L.circle([it.lat,it.lng],{radius:it.r_m,color:d.color,weight:2,fillColor:d.color,fillOpacity:.05,bubblingMouseEvents:false});
+        ci.bindTooltip(`${d.name} r=${fmtR(it.r_m)}`,{sticky:true});
+        ci.bindPopup(()=>ciPopup(arr,d,it,ii));
+        ci.addTo(drawLayer);
+        if(editing){ // 編集中レイヤーの円は⇔ハンドルをドラッグで半径変更
+          const h=L.marker(eastPoint(it.lat,it.lng,it.r_m),{draggable:true,bubblingMouseEvents:false,
+            icon:L.divIcon({className:'',html:`<div class="ci-handle" style="border-color:${d.color};color:${d.color}">⇔</div>`,iconSize:[22,22],iconAnchor:[11,11]})});
+          h.bindTooltip(fmtR(it.r_m),{permanent:true,direction:'top',offset:[0,-12]});
+          h.on('drag',ev=>{
+            const r=Math.max(10,distM(it,ev.latlng));
+            ci.setRadius(r);h.setTooltipContent(fmtR(r));
+          });
+          h.on('dragend',ev=>{
+            it.r_m=Math.round(Math.max(10,distM(it,ev.latlng)));
+            drawsPersist(arr);
+          });
+          h.addTo(drawLayer);
+        }
+      }
     });
   });
 }
@@ -1089,8 +1161,10 @@ function drawSubUi(){
   document.getElementById('drawPt').classList.toggle('on',!!drawMode&&drawMode.sub==='pt');
   document.getElementById('drawLn').classList.toggle('on',!!drawMode&&drawMode.sub==='ln');
   document.getElementById('drawCi').classList.toggle('on',!!drawMode&&drawMode.sub==='ci');
+  document.getElementById('ciBar').style.display=(!!drawMode&&drawMode.sub==='ci')?'flex':'none';
+  rebuildDrawLayer(); // 円ハンドルの表示/非表示を反映
 }
-function drawSave(){store.set('hnav.draws',drawMode.arr);rebuildDrawLayer()}
+function drawSave(){drawsPersist(drawMode.arr)}
 document.getElementById('drawPt').onclick=()=>{drawMode.sub='pt';drawMode.line=null;drawSubUi()};
 document.getElementById('drawLn').onclick=()=>{
   if(drawMode.sub==='ln')drawMode.line=null; // 線モード中に再度押すと新しい線を開始
@@ -1109,17 +1183,15 @@ document.getElementById('drawUndo').onclick=()=>{
 };
 document.getElementById('drawEnd').onclick=()=>{
   drawMode=null;document.getElementById('drawBar').style.display='none';
+  drawSubUi(); // ハンドル・半径バーを消す
 };
 function drawAdd(lat,lng){
   if(drawMode.sub==='pt')drawMode.d.items.push({k:'pt',lat:+lat.toFixed(5),lng:+lng.toFixed(5)});
-  else if(drawMode.sub==='ci'){ // 長押し位置=中心。半径を単位付きで入力
-    const s=(prompt('半径を入力 (例: 600m / 1.5NM / 2km)','1NM')||'').trim();
-    if(!s)return;
-    const m=/^([\d.]+)\s*(m|km|nm)?$/i.exec(s);
-    if(!m){alert('形式が読めません。例: 600m, 1.5NM, 2km');return}
-    const v=parseFloat(m[1]),u=(m[2]||'m').toLowerCase();
+  else if(drawMode.sub==='ci'){ // 長押し位置=中心。半径はバーの入力値+単位
+    const v=parseFloat(document.getElementById('ciR').value);
+    const u=document.getElementById('ciU').value;
+    if(!(v>0)){alert('半径を入力してください');return}
     const r_m=Math.round(u==='nm'?v*1852:u==='km'?v*1000:v);
-    if(!(r_m>0)){alert('半径が不正です');return}
     drawMode.d.items.push({k:'ci',lat:+lat.toFixed(5),lng:+lng.toFixed(5),r_m});
   }
   else{
