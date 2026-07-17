@@ -70,6 +70,10 @@
   .wp-pin.nextOn{border-color:#0e7c3d;background:var(--grn);color:#03270f;box-shadow:0 0 10px rgba(56,224,123,.9)}
   #cfgWind summary{color:var(--dim);font-size:12px;cursor:pointer;margin:12px 0 6px}
   #cfgWind .strip{border:1px solid var(--line);border-radius:6px}
+  #drawBar{position:absolute;z-index:955;left:50%;transform:translateX(-50%);top:calc(var(--ovlH) + 12px);display:none;gap:6px;background:rgba(13,26,41,.95);border:1px solid var(--amb);border-radius:8px;padding:6px 8px;align-items:center}
+  #drawBar span{color:var(--amb);font-size:12px;margin-right:2px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #drawBar button{background:none;border:1px solid var(--line);color:var(--txt);border-radius:5px;font-size:12px;padding:5px 10px;cursor:pointer}
+  #drawBar button.on{border-color:var(--amb);color:var(--amb)}
   tr.flying td{color:var(--grn);background:rgba(56,224,123,.08);border-bottom:1px solid var(--grn)}
   tr.flying td:first-child::before{content:'● ';color:var(--grn)}
   tr.nextwp td{background:rgba(61,213,243,.12);border-bottom:1px solid var(--cyn)}
@@ -168,6 +172,9 @@
   .apPop .row{display:flex;gap:6px;margin-top:7px}
   .apPop button{flex:1;background:none;border:1px solid var(--cyn);color:var(--cyn);border-radius:4px;font-size:11px;padding:4px;cursor:pointer;font-family:var(--sans)}
   .apPop button.add{border-color:var(--mag);color:var(--mag)}
+  .apPop button.fav2{border-color:var(--amb);color:var(--amb)}
+  .apPop button.fav2.on{background:var(--amb);color:#241500;opacity:1;cursor:default}
+  .apPop button.del3{border-color:var(--red);color:var(--red)}
   @media(max-width:640px){.clocks{gap:10px;font-size:15px}.cell span{font-size:19px}.cell input{font-size:19px;width:64px}}
 </style>
 </head>
@@ -207,6 +214,13 @@
     <input id="searchInput" type="search" placeholder="地名・住所・駅名を検索してEnter" autocomplete="off">
     <div id="searchResults"></div>
   </div>
+  <div id="drawBar">
+    <span id="drawName"></span>
+    <button id="drawPt" class="on">点</button>
+    <button id="drawLn">線</button>
+    <button id="drawUndo">↩ 戻す</button>
+    <button id="drawEnd">終了</button>
+  </div>
   <div id="zmBtns">
     <button id="btnZmNext" title="自機と次ポイントを表示">NXT PT</button>
     <button id="btnZmAll" title="ルート全体を表示">ALL</button>
@@ -215,6 +229,7 @@
     <button id="btnAsp">◍ 空域</button>
     <button id="btnAp">✈ 飛行場</button>
     <button id="btnRain">☂ 雨雲</button>
+    <button id="btnTfc2">◈ 他機</button>
     <button id="btnBase">地図: 淡色</button>
     <button id="btnGPS">◎ GPS</button>
     <button id="btnClear">経路クリア</button>
@@ -262,7 +277,7 @@
       <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
-    <div class="hint"><b>地図を長押しでポイント登録、マーカー長押しで削除</b>(誤タップ防止のためタップでは登録されません)。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>、★でお気に入り保存。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
+    <div class="hint"><b>地図を長押しでポイント登録</b>(作図モード中はレイヤーへ描画)。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
     <details id="cfgWind">
       <summary>風・燃料の設定(航法計算用)</summary>
       <div class="strip">
@@ -302,8 +317,10 @@
 <div id="libModal"><div class="sheet">
   <h4>保存済みルート</h4><div id="libRoutes"></div>
   <h4>お気に入りポイント</h4><div id="libPts"></div>
+  <h4>作図レイヤー</h4><div id="libDraws"></div>
   <div class="btnrow" style="margin-top:14px">
     <button class="btn" id="btnPtHere">地図中心をポイント登録</button>
+    <button class="btn" id="btnDrawNew">＋レイヤー作成</button>
     <button class="btn" id="btnLibClose">閉じる</button>
   </div>
 </div></div>
@@ -694,7 +711,7 @@ document.getElementById('btnRain').onclick=async function(){
 };
 
 /* ───────── GPS / 追尾(自機中心+進行方向上) ───────── */
-let ownPos=null,ownMarker=null,gpsWatch=null,follow=false;
+let ownPos=null,ownMarker=null,gpsWatch=null,follow=false,ownAltFt=null;
 function setFollow(on){
   follow=on;
   document.getElementById('btnFollow').classList.toggle('on',on);
@@ -708,7 +725,7 @@ document.getElementById('btnFollow').onclick=()=>{
 map.on('dragstart',()=>{if(follow)setFollow(false)}); // 手でパンしたら追尾解除
 document.getElementById('btnGPS').onclick=function(){
   if(gpsWatch!==null){navigator.geolocation.clearWatch(gpsWatch);gpsWatch=null;
-    ownPos=null;ownSpdKt=null;setFollow(false);
+    ownPos=null;ownSpdKt=null;ownAltFt=null;setFollow(false);
     if(ownMarker){map.removeLayer(ownMarker);ownMarker=null}
     this.classList.remove('on');renderLiveGs();redraw();return}
   if(!navigator.geolocation){alert('この環境では位置情報が使えません。');return}
@@ -716,6 +733,7 @@ document.getElementById('btnGPS').onclick=function(){
   gpsWatch=navigator.geolocation.watchPosition(p=>{
     ownPos={lat:p.coords.latitude,lng:p.coords.longitude};
     ownSpdKt=(p.coords.speed!==null&&!isNaN(p.coords.speed))?p.coords.speed*1.9438:null;
+    ownAltFt=(p.coords.altitude!==null&&!isNaN(p.coords.altitude))?p.coords.altitude*3.281:null;
     if(!ownMarker){ownMarker=L.marker(ownPos,{icon:L.divIcon({className:'',html:'<div class="own-ico"></div>',iconAnchor:[9,9]})}).addTo(map)}
     else ownMarker.setLatLng(ownPos);
     if(firstFix){firstFix=false;setFollow(true)} // GPS開始時は自動で追尾ON
@@ -754,11 +772,14 @@ function addWp(lat,lng,name){
       <dl><dt>位置</dt><dd>${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}</dd></dl>
       <div class="row">
         <button class="apDct">${dctTarget===w?'D→ 解除':'D→'}</button>
-        <button class="fav2">★</button>
+        <button class="fav2${isFav(w.name)?' on':''}" ${isFav(w.name)?'disabled':''}>${isFav(w.name)?'★ 登録済':'★'}</button>
         <button class="del3">削除</button>
       </div>`;
     el.querySelector('.apDct').onclick=()=>{dctTarget===w?clearDct():setDct(w);marker.closePopup()};
-    el.querySelector('.fav2').onclick=()=>{savePoint(w.name,w.lat,w.lng);marker.closePopup()};
+    el.querySelector('.fav2').onclick=function(){ // 確認なしで登録→その場で強調&無効化
+      savePoint(w.name,w.lat,w.lng,true);
+      this.classList.add('on');this.disabled=true;this.textContent='★ 登録済';
+    };
     el.querySelector('.del3').onclick=()=>{
       if(!confirm('ポイント「'+w.name+'」を削除しますか?'))return;
       if(dctTarget===w)clearDct();
@@ -838,7 +859,10 @@ function redraw(){
   syncDctUi();
   saveState();
 }
-map.on('contextmenu',e=>{addWp(e.latlng.lat,e.latlng.lng);redraw()}); // 長押し(iOS)/右クリックで登録(誤タップ防止)
+map.on('contextmenu',e=>{ // 長押し: 通常=ポイント登録 / 作図モード中=レイヤーへ描画
+  if(typeof drawMode!=='undefined'&&drawMode){drawAdd(e.latlng.lat,e.latlng.lng);return}
+  addWp(e.latlng.lat,e.latlng.lng);redraw();
+});
 ['tas','wDir','wSpd','varW','ff','fob'].forEach(id=>document.getElementById(id).oninput=redraw);
 document.getElementById('btnClear').onclick=()=>{clearAllWp();redraw()};
 
@@ -897,7 +921,7 @@ function rebuildLibLayer(){
       .bindTooltip('ルート: '+r.name,{sticky:true}).addTo(libLayer);
   });
 }
-function savePoint(name,lat,lng){
+function savePoint(name,lat,lng,quiet){
   const pts=libPtsGet();
   const i=pts.findIndex(p=>p.name===name);
   const old=i>=0?pts[i]:{};
@@ -905,8 +929,9 @@ function savePoint(name,lat,lng){
     folder:old.folder||'',icon:old.icon||'●',color:old.color||'#3df5ff',show:!!old.show};
   if(i>=0)pts[i]=rec;else pts.push(rec);
   store.set('hnav.pts',pts);rebuildLibLayer();
-  alert('お気に入りに保存: '+name);
+  if(!quiet)alert('お気に入りに保存: '+name);
 }
+function isFav(name){return libPtsGet().some(p=>p.name===name)}
 document.getElementById('btnRtSave').onclick=()=>{
   if(!wps.length){alert('ポイントがありません');return}
   const name=(prompt('ルート名を入力',wps[0].name+'→'+wps[wps.length-1].name)||'').trim();
@@ -987,6 +1012,28 @@ function renderLib(){
   rowP.isRt=false;rowP.save=saveP;
   fill(document.getElementById('libRoutes'),rts,'保存済みルートはありません(「ルート保存」で登録)',rowR);
   fill(document.getElementById('libPts'),pts,'お気に入りはありません(表の★ か下のボタンで登録)',rowP);
+  // 作図レイヤー
+  const dws=drawsGet();
+  const saveD=()=>{store.set('hnav.draws',dws);renderLib();rebuildDrawLayer()};
+  const dEl=document.getElementById('libDraws');dEl.innerHTML='';
+  if(!dws.length)dEl.innerHTML='<div class="libEmpty">レイヤーはありません(「＋レイヤー作成」→「作図」で点・線を描けます)</div>';
+  dws.forEach((d,i)=>{
+    const row=document.createElement('div');row.className='libRow';
+    row.innerHTML=`<button class="eye${d.show?' on':''}">👁</button>
+      <span style="color:${d.color}">✎</span>
+      <span class="nm">${d.name}</span><small>${d.items.length}件</small>
+      <button class="use">作図</button><button class="gear">⚙</button><button class="del2">削除</button>`;
+    row.querySelector('.eye').onclick=()=>{d.show=!d.show;saveD()};
+    row.querySelector('.use').onclick=()=>startDraw(i);
+    row.querySelector('.gear').onclick=()=>{
+      libEditKey=(libEditKey&&libEditKey.name===d.name&&libEditKey.t==='dw')?null:{t:'dw',name:d.name};
+      renderLib()};
+    row.querySelector('.del2').onclick=()=>{
+      if(!confirm('レイヤー削除: '+d.name+' ?(中の点・線も消えます)'))return;
+      dws.splice(i,1);saveD()};
+    dEl.appendChild(row);
+    if(libEditKey&&libEditKey.t==='dw'&&libEditKey.name===d.name)dEl.appendChild(libEditor(d,true,saveD));
+  });
 }
 document.getElementById('btnLib').onclick=()=>{renderLib();libModal.style.display='flex'};
 document.getElementById('btnLibClose').onclick=()=>libModal.style.display='none';
@@ -997,6 +1044,72 @@ document.getElementById('btnPtHere').onclick=()=>{
   const c=map.getCenter();savePoint(name,c.lat,c.lng);renderLib();
 };
 rebuildLibLayer(); // 起動時: 表示ONのポイント/ルートを地図へ
+
+/* ───────── 作図レイヤー(点・線の自由描画・複数レイヤー・表示切替) ───────── */
+function drawsGet(){const a=store.get('hnav.draws')||[];a.forEach(d=>{d.color=d.color||'#3df5ff';d.show=d.show!==false;d.items=d.items||[];d.folder=d.folder||''});return a}
+const drawLayer=L.layerGroup().addTo(map);
+function rebuildDrawLayer(){
+  drawLayer.clearLayers();
+  drawsGet().forEach(d=>{
+    if(!d.show)return;
+    d.items.forEach(it=>{
+      if(it.k==='pt')L.marker([it.lat,it.lng],{bubblingMouseEvents:false,
+        icon:L.divIcon({className:'',html:`<div class="lib-ico" style="color:${d.color}">●</div>`,iconAnchor:[5,6]})})
+        .bindTooltip(d.name,{direction:'top'}).addTo(drawLayer);
+      else if(it.k==='ln'&&it.pts.length>1)
+        L.polyline(it.pts,{color:d.color,weight:2.5,opacity:.9,bubblingMouseEvents:false})
+          .bindTooltip(d.name,{sticky:true}).addTo(drawLayer);
+    });
+  });
+}
+let drawMode=null; // {arr,d,sub:'pt'|'ln',line}
+function startDraw(i){
+  const arr=drawsGet();
+  drawMode={arr,d:arr[i],sub:'pt',line:null};
+  document.getElementById('drawName').textContent='✎ '+arr[i].name;
+  document.getElementById('drawBar').style.display='flex';
+  drawSubUi();
+  libModal.style.display='none';
+  setScreen('main');
+}
+function drawSubUi(){
+  document.getElementById('drawPt').classList.toggle('on',!!drawMode&&drawMode.sub==='pt');
+  document.getElementById('drawLn').classList.toggle('on',!!drawMode&&drawMode.sub==='ln');
+}
+function drawSave(){store.set('hnav.draws',drawMode.arr);rebuildDrawLayer()}
+document.getElementById('drawPt').onclick=()=>{drawMode.sub='pt';drawMode.line=null;drawSubUi()};
+document.getElementById('drawLn').onclick=()=>{
+  if(drawMode.sub==='ln')drawMode.line=null; // 線モード中に再度押すと新しい線を開始
+  drawMode.sub='ln';drawSubUi();
+};
+document.getElementById('drawUndo').onclick=()=>{
+  const items=drawMode.d.items;
+  if(drawMode.line&&drawMode.line.pts.length){
+    drawMode.line.pts.pop();
+    if(!drawMode.line.pts.length){items.splice(items.indexOf(drawMode.line),1);drawMode.line=null}
+  }else{
+    items.pop();drawMode.line=null;
+  }
+  drawSave();
+};
+document.getElementById('drawEnd').onclick=()=>{
+  drawMode=null;document.getElementById('drawBar').style.display='none';
+};
+function drawAdd(lat,lng){
+  if(drawMode.sub==='pt')drawMode.d.items.push({k:'pt',lat:+lat.toFixed(5),lng:+lng.toFixed(5)});
+  else{
+    if(!drawMode.line){drawMode.line={k:'ln',pts:[]};drawMode.d.items.push(drawMode.line)}
+    drawMode.line.pts.push([+lat.toFixed(5),+lng.toFixed(5)]);
+  }
+  drawSave();
+}
+document.getElementById('btnDrawNew').onclick=()=>{
+  const name=(prompt('レイヤー名を入力')||'').trim();
+  if(!name)return;
+  const a=drawsGet();a.push({name,show:true,color:'#3df5ff',items:[],folder:''});
+  store.set('hnav.draws',a);renderLib();rebuildDrawLayer();
+};
+rebuildDrawLayer(); // 起動時: 表示ONのレイヤーを地図へ
 
 /* ───────── 保存/復元 ───────── */
 function routeObj(){
@@ -1264,18 +1377,23 @@ document.getElementById('btnLogClr').onclick=()=>{
 
 /* ───────── traffic ───────── */
 const acLayer=L.layerGroup().addTo(map);
-function acIcon(track){return L.divIcon({className:'ac-ico',iconAnchor:[10,10],
+function acIcon(track,heli){return L.divIcon({className:'ac-ico',iconAnchor:[10,10],
   html:`<svg width="20" height="20" viewBox="0 0 20 20" style="transform:rotate(${track||0}deg)">
-    <path d="M10 1 L12 8 L18 11 L18 13 L12 11.5 L11.5 16 L14 18 L14 19 L10 18 L6 19 L6 18 L8.5 16 L8 11.5 L2 13 L2 11 L8 8 Z" fill="#38e07b"/></svg>`})}
+    <path d="M10 1 L12 8 L18 11 L18 13 L12 11.5 L11.5 16 L14 18 L14 19 L10 18 L6 19 L6 18 L8.5 16 L8 11.5 L2 13 L2 11 L8 8 Z" fill="${heli?'#ffb02e':'#38e07b'}"/></svg>`})}
+const HELI_TYPES=/^(R22|R44|R66|B06|B105|B407|B412|B429|B430|B505|EC20|EC25|EC30|EC35|EC45|EC55|EC75|H12|H125|H130|H135|H145|H155|H160|H175|H225|H47|H53|H60|H64|UH1|AS32|AS3B|AS50|AS55|AS65|A109|A119|A129|A139|A149|A169|A189|S61|S64|S76|S92|KA32|KMAX|MD52|MD60|EH10|V22|OH1|AH1|CH47|SH60|UH60|MH53|EN28|EN48|R4|S330|S350)/;
+function isHeli(a){
+  return a.category==='A7'||/HELI|ROTOR/i.test(a.desc||'')||HELI_TYPES.test((a.t||'').toUpperCase().trim());
+}
 function showTraffic(list,demo){
   acLayer.clearLayers();
   const body=document.getElementById('tfcBody');body.innerHTML='';
-  const c=map.getCenter();
   list.forEach(a=>{
-    L.marker([a.lat,a.lng],{icon:acIcon(a.trk)}).addTo(acLayer).bindTooltip(`${a.cs} ${a.alt}ft`,{direction:'top'});
+    L.marker([a.lat,a.lng],{icon:acIcon(a.trk,a.heli)}).addTo(acLayer)
+      .bindTooltip(`${a.heli?'🚁':''}${a.cs} ${a.alt}ft`,{direction:'top'});
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${a.cs}</td><td>${a.alt}</td><td>${a.spd}</td><td>${Math.round(a.trk)}°</td>
-      <td>${distNM({lat:c.lat,lng:c.lng},{lat:a.lat,lng:a.lng}).toFixed(1)}</td>`;
+    if(a.heli)tr.style.color='var(--amb)';
+    tr.innerHTML=`<td>${a.heli?'🚁':''}${a.cs}</td><td>${a.alt}</td><td>${a.spd}</td><td>${Math.round(a.trk)}°</td>
+      <td>${a.dist!==undefined?a.dist.toFixed(1):'—'}</td>`;
     body.appendChild(tr);
   });
   document.getElementById('tfcStatus').innerHTML=demo
@@ -1287,14 +1405,19 @@ async function fetchTraffic(){
   try{
     const r=await fetch(`https://api.airplanes.live/v2/point/${c.lat.toFixed(4)}/${c.lng.toFixed(4)}/50`);
     const j=await r.json();
-    const ac=(j.ac||[]).filter(a=>a.lat&&a.lon).slice(0,30).map(a=>({
+    const ac=(j.ac||[]).filter(a=>a.lat&&a.lon).map(a=>({
       cs:(a.flight||'').trim()||a.r||a.hex,
       lat:a.lat,lng:a.lon,
       alt:a.alt_baro==='ground'?0:Math.round(a.alt_baro||0),
-      spd:Math.round(a.gs||0),trk:a.track||0
+      spd:Math.round(a.gs||0),trk:a.track||0,
+      heli:isHeli(a),
+      dist:distNM({lat:c.lat,lng:c.lng},{lat:a.lat,lng:a.lon})
     }));
     if(!ac.length)throw new Error('empty');
-    showTraffic(ac,false);
+    // ヘリ優先 → 距離順 → 自機高度に近い順
+    const oa=ownAltFt||0;
+    ac.sort((x,y)=>(y.heli-x.heli)||(x.dist-y.dist)||(Math.abs(x.alt-oa)-Math.abs(y.alt-oa)));
+    showTraffic(ac.slice(0,30),false);
   }catch(e){
     const c2=map.getCenter();
     showTraffic([
@@ -1306,16 +1429,22 @@ async function fetchTraffic(){
   }
 }
 let tfcTimer=null;
-document.getElementById('btnTfc').onclick=function(){ // トグル: 15秒ごと自動更新
+function toggleTraffic(){ // トグル: 15秒ごと自動更新(タブと地図の両ボタン共通)
   if(tfcTimer){clearInterval(tfcTimer);tfcTimer=null;
     acLayer.clearLayers();document.getElementById('tfcBody').innerHTML='';
     document.getElementById('tfcStatus').textContent='';
-    this.textContent='他機表示 開始';this.classList.remove('on');return}
-  document.getElementById('tfcStatus').textContent='取得中…';
-  fetchTraffic();
-  tfcTimer=setInterval(fetchTraffic,15000);
-  this.textContent='他機表示 停止';this.classList.add('on');
-};
+  }else{
+    document.getElementById('tfcStatus').textContent='取得中…';
+    fetchTraffic();
+    tfcTimer=setInterval(fetchTraffic,15000);
+  }
+  const on=!!tfcTimer;
+  const b=document.getElementById('btnTfc');
+  b.textContent=on?'他機表示 停止':'他機表示 開始';b.classList.toggle('on',on);
+  document.getElementById('btnTfc2').classList.toggle('on',on);
+}
+document.getElementById('btnTfc').onclick=toggleTraffic;
+document.getElementById('btnTfc2').onclick=toggleTraffic;
 
 /* ───────── tabs ───────── */
 document.querySelectorAll('.tabs button').forEach(btn=>{
