@@ -98,6 +98,11 @@
   .mapwrap .leaflet-bottom.leaflet-right .leaflet-control-zoom{margin-bottom:76px;margin-right:12px}
   #btnFollow{top:calc(var(--ovlH) + 12px)}#btnMapOnly{top:calc(var(--ovlH) + 52px)}
   #btnGoLog{top:calc(var(--ovlH) + 92px)}#btnSearch{top:calc(var(--ovlH) + 132px)}
+  #btnUiHide{top:calc(var(--ovlH) + 172px)}
+  body.hideR .maptools,body.hideR #zmBtns{display:none}
+  body.hideAll .maptools,body.hideAll #zmBtns,body.hideAll .zbtn,body.hideAll .leaflet-control-zoom{display:none}
+  body.hideAll #btnUiHide{display:block}
+  .dct-pin{color:var(--cyn);font-size:20px;line-height:1;text-shadow:0 0 8px rgba(61,213,243,.95)}
   #searchBar{position:absolute;z-index:960;left:52px;top:calc(var(--ovlH) + 12px);width:min(72%,380px);display:none}
   #searchBar input{width:100%;background:rgba(13,26,41,.96);border:1px solid var(--cyn);border-radius:6px;color:var(--txt);padding:9px 11px;font-size:14px;outline:none;font-family:var(--sans)}
   #searchResults{background:rgba(13,26,41,.97);border:1px solid var(--line);border-radius:6px;margin-top:4px;max-height:40vh;overflow:auto}
@@ -203,11 +208,13 @@
         <div class="cell"><b>方位 (磁)</b><span id="nxBrg">---°</span></div>
         <div class="cell"><b>距離</b><span id="nxDist">— <small>NM</small></span></div>
         <div class="cell"><b>ETE</b><span id="nxEte">--:--</span></div>
+        <div class="cell"><b>ETA</b><span id="nxEta">--:--</span></div>
         <div class="cell" style="flex:0 0 auto"><b>&nbsp;</b><button class="livebtn" id="nxPrev" style="vertical-align:0">◀ 前</button> <button class="livebtn" id="nxSkip" style="vertical-align:0">次 ▶</button></div>
       </div>
       <div class="strip ovl2">
         <div class="cell mag"><b>ROUTE DIST</b><span id="dDist">0.0 <small>NM</small></span></div>
         <div class="cell mag"><b>ROUTE ETE<span class="livetag" id="tagEte">LIVE</span></b><span id="dEte">--:--</span></div>
+        <div class="cell mag"><b>ROUTE ETA</b><span id="dEta">--:--</span></div>
         <div class="cell"><b>TAS</b><input id="tas" type="number" value="100"> <span><small>kt</small></span></div>
         <div class="cell"><b>偏差 (西偏)</b><input id="varW" type="number" step="0.5" value="8"> <span><small>°W</small></span></div>
       </div>
@@ -218,6 +225,7 @@
   <button id="btnMapOnly" class="zbtn" title="メイン(地図)画面">🗺</button>
   <button id="btnGoLog" class="zbtn" title="計画(地図+ログ)画面">▤</button>
   <button id="btnSearch" class="zbtn" title="地名検索">🔍</button>
+  <button id="btnUiHide" class="zbtn" title="ボタン表示切替">👁</button>
   <div id="searchBar">
     <input id="searchInput" type="search" placeholder="地名・住所・駅名を検索してEnter" autocomplete="off">
     <div id="searchResults"></div>
@@ -563,6 +571,16 @@ function setScreen(mode){
 document.getElementById('btnMapOnly').onclick=()=>setScreen('main');
 document.getElementById('btnGoLog').onclick=()=>setScreen('plan');
 
+/* ── ボタン表示切替(👁): 全表示→右側非表示→全非表示(このボタンだけ残る) ── */
+let uiHide=0;
+document.getElementById('btnUiHide').onclick=function(){
+  uiHide=(uiHide+1)%3;
+  document.body.classList.toggle('hideR',uiHide===1);
+  document.body.classList.toggle('hideAll',uiHide===2);
+  this.textContent=uiHide===0?'👁':uiHide===1?'◐':'◌';
+  this.classList.toggle('on',uiHide>0);
+};
+
 /* ── 諸元オーバーレイ(メイン画面・上から引き出し) ──
    レベル0=地図のみ / 1=時計+GS+NEXT / 2=+距離・ETE・TAS・偏差 */
 let ovlLevel=1;
@@ -873,6 +891,7 @@ function redraw(){
   }
   document.getElementById('dDist').innerHTML=totD.toFixed(1)+' <small>NM</small>';
   document.getElementById('dEte').textContent=(!anyBad&&totH>0)?fmtHM(totH):'--:--';
+  document.getElementById('dEta').textContent=(!anyBad&&totH>0)?hm(new Date(Date.now()+totH*3600e3)):'--:--';
   const req=(!anyBad&&num('ff')>0)?totF:0;
   document.getElementById('dReq').innerHTML=req.toFixed(0)+' <small>lbs</small>';
   const fob=num('fob');
@@ -885,8 +904,9 @@ function redraw(){
   syncDctUi();
   saveState();
 }
-map.on('contextmenu',e=>{ // 長押し: 通常=ポイント登録 / 作図モード中=レイヤーへ描画
+map.on('contextmenu',e=>{ // 長押し: 作図中=描画 / 飛行中=D→ピン(ルートに追加しない) / 通常=ポイント登録
   if(typeof drawMode!=='undefined'&&drawMode){drawAdd(e.latlng.lat,e.latlng.lng);return}
+  if(flt&&flt.legOff){setDctPin(e.latlng.lat,e.latlng.lng);return}
   addWp(e.latlng.lat,e.latlng.lng);redraw();
 });
 ['tas','wDir','wSpd','varW','ff','fob'].forEach(id=>document.getElementById(id).oninput=redraw);
@@ -1298,8 +1318,14 @@ document.getElementById('fileIn').onchange=function(){
 };
 
 /* ───────── Direct-To ───────── */
-let dctTarget=null;
+let dctTarget=null,dctPin=null;
 const dctLine=L.polyline([],{color:'#3df5ff',weight:3,dashArray:'8 7',opacity:.95}).addTo(map);
+function setDctPin(lat,lng){ // 飛行中の長押し: その場ピンへD→(経路は変更しない)
+  if(dctPin)map.removeLayer(dctPin);
+  dctPin=L.marker([lat,lng],{bubblingMouseEvents:false,
+    icon:L.divIcon({className:'',html:'<div class="dct-pin">◎</div>',iconSize:[22,22],iconAnchor:[11,11]})}).addTo(map);
+  setDct({name:'PIN '+hm(new Date()),lat,lng,isWp:false});
+}
 function syncDctUi(){ // 一覧表のD→対象行を強調
   const rows=[...document.querySelectorAll('#wpBody tr:not(.total)')];
   rows.forEach((r,k)=>{
@@ -1318,6 +1344,7 @@ function setDct(w){
 function clearDct(){
   if(dctTarget&&dctTarget.isWp)dctTarget.marker.setIcon(wpIcon(dctTarget.name,false));
   dctTarget=null;dctLine.setLatLngs([]);
+  if(dctPin){map.removeLayer(dctPin);dctPin=null} // D→解除でピンも消す
   document.getElementById('dctCard').style.display='none';
   syncDctUi();syncWpIcons();
 }
@@ -1366,6 +1393,7 @@ function updateNext(){
     document.getElementById('nxBrg').textContent='---°';
     document.getElementById('nxDist').innerHTML='— <small>NM</small>';
     document.getElementById('nxEte').textContent='--:--';
+    document.getElementById('nxEta').textContent='--:--';
     return;
   }
   const tc=trueBrg(from,w),d=distNM(from,w);
@@ -1374,6 +1402,7 @@ function updateNext(){
   document.getElementById('nxDist').innerHTML=d.toFixed(1)+' <small>NM</small>';
   const tri=windTri(tc),g=(tri&&!tri.bad)?effGs(tri.gs):null;
   document.getElementById('nxEte').textContent=(g&&g>0)?fmtHM(d/g):'--:--';
+  document.getElementById('nxEta').textContent=(g&&g>0)?hm(new Date(Date.now()+d/g*3600e3)):'--:--';
 }
 document.getElementById('nxSkip').onclick=()=>{
   if(wps.length){nextIdx=Math.min(wps.length-1,nextIdx+1);updateNext()}};
