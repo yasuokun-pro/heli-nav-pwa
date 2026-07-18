@@ -60,7 +60,7 @@
   body.main #ovl{display:block}
   #ovl .strip,#ovlHandle{pointer-events:auto}
   #ovl .strip{background:rgba(10,20,32,.93)}
-  #ovlBody{display:none}
+  #ovlBody{display:none;background:rgba(10,20,32,.93)}
   body.ovl1 #ovlBody{display:block}
   #ovlBody .ovl2{display:none}
   body.ovl2 #ovlBody .ovl2{display:flex}
@@ -95,8 +95,9 @@
   .zbtn.on{border-color:var(--grn);color:var(--grn)}
   .mapwrap{--ovlH:0px}
   .mapwrap .leaflet-top{top:var(--ovlH)}
-  #btnFollow{top:calc(var(--ovlH) + 92px)}#btnMapOnly{top:calc(var(--ovlH) + 132px)}
-  #btnGoLog{top:calc(var(--ovlH) + 172px)}#btnSearch{top:calc(var(--ovlH) + 212px)}
+  .mapwrap .leaflet-bottom.leaflet-right .leaflet-control-zoom{margin-bottom:76px;margin-right:12px}
+  #btnFollow{top:calc(var(--ovlH) + 12px)}#btnMapOnly{top:calc(var(--ovlH) + 52px)}
+  #btnGoLog{top:calc(var(--ovlH) + 92px)}#btnSearch{top:calc(var(--ovlH) + 132px)}
   #searchBar{position:absolute;z-index:960;left:52px;top:calc(var(--ovlH) + 12px);width:min(72%,380px);display:none}
   #searchBar input{width:100%;background:rgba(13,26,41,.96);border:1px solid var(--cyn);border-radius:6px;color:var(--txt);padding:9px 11px;font-size:14px;outline:none;font-family:var(--sans)}
   #searchResults{background:rgba(13,26,41,.97);border:1px solid var(--line);border-radius:6px;margin-top:4px;max-height:40vh;overflow:auto}
@@ -290,6 +291,7 @@
       <button class="btn sh" id="btnJsonIn">JSON読込</button>
       <button class="btn go" id="btnRtSave">ルート保存</button>
       <button class="btn" id="btnLib">保存一覧</button>
+      <button class="btn" id="btnDrawNew">＋レイヤー作成</button>
       <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
@@ -336,7 +338,6 @@
   <h4>作図レイヤー</h4><div id="libDraws"></div>
   <div class="btnrow" style="margin-top:14px">
     <button class="btn" id="btnPtHere">地図中心をポイント登録</button>
-    <button class="btn" id="btnDrawNew">＋レイヤー作成</button>
     <button class="btn" id="btnLibClose">閉じる</button>
   </div>
 </div></div>
@@ -419,7 +420,8 @@ setInterval(tick,1000);tick();
 
 /* ───────── map(淡色 → 航空写真 → OSM 切替) ───────── */
 const map=L.map('map',{rotate:true,touchRotate:false,rotateControl:false,fadeAnimation:false}).setView([35.55,139.78],9); // fadeAnimation: leaflet-rotateとの相性問題で無効化
-map.attributionControl.setPosition('bottomleft'); // 右下は操作ボタンと重なるため
+map.attributionControl.setPosition('bottomleft');
+map.zoomControl.setPosition('bottomright'); // 右下(ALLボタンの上)
 const BASES=[
   {n:'淡色',ly:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{attribution:'国土地理院',maxZoom:18})},
   {n:'写真',ly:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{attribution:'国土地理院(全国最新写真)',maxZoom:18})},
@@ -1118,16 +1120,17 @@ function rebuildDrawLayer(){
     if(!d.show)return;
     const editing=!!drawMode&&drawMode.d&&drawMode.d.name===d.name;
     d.items.forEach((it,ii)=>{
-      if(it.k==='pt')L.marker([it.lat,it.lng],{bubblingMouseEvents:false,
+      // 作図モード外は誤タップ防止のため非インタラクティブ(表示のみ)
+      if(it.k==='pt')L.marker([it.lat,it.lng],{bubblingMouseEvents:false,interactive:editing,
         icon:L.divIcon({className:'',html:`<div class="lib-ico" style="color:${d.color}">●</div>`,iconAnchor:[5,6]})})
         .bindTooltip(d.name,{direction:'top'}).addTo(drawLayer);
       else if(it.k==='ln'&&it.pts.length>1)
-        L.polyline(it.pts,{color:d.color,weight:2.5,opacity:.9,bubblingMouseEvents:false})
+        L.polyline(it.pts,{color:d.color,weight:2.5,opacity:.9,bubblingMouseEvents:false,interactive:editing})
           .bindTooltip(d.name,{sticky:true}).addTo(drawLayer);
       else if(it.k==='ci'){
-        const ci=L.circle([it.lat,it.lng],{radius:it.r_m,color:d.color,weight:2,fillColor:d.color,fillOpacity:.05,bubblingMouseEvents:false});
+        const ci=L.circle([it.lat,it.lng],{radius:it.r_m,color:d.color,weight:2,fillColor:d.color,fillOpacity:.05,bubblingMouseEvents:false,interactive:editing});
         ci.bindTooltip(`${d.name} r=${fmtR(it.r_m)}`,{sticky:true});
-        ci.bindPopup(()=>ciPopup(arr,d,it,ii));
+        if(editing)ci.bindPopup(()=>ciPopup(arr,d,it,ii)); // 半径の数値変更は作図中のみ
         ci.addTo(drawLayer);
         if(editing){ // 編集中レイヤーの円は⇔ハンドルをドラッグで半径変更
           const h=L.marker(eastPoint(it.lat,it.lng,it.r_m),{draggable:true,bubblingMouseEvents:false,
@@ -1204,7 +1207,8 @@ document.getElementById('btnDrawNew').onclick=()=>{
   const name=(prompt('レイヤー名を入力')||'').trim();
   if(!name)return;
   const a=drawsGet();a.push({name,show:true,color:'#3df5ff',items:[],folder:''});
-  store.set('hnav.draws',a);renderLib();rebuildDrawLayer();
+  store.set('hnav.draws',a);renderLib();
+  startDraw(a.length-1); // 作成したらそのまま作図モードへ
 };
 rebuildDrawLayer(); // 起動時: 表示ONのレイヤーを地図へ
 
@@ -1474,9 +1478,17 @@ document.getElementById('btnLogClr').onclick=()=>{
 
 /* ───────── traffic ───────── */
 const acLayer=L.layerGroup().addTo(map);
-function acIcon(track,heli){return L.divIcon({className:'ac-ico',iconAnchor:[10,10],
-  html:`<svg width="20" height="20" viewBox="0 0 20 20" style="transform:rotate(${track||0}deg)">
-    <path d="M10 1 L12 8 L18 11 L18 13 L12 11.5 L11.5 16 L14 18 L14 19 L10 18 L6 19 L6 18 L8.5 16 L8 11.5 L2 13 L2 11 L8 8 Z" fill="${heli?'#ffb02e':'#38e07b'}"/></svg>`})}
+function acIcon(track,heli){
+  const svg=heli
+    ?`<g stroke="#ffb02e" stroke-width="1.7" stroke-linecap="round">
+        <line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/>
+        <ellipse cx="10" cy="9.5" rx="2.6" ry="4" fill="#ffb02e" stroke="none"/>
+        <line x1="10" y1="13" x2="10" y2="18"/><line x1="7.8" y1="18" x2="12.2" y2="18"/>
+      </g>`
+    :`<path d="M10 1 L12 8 L18 11 L18 13 L12 11.5 L11.5 16 L14 18 L14 19 L10 18 L6 19 L6 18 L8.5 16 L8 11.5 L2 13 L2 11 L8 8 Z" fill="#38e07b"/>`;
+  return L.divIcon({className:'ac-ico',iconAnchor:[10,10],
+    html:`<svg width="20" height="20" viewBox="0 0 20 20" style="transform:rotate(${track||0}deg)">${svg}</svg>`});
+}
 const HELI_TYPES=/^(R22|R44|R66|B06|B105|B407|B412|B429|B430|B505|EC20|EC25|EC30|EC35|EC45|EC55|EC75|H12|H125|H130|H135|H145|H155|H160|H175|H225|H47|H53|H60|H64|UH1|AS32|AS3B|AS50|AS55|AS65|A109|A119|A129|A139|A149|A169|A189|S61|S64|S76|S92|KA32|KMAX|MD52|MD60|EH10|V22|OH1|AH1|CH47|SH60|UH60|MH53|EN28|EN48|R4|S330|S350)/;
 function isHeli(a){
   return a.category==='A7'||/HELI|ROTOR/i.test(a.desc||'')||HELI_TYPES.test((a.t||'').toUpperCase().trim());
@@ -1489,8 +1501,14 @@ function showTraffic(list,demo){
       .bindTooltip(`${a.heli?'🚁':''}${a.cs} ${a.alt}ft`,{direction:'top'});
     const tr=document.createElement('tr');
     if(a.heli)tr.style.color='var(--amb)';
+    tr.style.cursor='pointer';
     tr.innerHTML=`<td>${a.heli?'🚁':''}${a.cs}</td><td>${a.alt}</td><td>${a.spd}</td><td>${Math.round(a.trk)}°</td>
       <td>${a.dist!==undefined?a.dist.toFixed(1):'—'}</td>`;
+    tr.onclick=()=>{ // タップでその機体を地図中心に
+      setFollow(false);
+      map.setView([a.lat,a.lng],Math.max(map.getZoom(),11));
+      setScreen('main');
+    };
     body.appendChild(tr);
   });
   document.getElementById('tfcStatus').innerHTML=demo
@@ -1509,7 +1527,7 @@ async function fetchTraffic(){
       spd:Math.round(a.gs||0),trk:a.track||0,
       heli:isHeli(a),
       dist:distNM({lat:c.lat,lng:c.lng},{lat:a.lat,lng:a.lon})
-    }));
+    })).filter(o=>o.alt>0); // 地上(0ft)の機体は表示しない
     if(!ac.length)throw new Error('empty');
     // ヘリ優先 → 距離順 → 自機高度に近い順
     const oa=ownAltFt||0;
