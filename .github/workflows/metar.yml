@@ -1,0 +1,47 @@
+name: Update METAR
+# 飛行場METARを定期取得して metar.json を更新(同一オリジン配信・CORS回避)。
+# aviationweather.gov はブラウザからCORSで叩けないため、サーバ側(Actions)で取得する。
+on:
+  schedule:
+    - cron: '5,35 * * * *'   # 毎時05分・35分(METARは毎時更新)
+  workflow_dispatch:
+  push:
+    paths: ['tools/metar_stations.json', '.github/workflows/metar.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: metar
+  cancel-in-progress: true
+
+jobs:
+  metar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch METAR
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, datetime
+          sta = json.load(open('tools/metar_stations.json'))
+          ids = ','.join(s['icao'] for s in sta)
+          url = 'https://aviationweather.gov/api/data/metar?ids='+ids+'&format=json'
+          req = urllib.request.Request(url, headers={'User-Agent':'heli-nav-pwa'})
+          d = json.load(urllib.request.urlopen(req, timeout=60))
+          out = {'updated': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%MZ'), 'm': {}}
+          for x in d:
+              out['m'][x['icaoId']] = {
+                'raw': x.get('rawOb',''), 'cat': x.get('fltCat',''),
+                'temp': x.get('temp'), 'wdir': x.get('wdir'), 'wspd': x.get('wspd'),
+                'visib': x.get('visib'), 'obs': x.get('obsTime')}
+          json.dump(out, open('metar.json','w'), ensure_ascii=False, separators=(',',':'))
+          print(len(out['m']), 'stations')
+          PY
+      - name: Commit if changed
+        run: |
+          git config user.name  'metar-bot'
+          git config user.email 'actions@github.com'
+          git add metar.json
+          git diff --cached --quiet || git commit -m 'METAR更新 [skip ci]'
+          git push

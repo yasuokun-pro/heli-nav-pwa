@@ -2,7 +2,7 @@
    - アプリ本体(シェル)はインストール時にキャッシュ → オフラインでも起動
    - 地図タイル(地理院・OSM・RainViewer)は一度表示したものをキャッシュ
    ※ index.html 等を更新したら、下の VER を上げると全端末に更新が配信されます */
-const VER = 'hnav-v6-27';
+const VER = 'hnav-v6-28';
 const TILE_CACHE = 'hnav-tiles';
 const TILE_MAX = 4000; /* タイル保持枚数の上限(超えたら古いものから削除) */
 

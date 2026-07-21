@@ -105,6 +105,10 @@
   .dct-pin{color:var(--cyn);font-size:20px;line-height:1;text-shadow:0 0 8px rgba(61,213,243,.95)}
   .nav-ico{font-size:15px;line-height:1;color:#7ea8d8;text-shadow:0 1px 3px rgba(0,0,0,.9)}
   .nav-ico b{font-family:var(--mono);font-size:9px;color:#9fc0e6;margin-left:2px;text-shadow:0 1px 3px #000}
+  .cat{display:inline-block;font-family:var(--mono);font-weight:700;font-size:11px;padding:1px 6px;border-radius:3px;color:#04120a}
+  .cat.VFR{background:var(--grn)}.cat.MVFR{background:#4da3ff}.cat.IFR{background:var(--red);color:#fff}.cat.LIFR{background:#c060e0;color:#fff}.cat.NA{background:var(--line);color:var(--dim)}
+  .metarRaw{font-family:var(--mono);font-size:11px;color:var(--txt);white-space:normal;word-break:break-all;margin-top:3px}
+  #metarList td{cursor:pointer}
   #searchBar{position:absolute;z-index:960;left:52px;top:calc(var(--ovlH) + 12px);width:min(72%,380px);display:none}
   #searchBar input{width:100%;background:rgba(13,26,41,.96);border:1px solid var(--cyn);border-radius:6px;color:var(--txt);padding:9px 11px;font-size:14px;outline:none;font-family:var(--sans)}
   #searchResults{background:rgba(13,26,41,.97);border:1px solid var(--line);border-radius:6px;margin-top:4px;max-height:40vh;overflow:auto}
@@ -283,6 +287,7 @@
     <button class="active" data-tab="wp">飛行ログ</button>
     <button data-tab="log">飛行記録</button>
     <button data-tab="tfc">他機情報</button>
+    <button data-tab="met">METAR</button>
   </div>
 
   <div class="tabbody" id="tab-wp">
@@ -338,6 +343,15 @@
     </div>
     <table><thead><tr><th>C/S</th><th>高度 ft</th><th>速度 kt</th><th>方位</th><th>距離 NM</th></tr></thead>
     <tbody id="tfcBody"></tbody></table>
+  </div>
+
+  <div class="tabbody" id="tab-met" style="display:none">
+    <div class="btnrow">
+      <button class="btn" id="btnMetR">↻ 更新</button>
+      <span id="metStatus" class="hint" style="align-self:center"></span>
+    </div>
+    <table><thead><tr><th>飛行場</th><th>区分</th><th>風</th><th>視程</th><th>気温</th><th>距離</th></tr></thead>
+    <tbody id="metBody"></tbody></table>
   </div>
 </div>
 
@@ -720,27 +734,78 @@ document.getElementById('btnZmAll').onclick=()=>{
 /* ───────── 飛行場情報レイヤー ─────────
    タップで詳細ポップアップ(標高・滑走路)。D→ / ルート追加も可。
    周波数・運用時間等はAIP AD編の正式データ入手後に追加予定 */
+/* ───────── METAR(GitHub Actionsが更新するmetar.jsonを同一オリジン取得) ───────── */
+let METAR=null,metarFetched=0;
+async function loadMetar(force){
+  if(METAR&&!force&&Date.now()-metarFetched<120000){renderMetarTab();return}
+  const st=document.getElementById('metStatus');if(st)st.textContent='取得中…';
+  try{
+    const r=await fetch('metar.json?t='+Math.floor(Date.now()/300000),{cache:'no-store'});
+    METAR=await r.json();metarFetched=Date.now();
+    store.set('hnav.metar',METAR); // オフライン用に退避
+  }catch(e){
+    METAR=METAR||store.get('hnav.metar'); // オフライン時は前回値
+  }
+  renderMetarTab();
+  document.querySelectorAll('.leaflet-popup .metarSlot').forEach(s=>s.innerHTML=metarHtml(s.dataset.icao));
+}
+function catCls(c){return c&&['VFR','MVFR','IFR','LIFR'].includes(c)?c:'NA'}
+function metarHtml(icao){
+  const m=METAR&&METAR.m&&METAR.m[icao];
+  if(!METAR)return '<span style="color:var(--dim)">METAR読込中…</span>';
+  if(!m)return '<span style="color:var(--dim)">METAR配信なし</span>';
+  const w=(m.wdir!=null&&m.wspd!=null)?`${fmt3(m.wdir)}°/${m.wspd}kt`:'';
+  return `<span class="cat ${catCls(m.cat)}">${m.cat||'N/A'}</span>`+
+    (w?` 風${w}`:'')+(m.temp!=null?` ${m.temp}℃`:'')+
+    `<div class="metarRaw">${m.raw||''}</div>`+
+    `<div style="font-size:9px;color:var(--dim)">${METAR.updated} 更新(UTC)</div>`;
+}
+function renderMetarTab(){
+  const b=document.getElementById('metBody');if(!b)return;
+  const c=ownPos||map.getCenter();
+  const rows=ASP.filter(a=>a.icao).map(a=>({a,d:distNM({lat:c.lat,lng:c.lng},{lat:a.lat,lng:a.lng})}))
+    .sort((x,y)=>x.d-y.d);
+  b.innerHTML='';
+  rows.forEach(({a,d})=>{
+    const m=METAR&&METAR.m&&METAR.m[a.icao];
+    const tr=document.createElement('tr');
+    const w=(m&&m.wdir!=null)?`${fmt3(m.wdir)}/${m.wspd}`:'—';
+    tr.innerHTML=`<td class="jp">${a.icao} ${a.n}</td>`+
+      `<td>${m?`<span class="cat ${catCls(m.cat)}">${m.cat||'—'}</span>`:'—'}</td>`+
+      `<td>${w}</td><td>${m&&m.visib!=null?m.visib:'—'}</td><td>${m&&m.temp!=null?m.temp+'℃':'—'}</td>`+
+      `<td>${d.toFixed(0)}</td>`;
+    tr.onclick=()=>{setFollow(false);map.setView([a.lat,a.lng],Math.max(map.getZoom(),10));setScreen('main');};
+    b.appendChild(tr);
+  });
+  const st=document.getElementById('metStatus');
+  if(st)st.innerHTML=METAR?`${METAR.updated} 更新(UTC) / 近い順`:'オフライン(データなし)';
+}
+document.getElementById('btnMetR').onclick=()=>loadMetar(true);
+
 const apLayer=L.layerGroup();
 ASP.forEach(a=>{
   if(!a.icao)return;
   const mk=L.marker([a.lat,a.lng],{
     icon:L.divIcon({className:'',html:`<div class="ap-ico">${a.icao}</div>`,iconAnchor:[16,7]})
   });
-  const el=document.createElement('div');
-  el.className='apPop';
-  el.innerHTML=`<h5>${a.icao} ${a.n}</h5>
-    <dl>
-      <dt>種別</dt><dd>${a.t==='ctr'?'管制圏(タワー)':a.t==='inf'?'情報圏(レディオ/リモート)':'飛行場(圏なし)'}</dd>
-      <dt>標高</dt><dd>${a.elev!==undefined?a.elev+' ft':'AIP参照'}</dd>
-      <dt>滑走路</dt><dd style="white-space:normal">${a.rwy||'AIP参照'}</dd>
-      <dt>位置</dt><dd>${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}</dd>
-      <dt>周波数</dt><dd>AIP AD参照</dd>
-    </dl>
-    <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>
-    <div class="note">※サンプルデータ。数値は必ずAIP/最新チャートで確認</div>`;
-  el.querySelector('.apDct').onclick=()=>{setDct({name:a.icao,lat:a.lat,lng:a.lng,isWp:false});mk.closePopup()};
-  el.querySelector('.add').onclick=()=>{addWp(a.lat,a.lng,a.icao);redraw();mk.closePopup()};
-  mk.bindPopup(el);
+  mk.bindPopup(()=>{
+    const el=document.createElement('div');
+    el.className='apPop';
+    el.innerHTML=`<h5>${a.icao} ${a.n}</h5>
+      <div class="metarSlot" data-icao="${a.icao}">${metarHtml(a.icao)}</div>
+      <dl>
+        <dt>種別</dt><dd>${a.t==='ctr'?'管制圏(タワー)':a.t==='inf'?'情報圏(レディオ/リモート)':'飛行場(圏なし)'}</dd>
+        <dt>標高</dt><dd>${a.elev!==undefined?a.elev+' ft':'AIP参照'}</dd>
+        <dt>滑走路</dt><dd style="white-space:normal">${a.rwy||'AIP参照'}</dd>
+        <dt>位置</dt><dd>${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}</dd>
+      </dl>
+      <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>
+      <div class="note">※空域・滑走路はサンプル。METARは実データ(参考)。必ずAIP/最新情報で確認</div>`;
+    el.querySelector('.apDct').onclick=()=>{setDct({name:a.icao,lat:a.lat,lng:a.lng,isWp:false});mk.closePopup()};
+    el.querySelector('.add').onclick=()=>{addWp(a.lat,a.lng,a.icao);redraw();mk.closePopup()};
+    loadMetar(); // 最新METARを取りに行き、取れたらスロットを差し替え
+    return el;
+  });
   mk.addTo(apLayer);
 });
 let apOn=false;
@@ -1631,7 +1696,8 @@ document.querySelectorAll('.tabs button').forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
-    ['wp','log','tfc'].forEach(t=>document.getElementById('tab-'+t).style.display=(t===btn.dataset.tab)?'':'none');
+    ['wp','log','tfc','met'].forEach(t=>document.getElementById('tab-'+t).style.display=(t===btn.dataset.tab)?'':'none');
+    if(btn.dataset.tab==='met')loadMetar();
   };
 });
 
