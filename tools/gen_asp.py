@@ -325,8 +325,25 @@ def gen_narita_pca():
     em('成田PCA', 6000, 3000, ring(['b4','c4','c5','b5']))
 
 # ══════════════════════════════════════════════════════════
+# 全国CTR/情報圏(関東以外) — AD 2.17 の半径から概略円で「単純に追加」
+# データは tools/natl_ctr.json (別途 gen_natl_ctr で全AD2から抽出済み)
+# ══════════════════════════════════════════════════════════
+def gen_natl():
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, 'natl_ctr.json')
+    if not os.path.exists(path):
+        print('!! natl_ctr.json なし: 全国空域はスキップ', file=sys.stderr); return
+    data = json.load(open(path))
+    for x in data:
+        p = Proj(x['lat'], x['lng'])
+        nm = x['n'] + (' 情報圏' if x['t'] == 'inf' else ' CTR')
+        emit(nm, x['icao'], x['t'], x.get('up', 0) or 0, 0,
+             'AIP概略円(半径%.0fnm) ※詳細形状は要AIP確認' % x['r_nm'],
+             p, circle(p, (x['lat'], x['lng']), x['r_nm']))
+
+# ══════════════════════════════════════════════════════════
 def main():
-    gen_ctrs(); gen_tokyo_pca(); gen_narita_pca()
+    gen_ctrs(); gen_tokyo_pca(); gen_narita_pca(); gen_natl()
     js = ('/* 自動生成: tools/gen_asp.py — AIP Japan AIRAC 2026-07-09\n'
           '   出典: AD2各飛行場 AD 2.17 / RJTT・RJAA 特別管制区チャート */\n'
           'const ASP_POLY=' + json.dumps(OUT, ensure_ascii=False, separators=(',', ':')) + ';')
