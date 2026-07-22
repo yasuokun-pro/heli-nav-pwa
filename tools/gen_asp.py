@@ -334,12 +334,52 @@ def gen_natl():
     if not os.path.exists(path):
         print('!! natl_ctr.json なし: 全国空域はスキップ', file=sys.stderr); return
     data = json.load(open(path))
+    ARPS = {x['icao']: (x['lat'], x['lng']) for x in data}
+
+    # ── AD 2.17 で分割/除外が明記された空域の正確な形状 ──
+    # (隣接飛行場どうしが重ならないよう半平面クリップ・円の差分で表現)
+    def ov_RJNY(p, c, r):   # 静浜: 104/292°T線の北側
+        return circle(p, c, r) & halfplane(p, p.xy(dms('344602N'), dms('1381946E')), 292, 'right')
+    def ov_RJNS(p, c, r):   # 静岡: 同じ線の南側(静浜と背中合わせ)
+        return circle(p, c, r) & halfplane(p, p.xy(dms('344602N'), dms('1381946E')), 292, 'left')
+    def ov_RJNG(p, c, r):   # 岐阜: 名古屋5nmを除外
+        return circle(p, c, r).difference(circle(p, ARPS['RJNA'], 5))
+    def ov_RJFR(p, c, r):   # 北九州: 築城CTRを除外
+        return circle(p, c, r).difference(circle(p, ARPS['RJFZ'], 5))
+    def ov_RODN(p, c, r):   # 嘉手納: 普天間CTR(ROTM ARP 261614.5N/1274452.97E)を除外
+        return circle(p, c, r).difference(circle(p, (dms('261614.50N'), dms('1274452.97E')), 5))
+    def ov_RJSU(p, c, r):   # 霞目: ARPから092°10'T線の1.7NM南に引いた平行線の北側
+        o = p.xy(*c)
+        return circle(p, c, r) & halfplane(p, offset_pt(o, 182.17, 1.7), 92.17, 'left')
+    def ov_ROAH(p, c, r):   # 那覇: 052°56'/125°31'Tの折れ線の西側
+        return circle(p, c, r) & bent_side(p, p.xy(dms('261429N'), dms('1274125E')), 52.93, 125.52, 270)
+    def _par_line(p, a, b, off_nm, off_side, keep):
+        """a→bを結ぶ線をoff_side方向にoff_nm平行移動し、keep側を残す半平面"""
+        ax, ay = p.xy(*a); bx, by = p.xy(*b)
+        brg = math.degrees(math.atan2(bx-ax, by-ay)) % 360
+        return halfplane(p, offset_pt((ax, ay), brg + off_side, off_nm), brg, keep)
+    def ov_RJFA(p, c, r):   # 芦屋: DGC VORTAC–SUOH VOR線の4NM北の平行線の北側
+        return circle(p, c, r) & _par_line(p, (33.67621,130.38963), (33.85662,131.0294), 4, -90, 'left')
+    def ov_RJFZ(p, c, r):   # 築城: DGC VORTAC–340446N1320850E線の4NM南の平行線の北側
+        return circle(p, c, r) & _par_line(p, (33.67621,130.38963),
+                                           (dms('340446N'), dms('1320850E')), 4, +90, 'left')
+    OVERRIDE = {'RJNY':ov_RJNY,'RJNS':ov_RJNS,'RJNG':ov_RJNG,'RJFR':ov_RJFR,
+                'RODN':ov_RODN,'RJSU':ov_RJSU,'ROAH':ov_ROAH,'RJFA':ov_RJFA,'RJFZ':ov_RJFZ}
+    # 円のままだと実形状より広い(追加区域や除外がある)ものは注記を出す
+    APPROX_NOTE = {'RJBB','RJBE','RJGG','RJOO','RJNA','RJCA','RJOY','RJFY','ROKJ','ROMD','RORK','RORY'}
+
     for x in data:
         p = Proj(x['lat'], x['lng'])
         nm = x['n'] + (' 情報圏' if x['t'] == 'inf' else ' CTR')
-        emit(nm, x['icao'], x['t'], x.get('up', 0) or 0, 0,
-             'AIP概略円(半径%.0fnm) ※詳細形状は要AIP確認' % x['r_nm'],
-             p, circle(p, (x['lat'], x['lng']), x['r_nm']))
+        c, r = (x['lat'], x['lng']), x['r_nm']
+        if x['icao'] in OVERRIDE:
+            geom = OVERRIDE[x['icao']](p, c, r)
+            rmk = 'AIP形状(AD 2.17の分割/除外を反映)'
+        else:
+            geom = circle(p, c, r)
+            rmk = ('AIP概略円(半径%.0fnm) ※実際は追加区域/除外あり・要AIP確認' % r
+                   if x['icao'] in APPROX_NOTE else 'AIP概略円(半径%.0fnm)' % r)
+        emit(nm, x['icao'], x['t'], x.get('up', 0) or 0, 0, rmk, p, geom)
 
 # ══════════════════════════════════════════════════════════
 def main():

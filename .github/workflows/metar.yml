@@ -26,15 +26,23 @@ jobs:
           import json, urllib.request, datetime
           sta = json.load(open('tools/metar_stations.json'))
           ids = ','.join(s['icao'] for s in sta)
-          url = 'https://aviationweather.gov/api/data/metar?ids='+ids+'&format=json'
+          # hours=3: 直近3時間分(最新+過去)を取得してトレンドを見られるようにする
+          url = 'https://aviationweather.gov/api/data/metar?ids='+ids+'&format=json&hours=3'
           req = urllib.request.Request(url, headers={'User-Agent':'heli-nav-pwa'})
           d = json.load(urllib.request.urlopen(req, timeout=60))
-          out = {'updated': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%MZ'), 'm': {}}
+          byst = {}
           for x in d:
-              out['m'][x['icaoId']] = {
+              byst.setdefault(x['icaoId'], []).append(x)
+          out = {'updated': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%MZ'), 'm': {}}
+          for icao, xs in byst.items():
+              xs.sort(key=lambda z: z.get('obsTime') or 0, reverse=True)   # 新しい順
+              x = xs[0]
+              out['m'][icao] = {
                 'raw': x.get('rawOb',''), 'cat': x.get('fltCat',''),
                 'temp': x.get('temp'), 'wdir': x.get('wdir'), 'wspd': x.get('wspd'),
-                'visib': x.get('visib'), 'obs': x.get('obsTime')}
+                'visib': x.get('visib'), 'obs': x.get('obsTime'),
+                'hist': [{'obs': z.get('obsTime'), 'raw': z.get('rawOb',''),
+                          'cat': z.get('fltCat','')} for z in xs[1:8]]}
           json.dump(out, open('metar.json','w'), ensure_ascii=False, separators=(',',':'))
           print(len(out['m']), 'stations')
           PY
