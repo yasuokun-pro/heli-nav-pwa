@@ -404,6 +404,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.min.js"></script>
 <script>
+/* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
+const VER_TAG='v6-37';
+
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
@@ -657,7 +660,7 @@ let OBST=null,obstOn=false;
 const obstLayer=L.layerGroup(),obstRenderer=L.canvas({padding:.3});
 async function loadObst(){
   if(OBST)return OBST;
-  try{const r=await fetch('obst.json');OBST=await r.json()}catch(e){OBST={types:[],o:[]}}
+  try{const r=await fetch('obst.json?v='+VER_TAG);OBST=await r.json()}catch(e){OBST={types:[],o:[]}}
   return OBST;
 }
 function drawObst(){
@@ -693,14 +696,16 @@ let SUP=null,supOn=false;
 const supLayer=L.layerGroup(),supRenderer=L.canvas({padding:.3});
 async function loadSup(){
   if(SUP)return SUP;
-  try{const r=await fetch('sup.json');SUP=await r.json()}catch(e){SUP={s:[]}}
+  try{const r=await fetch('sup.json?v='+VER_TAG);SUP=await r.json()}catch(e){SUP={s:[]}}
   SUP.s.forEach(x=>{
-    L.polygon(x.pts,{renderer:supRenderer,color:'#ff9f40',weight:1.6,dashArray:'5 4',
-      fillColor:'#ff9f40',fillOpacity:.08})
+    const drone=x.cat==='Unmanned Aircraft'||/ドローン/.test(x.subj||'');
+    const col=drone?'#b48ee8':'#ff9f40'; // ドローン=紫 / 訓練・射撃等=オレンジ
+    L.polygon(x.pts,{renderer:supRenderer,color:col,weight:1.6,dashArray:'5 4',
+      fillColor:col,fillOpacity:.08})
       .bindTooltip(`<div style="font-family:var(--mono)"><b>${x.n} ${x.id||''}</b><br>`+
         `${x.subj||''}<br>高度: ${x.alt||'—'}<br>`+
         `<span style="font-size:10px">期間: ${x.period||'—'}<br>${x.rmk?x.rmk+'<br>':''}`+
-        `※SUPは期限切れを含む・要NOTAM/AIP確認</span></div>`,{sticky:true})
+        `※期限切れを含む・要NOTAM/AIP確認</span></div>`,{sticky:true})
       .addTo(supLayer);
   });
   return SUP;

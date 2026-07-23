@@ -16,7 +16,15 @@ import re, os, glob, json, sys, datetime, html as htmlmod
 SRC = os.path.expanduser('~/Downloads/AIP File Download Service/3_SUP(KML)')
 
 def field(h, key):
+    """英語SUP形式: <td>Period</td><td>値</td>"""
     m = re.search(r'<td>' + key + r'[^<]*</td>\s*<td>(.*?)</td>', h, re.S)
+    if not m: return ''
+    v = re.sub(r'<br\s*/?>', ' ', m.group(1))
+    return htmlmod.unescape(re.sub(r'<[^>]+>', '', v)).strip()
+
+def jfield(h, key):
+    """ドローンKML形式: <td>終了日：値</td> (1セル内に全角コロン区切り)"""
+    m = re.search(r'<td>\s*' + key + r'[^：:]*[：:](.*?)</td>', h, re.S)
     if not m: return ''
     v = re.sub(r'<br\s*/?>', ' ', m.group(1))
     return htmlmod.unescape(re.sub(r'<[^>]+>', '', v)).strip()
@@ -34,10 +42,30 @@ def main():
             nm = re.search(r'<name>(.*?)</name>', b, re.S)
             name = htmlmod.unescape(nm.group(1).strip()) if nm else ''
             desc = b
-            rec = dict(n=name, cat=cat,
-                       subj=field(desc, 'Subject'), id=field(desc, 'Name／ID') or field(desc, 'Name/ID'),
-                       period=field(desc, 'Period'), alt=field(desc, 'Altitude'),
-                       rmk=field(desc, 'Remarks'))
+            subj = field(desc, 'Subject')
+            if subj:   # 英語のSUP KML(射撃訓練・臨時訓練空域など)
+                rec = dict(n=name, cat=cat, subj=subj,
+                           id=field(desc, 'Name／ID') or field(desc, 'Name/ID'),
+                           period=field(desc, 'Period'), alt=field(desc, 'Altitude'),
+                           rmk=field(desc, 'Remarks'))
+            else:      # 日本語のドローン飛行禁止空域KML(1セル内に「項目：値」)
+                end  = jfield(desc, '終了日')
+                hrs  = jfield(desc, '時間帯')
+                addr = jfield(desc, '住所等')
+                num  = jfield(desc, '最大機数')
+                kind = jfield(desc, '種類')
+                notam= jfield(desc, '備考')
+                if end:
+                    e = re.sub(r'^(\d{4})(\d{2})(\d{2})$', r'\1/\2/\3', end.strip())
+                    period = f'{e}まで' + (f' / 時間帯(UTC): {hrs}' if hrs else '')
+                else:
+                    period = (f'時間帯(UTC): {hrs}' if hrs else '')
+                rmk = ' / '.join(x for x in [
+                    addr, (f'最大{num}機' if num else ''),
+                    (kind.replace('\n', ' ') if kind else ''),
+                    (f'NOTAM {notam}' if notam else '')] if x)
+                rec = dict(n=name, cat=cat, subj='無人航空機 飛行区域(ドローン)',
+                           id='', period=period, alt=jfield(desc, '最大高度'), rmk=rmk)
             for co in re.finditer(r'<coordinates>(.*?)</coordinates>', b, re.S):
                 pts = []
                 for tok in co.group(1).split():
