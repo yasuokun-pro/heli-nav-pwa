@@ -55,11 +55,13 @@
     border-right:2px solid var(--line);padding-right:6px;margin-right:2px;
     background:rgba(10,20,32,.92);border-radius:6px;padding:6px 8px 6px 6px}
   .mtGrp.open .mtSub{display:flex}
-  .mtSub button{font-size:11.5px;padding:6px 10px}
   .maptools .on-dot{color:var(--grn)}
   #zmBtns{position:absolute;z-index:900;right:12px;bottom:16px;display:flex;gap:8px}
   #zmBtns button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:10px 14px;border-radius:6px;font-size:13px;font-family:var(--mono);font-weight:600;cursor:pointer}
-  .maptools button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--sans)}
+  /* 右側ボタンは全て同じ幅・高さに揃える(見出し/サブ/単独すべて) */
+  .maptools button{background:var(--panel);border:1px solid var(--line);color:var(--txt);
+    width:72px;height:34px;padding:0;border-radius:6px;font-size:12.5px;cursor:pointer;
+    font-family:var(--sans);display:flex;align-items:center;justify-content:center;gap:3px;flex:none}
   .maptools button.on{border-color:var(--grn);color:var(--grn)}
   html,body{overflow:hidden}
   body.main .panel,body.main footer{display:none}
@@ -278,24 +280,24 @@
   </div>
   <div class="maptools">
     <div class="mtGrp" data-grp="air">
-      <button class="mtHead">📐 航空情報 <i>▾</i></button>
+      <button class="mtHead">航空<i>▾</i></button>
       <div class="mtSub">
-        <button id="btnAsp">◍ 空域</button>
-        <button id="btnAp">✈ 飛行場</button>
-        <button id="btnNav">◈ NAV</button>
-        <button id="btnObst">⚠ 障害物</button>
-        <button id="btnSup">▨ 臨時空域</button>
+        <button id="btnAsp">空域</button>
+        <button id="btnAp">飛行場</button>
+        <button id="btnNav">NAV</button>
+        <button id="btnObst">障害物</button>
+        <button id="btnSup">臨時</button>
       </div>
     </div>
     <div class="mtGrp" data-grp="wx">
-      <button class="mtHead">☂ 気象・交通 <i>▾</i></button>
+      <button class="mtHead">気象<i>▾</i></button>
       <div class="mtSub">
-        <button id="btnRain">☂ 雨雲</button>
-        <button id="btnTfc2">◈ 他機</button>
+        <button id="btnRain">雨雲</button>
+        <button id="btnTfc2">他機</button>
       </div>
     </div>
-    <button id="btnGPS">◎ GPS</button>
-    <button id="btnBase">地図: 淡色</button>
+    <button id="btnGPS">GPS</button>
+    <button id="btnBase">淡色</button>
   </div>
 
   <div id="dctCard">
@@ -487,12 +489,12 @@ const BASES=[
 let baseIdx=store.get('hnav.base')||0;
 if(baseIdx>=BASES.length)baseIdx=0;
 BASES[baseIdx].ly.addTo(map);
-document.getElementById('btnBase').textContent='地図: '+BASES[baseIdx].n;
+document.getElementById('btnBase').textContent=BASES[baseIdx].n;
 document.getElementById('btnBase').onclick=function(){
   map.removeLayer(BASES[baseIdx].ly);
   baseIdx=(baseIdx+1)%BASES.length;
   BASES[baseIdx].ly.addTo(map);
-  this.textContent='地図: '+BASES[baseIdx].n;
+  this.textContent=BASES[baseIdx].n;
   store.set('hnav.base',baseIdx);
 };
 
