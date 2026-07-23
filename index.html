@@ -46,7 +46,17 @@
   .mapwrap{position:relative;flex:1;display:flex}
   #map{flex:1;min-height:300px;background:#08101a;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   #btnTO,#btnLDG{min-width:104px;padding-left:8px;padding-right:8px;text-align:center}
-  .maptools{position:absolute;z-index:900;right:12px;top:calc(var(--ovlH) + 12px);display:flex;flex-direction:column;gap:8px}
+  .maptools{position:absolute;z-index:900;right:12px;top:calc(var(--ovlH) + 12px);display:flex;flex-direction:column;gap:8px;align-items:flex-end;max-height:calc(100% - var(--ovlH) - 90px);overflow-y:auto;overflow-x:hidden}
+  .mtGrp{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+  .mtHead i{font-style:normal;color:var(--dim);font-size:10px;transition:transform .15s}
+  .mtGrp.open .mtHead i{display:inline-block;transform:rotate(180deg)}
+  .mtGrp.open .mtHead{border-color:var(--grn);color:var(--grn)}
+  .mtSub{display:none;flex-direction:column;gap:6px;align-items:flex-end;
+    border-right:2px solid var(--line);padding-right:6px;margin-right:2px;
+    background:rgba(10,20,32,.92);border-radius:6px;padding:6px 8px 6px 6px}
+  .mtGrp.open .mtSub{display:flex}
+  .mtSub button{font-size:11.5px;padding:6px 10px}
+  .maptools .on-dot{color:var(--grn)}
   #zmBtns{position:absolute;z-index:900;right:12px;bottom:16px;display:flex;gap:8px}
   #zmBtns button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:10px 14px;border-radius:6px;font-size:13px;font-family:var(--mono);font-weight:600;cursor:pointer}
   .maptools button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--sans)}
@@ -96,6 +106,8 @@
   .mapwrap{--ovlH:0px}
   .mapwrap .leaflet-top{top:var(--ovlH)}
   .mapwrap .leaflet-bottom.leaflet-right .leaflet-control-zoom{margin-bottom:76px;margin-right:12px}
+  /* カテゴリ展開中はズーム/縮尺ボタンを隠して重なりを防ぐ */
+  body.mtOpen .leaflet-control-zoom,body.mtOpen #zmBtns{display:none}
   #btnFollow{top:calc(var(--ovlH) + 12px)}#btnMapOnly{top:calc(var(--ovlH) + 52px)}
   #btnGoLog{top:calc(var(--ovlH) + 92px)}#btnSearch{top:calc(var(--ovlH) + 132px)}
   #btnUndo{top:calc(var(--ovlH) + 172px)}
@@ -265,15 +277,25 @@
     <button id="btnZmAll" title="ルート全体を表示">ALL</button>
   </div>
   <div class="maptools">
-    <button id="btnAsp">◍ 空域</button>
-    <button id="btnAp">✈ 飛行場</button>
-    <button id="btnNav">◈ NAV</button>
-    <button id="btnObst">⚠ 障害物</button>
-    <button id="btnSup">▨ 臨時空域</button>
-    <button id="btnRain">☂ 雨雲</button>
-    <button id="btnTfc2">◈ 他機</button>
-    <button id="btnBase">地図: 淡色</button>
+    <div class="mtGrp" data-grp="air">
+      <button class="mtHead">📐 航空情報 <i>▾</i></button>
+      <div class="mtSub">
+        <button id="btnAsp">◍ 空域</button>
+        <button id="btnAp">✈ 飛行場</button>
+        <button id="btnNav">◈ NAV</button>
+        <button id="btnObst">⚠ 障害物</button>
+        <button id="btnSup">▨ 臨時空域</button>
+      </div>
+    </div>
+    <div class="mtGrp" data-grp="wx">
+      <button class="mtHead">☂ 気象・交通 <i>▾</i></button>
+      <div class="mtSub">
+        <button id="btnRain">☂ 雨雲</button>
+        <button id="btnTfc2">◈ 他機</button>
+      </div>
+    </div>
     <button id="btnGPS">◎ GPS</button>
+    <button id="btnBase">地図: 淡色</button>
   </div>
 
   <div id="dctCard">
@@ -685,6 +707,27 @@ document.getElementById('btnSup').onclick=async function(){
   supOn=!supOn;this.classList.toggle('on',supOn);
   if(supOn){await loadSup();supLayer.addTo(map)}else map.removeLayer(supLayer);
 };
+
+/* ── 地図ボタンのカテゴリ折りたたみ(既定は閉じてボタン数を減らす) ── */
+document.querySelectorAll('.mtGrp').forEach(g=>{
+  const head=g.querySelector('.mtHead');
+  head.onclick=()=>{
+    const open=!g.classList.contains('open');
+    document.querySelectorAll('.mtGrp').forEach(o=>o.classList.remove('open')); // 1つだけ開く
+    g.classList.toggle('open',open);
+    document.body.classList.toggle('mtOpen',open);
+    syncMtHeads();
+  };
+});
+function syncMtHeads(){ // 閉じていてもONのレイヤーがあれば見出しを緑に
+  document.querySelectorAll('.mtGrp').forEach(g=>{
+    const anyOn=[...g.querySelectorAll('.mtSub button')].some(b=>b.classList.contains('on'));
+    const head=g.querySelector('.mtHead');
+    if(!g.classList.contains('open'))head.classList.toggle('on',anyOn);
+    else head.classList.remove('on');
+  });
+}
+document.querySelectorAll('.mtSub button').forEach(b=>b.addEventListener('click',()=>setTimeout(syncMtHeads,0)));
 
 /* ── 画面切替: main=地図メイン(諸元スワイプ) / plan=地図+ログ(飛行計画) ── */
 function setScreen(mode){
