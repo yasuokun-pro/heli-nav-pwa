@@ -23,6 +23,7 @@ def find_pdf():
     return cands[-1] if cands else None
 
 def dms(v):
+    # 度分秒は小数点が無い表記(例: 352644N)もあるため \d+(\.\d+)? で両対応する
     ip=v.split('.')[0]
     if len(ip)==6: d,rest=float(v[:2]),v[2:]
     else: d,rest=float(v[:3]),v[3:]
@@ -30,8 +31,10 @@ def dms(v):
 
 def parse(lines):
     raw=[]
+    LAT_RE=re.compile(r'(\d{6}(?:\.\d+)?)N')
+    LNG_RE=re.compile(r'(\d{7}(?:\.\d+)?)E')
     for i,ln in enumerate(lines):
-        mlat=re.search(r'(\d{6}\.\d+)N',ln); mtype=re.search(r'\b(VORTAC|VOR/DME|TACAN|VOR|DME|NDB)\b',ln)
+        mlat=LAT_RE.search(ln); mtype=re.search(r'\b(VORTAC|VOR/DME|TACAN|VOR|DME|NDB)\b',ln)
         if not(mlat and mtype):continue
         typ=mtype.group(1)
         mid=re.search(r'\b([A-Z]{2,3})\b\s+(\d{3}\.\d+MHz|\d{3,4}MHz|\d{3}\.\d+kHz)',ln)
@@ -44,7 +47,7 @@ def parse(lines):
                 name=m.group(1).strip();break
         lng=None;ch=''
         for k in range(i,min(len(lines),i+3)):
-            ml=re.search(r'(\d{7}\.\d+)E',lines[k])
+            ml=LNG_RE.search(lines[k])
             if ml and lng is None:lng=dms(ml.group(1))
             mc=re.search(r'\(CH-?([\dA-Z]+)\)',lines[k])
             if mc and not ch:ch=mc.group(1)
