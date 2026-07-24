@@ -363,8 +363,15 @@ def gen_natl():
     def ov_RJFZ(p, c, r):   # 築城: DGC VORTAC–340446N1320850E線の4NM南の平行線の北側
         return circle(p, c, r) & _par_line(p, (33.67621,130.38963),
                                            (dms('340446N'), dms('1320850E')), 4, +90, 'left')
+    def ov_RJTS(p, c, r):   # 相馬原(AD3 3.16): 5NM円から「350°T線の西側∩270°T線の北側∩3NM円外」を除外
+        o = p.xy(*c)
+        notch = (halfplane(p, o, 350, 'left')       # 350°T線の西側
+                 & halfplane(p, o, 270, 'right')     # 270°T線の北側
+                 & circle(p, c, r).difference(circle(p, c, 3)))  # 3NM円の外側
+        return circle(p, c, r).difference(notch)
     OVERRIDE = {'RJNY':ov_RJNY,'RJNS':ov_RJNS,'RJNG':ov_RJNG,'RJFR':ov_RJFR,
-                'RODN':ov_RODN,'RJSU':ov_RJSU,'ROAH':ov_ROAH,'RJFA':ov_RJFA,'RJFZ':ov_RJFZ}
+                'RODN':ov_RODN,'RJSU':ov_RJSU,'ROAH':ov_ROAH,'RJFA':ov_RJFA,'RJFZ':ov_RJFZ,
+                'RJTS':ov_RJTS}
     # 円のままだと実形状より広い(追加区域や除外がある)ものは注記を出す
     APPROX_NOTE = {'RJBB','RJBE','RJGG','RJOO','RJNA','RJCA','RJOY','RJFY','ROKJ','ROMD','RORK','RORY'}
 
@@ -374,7 +381,8 @@ def gen_natl():
         c, r = (x['lat'], x['lng']), x['r_nm']
         if x['icao'] in OVERRIDE:
             geom = OVERRIDE[x['icao']](p, c, r)
-            rmk = 'AIP形状(AD 2.17の分割/除外を反映)'
+            rmk = ('AIP形状(AD 3.16の分割/除外を反映) HARUNA TOWER' if x['icao'] == 'RJTS'
+                   else 'AIP形状(AD 2.17の分割/除外を反映)')
         else:
             geom = circle(p, c, r)
             rmk = ('AIP概略円(半径%.0fnm) ※実際は追加区域/除外あり・要AIP確認' % r

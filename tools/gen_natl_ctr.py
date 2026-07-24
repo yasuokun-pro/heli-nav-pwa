@@ -16,7 +16,7 @@ A = os.path.expanduser('~/Downloads/1_AIP (PDF)')
 KANTO = {'RJTT','RJAA','RJAH','RJTA','RJTC','RJTJ','RJTY','RJTK','RJTL','RJTE','RJTU','RJTO'}
 # ICAO→和名(AD2から機械抽出できないものを補う)
 JP = {'RJNS':'静岡','RJNY':'静浜','RJSU':'霞目','RJFZ':'築城','RJFA':'芦屋','RJNG':'岐阜',
-      'RJOB':'岡山','RJSI':'花巻','RJCA':'旭川(陸)','RJCJ':'千歳','RJAK':'鹿屋(海)',
+      'RJOB':'岡山','RJSI':'花巻','RJCA':'旭川(陸)','RJCJ':'千歳','RJAK':'霞ヶ浦',
       'RJKB':'徳之島','RJKN':'沖永良部','RJNF':'福井','RJST':'松島','RJSH':'八戸',
       'RJSM':'三沢','RJDC':'山口宇部','RJEB':'紋別','RJER':'新島','RJTQ':'三宅島',
       'RJTH':'南紀白浜','RJCN':'中標津','RJCW':'稚内','RJDM':'大村','RJNO':'隠岐',
@@ -83,6 +83,13 @@ def main():
         t = 'ctr' if has_twr else ('inf' if has_rdo else 'ctr')
         rows.append(dict(icao=icao, n=JP.get(icao, names.get(icao, en)),
                          lat=arp[0], lng=arp[1], r_nm=r_nm, up=up, t=t))
+
+    # AD3(ヘリポート様式)は AD2_Combine と別フォルダ・別書式(AD 3.16 ATS AIRSPACE)のため
+    # 上のスキャン対象外。自衛隊ヘリポート6件中、空域を持つのはRJTS(相馬原)のみ確認済み
+    # (2026-07-09時点。AIRAC更新時は AD3 フォルダの他5件も要目視確認)。
+    rows.append(dict(icao='RJTS', n='相馬原', lat=36.43472, lng=138.95306,
+                     r_nm=5.0, up=4000, t='ctr'))
+
     out = os.path.join(here, 'natl_ctr.json')
     json.dump(rows, open(out,'w'), ensure_ascii=False)
     print(f'{len(rows)} 件 → natl_ctr.json  (ctr={sum(1 for x in rows if x["t"]=="ctr")}, '
