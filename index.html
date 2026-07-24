@@ -151,6 +151,7 @@
   tr.dragging{opacity:.55;background:var(--panel2)}
   tr.dragging td{border-top:1px solid var(--cyn)}
   .fav{background:none;border:1px solid var(--amb);color:var(--amb);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;margin-right:5px}
+  .ins{background:none;border:1px solid var(--grn);color:var(--grn);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;margin-right:5px}
   .fav.on{background:var(--amb);color:#241500;opacity:1;cursor:default}
   #libModal{position:fixed;inset:0;z-index:2000;background:rgba(4,10,18,.72);display:none;align-items:flex-end;justify-content:center}
   #libModal .sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 0 0;width:100%;max-width:560px;max-height:78vh;overflow:auto;padding:16px}
@@ -345,7 +346,7 @@
     </div>
     <div class="btnrow"><button class="btn danger" id="btnClear">経路クリア</button></div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
-    <div class="hint"><b>地図を長押しでポイント登録</b>(作図モード中はレイヤーへ描画)。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
+    <div class="hint"><b>地図を長押しでポイント登録</b>(末尾に追加/作図モード中はレイヤーへ描画)。<b>経路線を長押しするとその区間に挿入</b>、表の<span style="color:var(--grn)">＋</span>でも区間の中点に挿入できます。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
     <details id="cfgWind">
       <summary>風・燃料の設定(航法計算用)</summary>
       <div class="strip">
@@ -405,7 +406,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.min.js"></script>
 <script>
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-39';
+const VER_TAG='v6-40';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -1063,7 +1064,7 @@ document.getElementById('btnUndo').onclick=doUndo;
 document.getElementById('btnUndo').disabled=true;
 
 let wpSeq=0; // WP連番(途中削除しても番号は再利用しない)
-function addWp(lat,lng,name){
+function addWp(lat,lng,name,at){ // at を渡すとその位置へ挿入、省略時は末尾に追加
   if(name){const m=/^WP(\d+)$/.exec(name);if(m)wpSeq=Math.max(wpSeq,+m[1]);}
   else{wpSeq++;name='WP'+wpSeq;}
   const marker=L.marker([lat,lng],{icon:wpIcon(wps.length+1,false,false),draggable:true,bubblingMouseEvents:false}).addTo(map);
@@ -1096,12 +1097,48 @@ function addWp(lat,lng,name){
     };
     return el;
   });
-  wps.push(w);
+  if(at===undefined||at<0||at>wps.length){wps.push(w)}
+  else{
+    wps.splice(at,0,w);
+    if(at<=nextIdx&&wps.length>1)nextIdx++; // 挿入位置より後ろのNEXTがずれないように
+  }
+  return w;
 }
 function clearAllWp(){clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.length=0;wpSeq=0}
 
+/* ── 経路の途中へWP挿入 ── */
+function nearestLeg(latlng){ // クリック位置に最も近い区間の番号(手前側WPのindex)
+  if(wps.length<2)return -1;
+  const p=map.latLngToLayerPoint(latlng);
+  let best=-1,bd=Infinity;
+  for(let i=0;i<wps.length-1;i++){
+    const a=map.latLngToLayerPoint([wps[i].lat,wps[i].lng]);
+    const b=map.latLngToLayerPoint([wps[i+1].lat,wps[i+1].lng]);
+    const d=L.LineUtil.pointToSegmentDistance(p,a,b);
+    if(d<bd){bd=d;best=i}
+  }
+  return best;
+}
+function insertWpAt(leg,lat,lng){ // leg番目の区間(leg→leg+1の間)に挿入
+  pushUndo();
+  const w=addWp(lat,lng,undefined,leg+1);
+  redraw();
+  return w;
+}
+// 経路線は細くて押しにくいので、透明で太い当たり判定用の線を重ねる
+const routeHit=L.polyline([],{color:'#000',opacity:0,weight:24,bubblingMouseEvents:false}).addTo(map);
+routeHit.on('contextmenu',e=>{ // 長押し: その区間にWPを挿入
+  if(typeof drawMode!=='undefined'&&drawMode)return; // 作図中は作図優先
+  if(flt&&flt.legOff)return;                          // 飛行中(空中)はD→ピン優先
+  const leg=nearestLeg(e.latlng);
+  if(leg<0)return;
+  insertWpAt(leg,e.latlng.lat,e.latlng.lng);
+});
+
 function redraw(){
-  routeLine.setLatLngs(wps.map(w=>[w.lat,w.lng]));
+  const lls=wps.map(w=>[w.lat,w.lng]);
+  routeLine.setLatLngs(lls);
+  routeHit.setLatLngs(lls); // 挿入用の当たり判定線も追従
   // 名称編集中に表を作り直すとフォーカスが切れるため、編集位置を記憶して復元する
   let ed=null;
   const ae=document.activeElement;
@@ -1131,13 +1168,19 @@ function redraw(){
     tr.innerHTML=`<td class="grip">≡ ${i+1}</td>
       <td class="jp"><input value="${w.name}"></td>
       <td>${mc}</td><td>${mh}</td><td>${gsS}</td><td>${leg}</td><td>${ete}</td><td>${fuel}</td>
-      <td><button class="dct">D→</button><button class="fav${isFav(w.name)?' on':''}"${isFav(w.name)?' disabled':''}>★</button><button class="del">削除</button></td>`;
+      <td><button class="dct">D→</button><button class="fav${isFav(w.name)?' on':''}"${isFav(w.name)?' disabled':''}>★</button>${i<wps.length-1?'<button class="ins" title="この下に挿入(区間の中点)">＋</button>':''}<button class="del">削除</button></td>`;
     tr.querySelector('input').oninput=e=>{w.name=e.target.value;syncWpIcons();saveState()};
     tr.querySelector('.del').onclick=()=>{
       pushUndo();
       if(dctTarget===w)clearDct();
       map.removeLayer(w.marker);wps.splice(i,1);redraw()};
     tr.querySelector('.dct').onclick=()=>{dctTarget===w?clearDct():setDct(w)}; // 2回目で解除
+    const insBtn=tr.querySelector('.ins');
+    if(insBtn)insBtn.onclick=()=>{ // この行と次の行の中点に挿入(あとはドラッグで微調整)
+      const a=wps[i],b=wps[i+1];
+      const w=insertWpAt(i,(a.lat+b.lat)/2,(a.lng+b.lng)/2);
+      w.marker.openPopup();
+    };
     tr.querySelector('.fav').onclick=function(){ // 確認なし・即強調(地図ポップアップと連動)
       savePoint(w.name,w.lat,w.lng,true);
       this.classList.add('on');this.disabled=true;
