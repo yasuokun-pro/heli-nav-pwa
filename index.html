@@ -346,7 +346,7 @@
     </div>
     <div class="btnrow"><button class="btn danger" id="btnClear">経路クリア</button></div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
-    <div class="hint"><b>地図を長押しでポイント登録</b>(末尾に追加/作図モード中はレイヤーへ描画)。<b>経路線を長押しするとその区間に挿入</b>、表の<span style="color:var(--grn)">＋</span>でも区間の中点に挿入できます。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
+    <div class="hint"><b>地図を長押しでポイント登録</b>(末尾に追加/作図モード中はレイヤーへ描画)。<b>経路線を長押しするとその区間に挿入</b>、表の<span style="color:var(--grn)">＋</span>は検索した地点をその区間に挿入します。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
     <details id="cfgWind">
       <summary>風・燃料の設定(航法計算用)</summary>
       <div class="strip">
@@ -406,7 +406,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.min.js"></script>
 <script>
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-40';
+const VER_TAG='v6-41';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -792,13 +792,30 @@ ovlHandle.addEventListener('click',()=>{if(ovlDragged){ovlDragged=false;return}s
 
 /* ───────── 地名検索(国土地理院ジオコーダ・APIキー不要) ───────── */
 let searchMarker=null;
+let searchInsertLeg=null; // 数値なら「検索結果をその区間に挿入」モード
 const searchBar=document.getElementById('searchBar');
+function openSearch(insertLeg){
+  searchInsertLeg=(insertLeg===undefined)?null:insertLeg;
+  const inp=document.getElementById('searchInput');
+  inp.placeholder=(searchInsertLeg!==null)
+    ? `${searchInsertLeg+1}→${searchInsertLeg+2} の間に挿入する地点を検索`
+    : '地名・住所・駅名を検索してEnter';
+  searchBar.style.display='block';
+  document.getElementById('btnSearch').classList.add('on');
+  document.getElementById('searchResults').innerHTML='';
+  inp.value='';
+  setScreen('main'); // 地図画面に出して検索窓を見せる
+  setTimeout(()=>inp.focus(),80);
+}
+function closeSearch(){
+  searchBar.style.display='none';
+  document.getElementById('btnSearch').classList.remove('on');
+  document.getElementById('searchResults').innerHTML='';
+  searchInsertLeg=null;
+  document.getElementById('searchInput').placeholder='地名・住所・駅名を検索してEnter';
+}
 document.getElementById('btnSearch').onclick=function(){
-  const show=searchBar.style.display!=='block';
-  searchBar.style.display=show?'block':'none';
-  this.classList.toggle('on',show);
-  if(show)document.getElementById('searchInput').focus();
-  else document.getElementById('searchResults').innerHTML='';
+  if(searchBar.style.display==='block')closeSearch();else openSearch();
 };
 function showSearchResult(lat,lng,title){
   if(searchMarker)map.removeLayer(searchMarker);
@@ -831,10 +848,16 @@ document.getElementById('searchInput').onkeydown=async e=>{
       d.textContent=it.properties.title;
       d.onclick=()=>{
         const c=it.geometry.coordinates; // [lng,lat]
-        searchBar.style.display='none';
-        document.getElementById('btnSearch').classList.remove('on');
-        box.innerHTML='';
-        showSearchResult(c[1],c[0],it.properties.title);
+        const title=it.properties.title;
+        const leg=searchInsertLeg;
+        closeSearch();
+        if(leg!==null){ // ＋から開いた場合: その区間へ挿入してポップアップで確認
+          const w=insertWpAt(leg,c[1],c[0],title);
+          map.setView([c[1],c[0]],Math.max(map.getZoom(),11));
+          w.marker.openPopup();
+        }else{
+          showSearchResult(c[1],c[0],title);
+        }
       };
       box.appendChild(d);
     });
@@ -1119,9 +1142,9 @@ function nearestLeg(latlng){ // クリック位置に最も近い区間の番号
   }
   return best;
 }
-function insertWpAt(leg,lat,lng){ // leg番目の区間(leg→leg+1の間)に挿入
+function insertWpAt(leg,lat,lng,name){ // leg番目の区間(leg→leg+1の間)に挿入
   pushUndo();
-  const w=addWp(lat,lng,undefined,leg+1);
+  const w=addWp(lat,lng,name,leg+1);
   redraw();
   return w;
 }
@@ -1176,11 +1199,7 @@ function redraw(){
       map.removeLayer(w.marker);wps.splice(i,1);redraw()};
     tr.querySelector('.dct').onclick=()=>{dctTarget===w?clearDct():setDct(w)}; // 2回目で解除
     const insBtn=tr.querySelector('.ins');
-    if(insBtn)insBtn.onclick=()=>{ // この行と次の行の中点に挿入(あとはドラッグで微調整)
-      const a=wps[i],b=wps[i+1];
-      const w=insertWpAt(i,(a.lat+b.lat)/2,(a.lng+b.lng)/2);
-      w.marker.openPopup();
-    };
+    if(insBtn)insBtn.onclick=()=>openSearch(i); // 検索で選んだ地点をこの区間に挿入
     tr.querySelector('.fav').onclick=function(){ // 確認なし・即強調(地図ポップアップと連動)
       savePoint(w.name,w.lat,w.lng,true);
       this.classList.add('on');this.disabled=true;
