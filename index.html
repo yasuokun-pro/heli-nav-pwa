@@ -122,6 +122,46 @@
   body.hideAll .maptools,body.hideAll #zmBtns,body.hideAll .zbtn,body.hideAll .leaflet-control-zoom{display:none}
   body.hideAll #btnUiHide{display:block}
   .dct-pin{color:var(--cyn);font-size:20px;line-height:1;text-shadow:0 0 8px rgba(61,213,243,.95)}
+  /* ───── FLIGHT LOG 様式(標準のログ用紙に合わせた2行/FIX構成) ───── */
+  .logwrap{overflow:auto;max-height:52vh;border:1px solid var(--line);border-radius:6px}
+  table.fltlog{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+  table.fltlog th,table.fltlog td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+    padding:3px 5px;text-align:center;white-space:nowrap}
+  table.fltlog thead th{position:sticky;top:0;z-index:3;background:var(--panel2);color:var(--dim);
+    font-size:9.5px;font-weight:500;letter-spacing:.03em;line-height:1.15}
+  table.fltlog thead tr:first-child th{top:0}
+  table.fltlog thead tr:nth-child(2) th{top:26px}
+  table.fltlog td{font-family:var(--mono)}
+  table.fltlog td.fixName{font-family:var(--sans);text-align:left}
+  table.fltlog td.fixNo{text-align:left;color:var(--dim);font-style:italic;font-size:11px}
+  tr.fixA td{border-bottom:1px dotted rgba(122,143,166,.35)} /* FIX内の上下段は点線で区切る */
+  tr.fixB td{border-bottom:1px solid var(--line)}
+  table.fltlog td input{width:100%;min-width:78px;background:none;border:none;color:var(--txt);
+    font-family:var(--sans);font-size:12px;outline:none;text-align:left}
+  .cFix{min-width:104px}.cRte{min-width:52px}.cNav{min-width:52px}.cCrs{min-width:42px}
+  .cNum{min-width:52px}.cAct{min-width:118px}
+  tr.total td{color:var(--amb);font-weight:600}
+  /* 印刷: A4横に同じログを2面付け(切るとA5×2枚) */
+  #printArea{display:none}
+  @media print{
+    @page{size:A4 landscape;margin:6mm}
+    body>*{display:none!important}
+    #printArea{display:flex!important;gap:0;width:100%;color:#000;background:#fff}
+    .prCopy{width:50%;padding:0 4mm;box-sizing:border-box;border-right:1px dashed #999}
+    .prCopy:last-child{border-right:none}
+    .prTitle{text-align:center;font-weight:700;font-size:11pt;border-bottom:2px solid #000;padding-bottom:2px;margin-bottom:3px}
+    .prHead{width:100%;border-collapse:collapse;font-size:7pt;margin-bottom:3px}
+    .prHead th,.prHead td{border:1px solid #000;padding:2px 3px;text-align:left}
+    .prHead .v{font-size:11pt;font-style:italic;text-align:center}
+    table.prLog{width:100%;border-collapse:collapse;font-size:7pt}
+    table.prLog th,table.prLog td{border:1px solid #000;padding:1.5px 2px;text-align:center;
+      color:#000;background:#fff!important;font-family:inherit}
+    table.prLog th{font-size:5.6pt;line-height:1.1;font-weight:400}
+    table.prLog td.fixNo{text-align:left;font-style:italic}
+    table.prLog td.fixName{text-align:left;font-size:7.5pt}
+    table.prLog tr.fixA td{border-bottom:none}
+    .noprint{display:none!important}
+  }
   /* 接近警告 */
   /* 左右のボタン列と重ならないよう、地図下部いっぱいに横長で出す */
   #alertBar{position:absolute;z-index:975;left:8px;right:8px;
@@ -347,10 +387,40 @@
       <button class="btn go" id="btnTO">▲ T/O</button>
       <button class="btn stop" id="btnLDG" disabled>▼ L/D</button>
     </div>
-    <table>
-      <thead><tr><th>#</th><th>名称</th><th>MC</th><th>MH (WCA)</th><th>GS</th><th>NM</th><th>ETE</th><th>燃料 lbs</th><th></th></tr></thead>
+    <div class="btnrow">
+      <button class="btn sh" id="btnPrint">🖨 ログ印刷 (A4横 2面)</button>
+      <span class="hint" style="align-self:center;margin:0">切り取るとA5×2枚(ニーボード用)</span>
+    </div>
+    <div class="logwrap">
+    <table class="fltlog">
+      <thead>
+        <tr>
+          <th rowspan="2" class="cFix">FIX</th>
+          <th class="cRte">ROUTE</th>
+          <th class="cNav">IDENT</th>
+          <th class="cNav">IDENT</th>
+          <th rowspan="2" class="cCrs">MAG<br>CRS</th>
+          <th class="cNum">DISTANCE</th>
+          <th rowspan="2" class="cNum">GROUND<br>SPEED</th>
+          <th class="cNum">EET</th>
+          <th class="cNum">ETA</th>
+          <th class="cNum">LEG</th>
+          <th rowspan="2" class="cNum">ACTUAL<br>FUEL<br>REMAIN</th>
+          <th rowspan="2" class="cAct noprint"></th>
+        </tr>
+        <tr>
+          <th class="cRte"></th>
+          <th class="cNav">FREQ</th>
+          <th class="cNav">FREQ</th>
+          <th class="cNum">REMAIN</th>
+          <th class="cNum">REMAIN</th>
+          <th class="cNum">ATA</th>
+          <th class="cNum">REMAIN</th>
+        </tr>
+      </thead>
       <tbody id="wpBody"></tbody>
     </table>
+    </div>
     <div class="btnrow" style="margin-top:16px">
       <button class="btn sh" id="btnShare">共有コード生成</button>
       <button class="btn sh" id="btnLoad">コード読込</button>
@@ -410,6 +480,8 @@
 
 <footer>※ 開発中プロトタイプ。参考値であり正式な航法情報源としては使用不可。空域表示: 関東=AIP 2026-07-09現在の形状(タップで上下限・周波数)、関東以外=<b>サンプルデータの概略円</b>。<b>必ず最新のAIP・エンルートチャートで確認してください。</b>風向は真方位(°T)で入力(タワー/ATISの風は磁方位)。</footer>
 
+<div id="printArea"></div>
+
 <div id="libModal"><div class="sheet">
   <h4>保存済みルート</h4><div id="libRoutes"></div>
   <h4>お気に入りポイント</h4><div id="libPts"></div>
@@ -424,7 +496,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.min.js"></script>
 <script>
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-45';
+const VER_TAG='v6-47';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -1185,56 +1257,101 @@ function redraw(){
   let ed=null;
   const ae=document.activeElement;
   if(ae&&ae.tagName==='INPUT'&&ae.closest('#wpBody')){
-    const rows=[...document.querySelectorAll('#wpBody tr:not(.total)')];
-    ed={i:rows.indexOf(ae.closest('tr')),s:ae.selectionStart,e:ae.selectionEnd};
+    const inps=[...document.querySelectorAll('#wpBody tr.fixB input')];
+    ed={i:inps.indexOf(ae),s:ae.selectionStart,e:ae.selectionEnd};
   }
   const body=document.getElementById('wpBody');body.innerHTML='';
   const ff=num('ff');
+  // 先に各レグを計算する(REMAINは残距離・残時間なので後ろから積む必要がある)
+  const legs=[];               // legs[i] = i-1 → i の区間
   let totD=0,totH=0,totF=0,anyBad=false;
   wps.forEach((w,i)=>{
-    let mc='—',mh='—',gsS='—',leg='—',ete='—',fuel='—';
-    if(i>0){
-      const d=distNM(wps[i-1],w);totD+=d;leg=d.toFixed(1);
-      const tc=trueBrg(wps[i-1],w);
-      mc=fmt3(magOf(tc))+'°';
-      const tri=windTri(tc);
-      if(tri&&!tri.bad){
-        mh=fmt3(magOf(tri.th))+'° ('+fmtWca(tri.wca)+')';
-        const g=effGs(tri.gs);
-        gsS=Math.round(g);
-        const h=d/g;totH+=h;ete=fmtHM(h);
-        if(ff>0){const f=h*ff;totF+=f;fuel=f.toFixed(0)}
-      }else{mh='<span style="color:var(--red)">不可</span>';anyBad=true}
-    }
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="grip">≡ ${i+1}</td>
-      <td class="jp"><input value="${w.name}"></td>
-      <td>${mc}</td><td>${mh}</td><td>${gsS}</td><td>${leg}</td><td>${ete}</td><td>${fuel}</td>
-      <td><button class="dct">D→</button><button class="fav${isFav(w.name)?' on':''}"${isFav(w.name)?' disabled':''}>★</button>${i<wps.length-1?'<button class="ins" title="この下に挿入(区間の中点)">＋</button>':''}<button class="del">削除</button></td>`;
-    tr.querySelector('input').oninput=e=>{w.name=e.target.value;syncWpIcons();saveState()};
-    tr.querySelector('.del').onclick=()=>{
+    if(i===0){legs.push(null);return}
+    const d=distNM(wps[i-1],w);totD+=d;
+    const tc=trueBrg(wps[i-1],w);
+    const tri=windTri(tc);
+    const L={d,mc:magOf(tc),bad:true};
+    if(tri&&!tri.bad){
+      L.bad=false;
+      L.mh=magOf(tri.th);L.wca=tri.wca;
+      L.gs=effGs(tri.gs);
+      L.h=d/L.gs;totH+=L.h;
+      if(ff>0){L.f=L.h*ff;totF+=L.f}
+    }else anyBad=true;
+    legs.push(L);
+  });
+  // 各FIX時点の残り(そのFIX以降に飛ぶ分)を後ろから求める
+  const remD=new Array(wps.length).fill(0),remH=new Array(wps.length).fill(0),remF=new Array(wps.length).fill(0);
+  for(let i=wps.length-2;i>=0;i--){
+    const L=legs[i+1]||{};
+    remD[i]=remD[i+1]+(L.d||0);
+    remH[i]=remH[i+1]+(L.h||0);
+    remF[i]=remF[i+1]+(L.f||0);
+  }
+  const fob=num('fob');
+  let etaAcc=0; // 現在時刻からの積算(ETA計算用)
+  wps.forEach((w,i)=>{
+    const L=legs[i]||null;                       // このFIXへ到達する区間
+    const leg=L?L.d.toFixed(1):'';
+    const mc=L?fmt3(L.mc)+'°':'';
+    const gs=(L&&!L.bad)?Math.round(L.gs):(L?'不可':'');
+    const ete=(L&&!L.bad)?fmtHM(L.h):(L?'—':'');
+    if(L&&!L.bad)etaAcc+=L.h;
+    const eta=(L&&!L.bad)?hm(new Date(Date.now()+etaAcc*3600e3)):'';
+    const legF=(L&&!L.bad&&ff>0)?L.f.toFixed(0):'';
+    const rD=(i<wps.length-1)?remD[i].toFixed(0):'0';
+    const rH=(!anyBad&&i<wps.length-1)?fmtHM(remH[i]):(i===wps.length-1?'0:00':'—');
+    const rF=(ff>0&&fob>0)?Math.round(fob-(totF-remF[i])):'';   // そのFIX到達時の残燃料(計画)
+    const isNext=(i===nextIdx),isDct=(dctTarget===w);
+    const mark=isNext?'▶':(isDct?'▷':'');
+
+    // 上段: 番号 / ROUTE / IDENT / MAG CRS(2行) / DISTANCE / GS(2行) / EET / ETA / LEG / ACTUAL(2行) / 操作(2行)
+    const a=document.createElement('tr');
+    a.className='fixA'+(isNext?' nextwp':'')+(isDct?' dctOnRow':'');
+    a.innerHTML=`<td class="fixNo grip">≡ ${mark}(${i+1})</td>
+      <td class="cRte"></td><td class="cNav"></td><td class="cNav"></td>
+      <td rowspan="2" class="cCrs">${mc}</td>
+      <td class="cNum">${leg}</td>
+      <td rowspan="2" class="cNum">${gs}</td>
+      <td class="cNum">${ete}</td><td class="cNum">${eta}</td><td class="cNum">${legF}</td>
+      <td rowspan="2" class="cNum"></td>
+      <td rowspan="2" class="cAct noprint">
+        <button class="dct${isDct?' on':''}">D→</button>
+        <button class="fav${isFav(w.name)?' on':''}"${isFav(w.name)?' disabled':''}>★</button>
+        ${i<wps.length-1?'<button class="ins" title="この区間に検索した地点を挿入">＋</button>':''}
+        <button class="del">削除</button></td>`;
+    // 下段: 名称 / (FREQ欄) / REMAIN類
+    const b=document.createElement('tr');
+    b.className='fixB'+(isNext?' nextwp':'')+(isDct?' dctOnRow':'');
+    b.innerHTML=`<td class="fixName"><input value="${w.name.replace(/"/g,'&quot;')}"></td>
+      <td class="cRte"></td><td class="cNav"></td><td class="cNav"></td>
+      <td class="cNum">${rD}</td>
+      <td class="cNum">${rH}</td><td class="cNum"></td><td class="cNum">${rF}</td>`;
+    b.querySelector('input').oninput=e=>{w.name=e.target.value;syncWpIcons();saveState()};
+    a.querySelector('.del').onclick=()=>{
       pushUndo();
       if(dctTarget===w)clearDct();
       map.removeLayer(w.marker);wps.splice(i,1);redraw()};
-    tr.querySelector('.dct').onclick=()=>{dctTarget===w?clearDct():setDct(w)}; // 2回目で解除
-    const insBtn=tr.querySelector('.ins');
+    a.querySelector('.dct').onclick=()=>{dctTarget===w?clearDct():setDct(w)}; // 2回目で解除
+    const insBtn=a.querySelector('.ins');
     if(insBtn)insBtn.onclick=()=>openSearch(i); // 検索で選んだ地点をこの区間に挿入
-    tr.querySelector('.fav').onclick=function(){ // 確認なし・即強調(地図ポップアップと連動)
+    a.querySelector('.fav').onclick=function(){ // 確認なし・即強調(地図ポップアップと連動)
       savePoint(w.name,w.lat,w.lng,true);
       this.classList.add('on');this.disabled=true;
     };
-    attachDrag(tr.querySelector('.grip'),tr,i);
-    body.appendChild(tr);
+    attachDrag(a.querySelector('.grip'),a,i);
+    body.appendChild(a);body.appendChild(b);
   });
   if(wps.length>1){
     const trT=document.createElement('tr');trT.className='total';
-    trT.innerHTML=`<td></td><td class="jp">合計</td><td></td><td></td><td></td>
-      <td>${totD.toFixed(1)}</td><td>${anyBad?'—':fmtHM(totH)}</td><td>${num('ff')>0&&!anyBad?totF.toFixed(0):'—'}</td><td></td>`;
+    trT.innerHTML=`<td class="fixName">TOTAL</td><td></td><td></td><td></td><td></td>
+      <td>${totD.toFixed(1)}</td><td></td><td>${anyBad?'—':fmtHM(totH)}</td><td></td>
+      <td>${ff>0&&!anyBad?totF.toFixed(0):'—'}</td><td></td><td class="noprint"></td>`;
     body.appendChild(trT);
   }
   if(ed&&ed.i>=0){ // 編集中だった名称入力へフォーカスを戻す
-    const rows2=[...body.querySelectorAll('tr:not(.total)')];
-    const inp=rows2[ed.i]&&rows2[ed.i].querySelector('input');
+    const inps=[...body.querySelectorAll('tr.fixB input')];
+    const inp=inps[ed.i];
     if(inp){inp.focus();try{inp.setSelectionRange(ed.s,ed.e)}catch(_){}}
   }
   document.getElementById('dDist').innerHTML=totD.toFixed(1)+' <small>NM</small>';
@@ -1242,7 +1359,6 @@ function redraw(){
   document.getElementById('dEta').textContent=(!anyBad&&totH>0)?hm(new Date(Date.now()+totH*3600e3)):'--:--';
   const req=(!anyBad&&num('ff')>0)?totF:0;
   document.getElementById('dReq').innerHTML=req.toFixed(0)+' <small>lbs</small>';
-  const fob=num('fob');
   document.getElementById('dRem').innerHTML=(fob>0&&req>0)?(fob-req).toFixed(0)+' <small>lbs</small>':'— <small>lbs</small>';
   document.getElementById('dRem').style.color=(fob>0&&req>0&&fob-req<num('ff')*0.5)?'var(--red)':'';
   document.getElementById('dEnd').textContent=(fob>0&&num('ff')>0)?fmtHM(fob/num('ff')):'--:--';
@@ -1274,16 +1390,23 @@ function attachDrag(grip,tr,idx){
   });
   grip.addEventListener('pointermove',e=>{
     if(!dragRow)return;
-    const rows=[...document.querySelectorAll('#wpBody tr:not(.total)')];
-    const over=rows.find(r=>{const b=r.getBoundingClientRect();return e.clientY>=b.top&&e.clientY<b.bottom});
+    const rows=[...document.querySelectorAll('#wpBody tr.fixA')];
+    const over=rows.find(r=>{const b=r.getBoundingClientRect();
+      const b2=r.nextElementSibling?r.nextElementSibling.getBoundingClientRect():b;
+      return e.clientY>=b.top&&e.clientY<b2.bottom});
     if(over&&over!==dragRow){
-      if(rows.indexOf(over)>rows.indexOf(dragRow))over.after(dragRow);
-      else over.before(dragRow);
+      const mate=dragRow.nextElementSibling; // 下段(fixB)も追従させる
+      if(rows.indexOf(over)>rows.indexOf(dragRow)){
+        const oMate=over.nextElementSibling||over;
+        oMate.after(dragRow);if(mate)dragRow.after(mate);
+      }else{
+        over.before(dragRow);if(mate)dragRow.after(mate);
+      }
     }
   });
   const fin=()=>{
     if(!dragRow)return;
-    const rows=[...document.querySelectorAll('#wpBody tr:not(.total)')];
+    const rows=[...document.querySelectorAll('#wpBody tr.fixA')];
     const ni=rows.indexOf(dragRow);
     dragRow.classList.remove('dragging');dragRow=null;
     if(ni>=0&&ni!==dragIdx){pushUndo();const[m]=wps.splice(dragIdx,1);wps.splice(ni,0,m);redraw()}
@@ -1679,11 +1802,12 @@ function setDctPin(lat,lng){ // 飛行中の長押し: その場ピンへD→(�
     icon:L.divIcon({className:'',html:'<div class="dct-pin">◎</div>',iconSize:[22,22],iconAnchor:[11,11]})}).addTo(map);
   setDct({name:'PIN '+hm(new Date()),lat,lng,isWp:false});
 }
-function syncDctUi(){ // 一覧表のD→対象行を強調
-  const rows=[...document.querySelectorAll('#wpBody tr:not(.total)')];
+function syncDctUi(){ // 一覧表のD→対象行を強調(1FIX=上下2行)
+  const rows=[...document.querySelectorAll('#wpBody tr.fixA')];
   rows.forEach((r,k)=>{
-    const on=wps[k]&&dctTarget===wps[k];
+    const on=!!(wps[k]&&dctTarget===wps[k]);
     r.classList.toggle('dctOnRow',on);
+    if(r.nextElementSibling)r.nextElementSibling.classList.toggle('dctOnRow',on);
     const b=r.querySelector('.dct');if(b)b.classList.toggle('on',on);
   });
 }
@@ -1737,7 +1861,11 @@ function updateNext(){
   if(nextIdx>=wps.length)nextIdx=wps.length-1;
   const w=wps[nextIdx];
   // ポイント一覧の「今向かっている行」と地図マーカーをハイライト
-  document.querySelectorAll('#wpBody tr:not(.total)').forEach((r,k)=>r.classList.toggle('nextwp',k===nextIdx));
+  document.querySelectorAll('#wpBody tr.fixA').forEach((r,k)=>{
+    const on=(k===nextIdx);
+    r.classList.toggle('nextwp',on);
+    if(r.nextElementSibling)r.nextElementSibling.classList.toggle('nextwp',on);
+  });
   syncWpIcons();
   const from=ownPos||(nextIdx>0?wps[nextIdx-1]:null);
   document.getElementById('nxName').textContent=(nextIdx+1)+'. '+w.name;
@@ -1913,6 +2041,46 @@ function renderLogs(){
     };
     b.appendChild(tr)});
 }
+/* ───────── ログ印刷(A4横に同じログを2面付け→切るとA5×2枚) ───────── */
+document.getElementById('btnPrint').onclick=()=>{
+  if(!wps.length){alert('ポイントがありません');return}
+  const src=document.querySelector('table.fltlog');
+  const build=()=>{
+    const t=src.cloneNode(true);
+    t.className='prLog';
+    t.querySelectorAll('.noprint').forEach(e=>e.remove());
+    // 入力欄は印刷で消えるのでテキストに置換
+    t.querySelectorAll('input').forEach(inp=>{
+      const td=inp.parentElement;td.textContent=inp.value;
+    });
+    // 画面用の記号(≡ ▶)は印刷では不要
+    t.querySelectorAll('td.fixNo').forEach(td=>{
+      td.textContent=td.textContent.replace(/[≡▶▷]/g,'').trim();
+    });
+    return t.outerHTML;
+  };
+  const tbl=build();
+  const dep=wps[0]?wps[0].name:'';
+  const dst=wps.length>1?wps[wps.length-1].name:'';
+  const totD=document.getElementById('dDist').textContent.trim();
+  const totE=document.getElementById('dEte').textContent.trim();
+  const totF=document.getElementById('dReq').textContent.trim();
+  const head=`<table class="prHead">
+    <tr><th style="width:14%">NOTES</th><td colspan="4" style="height:12mm"></td></tr>
+    <tr><th>AIRCRAFT<br>IDENT</th><th>DEPARTURE<br>TIME</th><th>TOTAL<br>DISTANCE</th><th>TOTAL<br>EET</th><th>TOTAL<br>AMT FUEL</th></tr>
+    <tr><td style="height:7mm"></td><td></td><td class="v">${totD}</td><td class="v">${totE}</td><td class="v">${totF}</td></tr>
+  </table>`;
+  const copy=`<div class="prCopy">
+    <div class="prTitle">FLIGHT LOG${dep?`　${dep}${dst?' → '+dst:''}`:''}</div>
+    ${head}${tbl}
+  </div>`;
+  const area=document.getElementById('printArea');
+  area.innerHTML=copy+copy;         // 同じものを2面付け
+  const done=()=>{area.innerHTML='';window.removeEventListener('afterprint',done)};
+  window.addEventListener('afterprint',done);
+  setTimeout(()=>window.print(),60);
+};
+
 document.getElementById('btnCSV').onclick=()=>{
   if(!logs.length){alert('ログがありません');return}
   const csv='日付,T/O,L/D,飛行時間,経路\n'+logs.map(l=>[l.date,l.off,l.on,l.dur,l.route].join(',')).join('\n');
