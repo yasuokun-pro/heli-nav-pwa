@@ -406,7 +406,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.min.js"></script>
 <script>
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-41';
+const VER_TAG='v6-42';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -1051,6 +1051,7 @@ document.getElementById('btnGPS').onclick=function(){
         map.setBearing(-hdg); // トラックアップ
     }
     updateNext();
+    trackRecord(); // 飛行中ならGPS軌跡を記録
     document.getElementById('btnGPS').classList.add('on');
     renderLiveGs();
     if(liveGsActive())redraw();else updateDct(); // 表の毎秒再構築を抑制(名称編集の中断防止)
@@ -1747,8 +1748,55 @@ document.getElementById('nxPrev').onclick=()=>{
    状態: null=待機 / legOffあり=飛行中 / legOffなし=一時着陸中(地上)
    L/D 1回目=一時着陸(レグ確定)、地上でT/O=再出発、地上でL/D=FLT終了(記録確定)
    飛行時間は空中時間の積算(地上待機は含まない) */
-let flt=null,timerId=null;const logs=[]; // flt={firstOff,legOff,accMs,legs:[{off,on}]}
+let flt=null,timerId=null;const logs=[]; // flt={firstOff,legOff,accMs,legs:[{off,on}],trk:[[lat,lng,altFt,spdKt,ts],..]}
 function saveLogs(){store.set('hnav.logs',logs)}
+
+/* ───────── トラックログ(GPS軌跡) ─────────
+   T/O〜L/Dの空中のみ記録。1点は[lat,lng,高度ft,GSkt,UNIX秒]で、
+   前回から2秒以上かつ15m以上動いたときだけ追加(容量と精度のバランス) */
+const trackLine=L.polyline([],{color:'#38e07b',weight:2.5,opacity:.85,dashArray:'1 6',lineCap:'round'}).addTo(map);
+let trkLast=null;
+function trackRecord(){
+  if(!flt||!flt.legOff||!ownPos)return;              // 飛行中(空中)のみ
+  const now=Date.now();
+  if(trkLast){
+    if(now-trkLast.t<2000)return;                    // 2秒間隔
+    if(distNM(trkLast,ownPos)*1852<15)return;        // 15m未満の動きは捨てる
+  }
+  flt.trk=flt.trk||[];
+  flt.trk.push([+ownPos.lat.toFixed(5),+ownPos.lng.toFixed(5),
+    ownAltFt!==null?Math.round(ownAltFt):null,
+    ownSpdKt!==null?Math.round(ownSpdKt):null,
+    Math.floor(now/1000)]);
+  trkLast={lat:ownPos.lat,lng:ownPos.lng,t:now};
+  trackLine.setLatLngs(flt.trk.map(p=>[p[0],p[1]]));
+  store.set('hnav.fltTrk',{firstOff:+flt.firstOff,trk:flt.trk}); // 落ちても復元できるよう随時退避
+}
+function trackShow(pts){ // 記録済みトラックを地図に表示
+  trackLine.setLatLngs((pts||[]).map(p=>[p[0],p[1]]));
+}
+function trkStats(trk){ // 距離NM・最高高度ft・最高速度kt
+  if(!trk||trk.length<2)return null;
+  let d=0;
+  for(let i=1;i<trk.length;i++)d+=distNM({lat:trk[i-1][0],lng:trk[i-1][1]},{lat:trk[i][0],lng:trk[i][1]});
+  const alts=trk.map(p=>p[2]).filter(v=>v!==null&&!isNaN(v));
+  const spds=trk.map(p=>p[3]).filter(v=>v!==null&&!isNaN(v));
+  return {d,maxAlt:alts.length?Math.max(...alts):null,maxSpd:spds.length?Math.max(...spds):null,n:trk.length};
+}
+function trackGpx(l){ // 飛行記録1件をGPXトラックに
+  const t=l.trk||[];
+  const seg=t.map(p=>`   <trkpt lat="${p[0]}" lon="${p[1]}">`+
+    (p[2]!==null?`<ele>${(p[2]/3.281).toFixed(1)}</ele>`:'')+
+    (p[4]?`<time>${new Date(p[4]*1000).toISOString()}</time>`:'')+`</trkpt>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="HELI NAV" xmlns="http://www.topografix.com/GPX/1/1">
+ <trk><name>${(l.date+' '+l.off+'-'+l.on).replace(/[<>&]/g,'')}</name>
+  <trkseg>
+${seg}
+  </trkseg>
+ </trk>
+</gpx>`;
+}
 const hm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
 function fltDurMs(){return flt?flt.accMs+(flt.legOff?Date.now()-flt.legOff:0):0}
 function tickTimer(){
@@ -1764,8 +1812,9 @@ function setFltButtons(){
 }
 document.getElementById('btnTO').onclick=function(){
   const now=new Date();
-  if(!flt)flt={firstOff:now,legOff:now,accMs:0,legs:[]};
-  else flt.legOff=now; // 再出発
+  if(!flt){flt={firstOff:now,legOff:now,accMs:0,legs:[],trk:[]};trkLast=null;trackShow([])}
+  else{flt.legOff=now;trkLast=null} // 再出発(一時着陸中の移動は記録しない)
+  if(gpsWatch===null)document.getElementById('btnGPS').click(); // 軌跡記録のためGPSを自動ON
   clearInterval(timerId);timerId=setInterval(tickTimer,1000);
   setFltButtons();renderLogs();
 };
@@ -1784,8 +1833,10 @@ document.getElementById('btnLDG').onclick=function(){
       dur:fmtHMS(flt.accMs).slice(0,5),
       route:wps.map(w=>w.name).join('→')||'—',
       wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name]),
-      legs:flt.legs});
-    flt=null;clearInterval(timerId);
+      legs:flt.legs,
+      trk:flt.trk||[]});                 // GPS軌跡を記録に保存
+    store.del('hnav.fltTrk');            // 進行中トラックの退避を破棄
+    flt=null;clearInterval(timerId);trkLast=null;
     document.getElementById('dTimer').textContent='00:00:00';
     setFltButtons();renderLogs();saveLogs();
   }
@@ -1807,12 +1858,20 @@ function renderLogs(){
       if(nx&&nx.classList.contains('logdet')){nx.remove();return}
       document.querySelectorAll('#logBody tr.logdet').forEach(x=>x.remove());
       const d=document.createElement('tr');d.className='logdet';
+      const ts=trkStats(l.trk);
       d.innerHTML=`<td colspan="5"><div class="logdetbox">
         <div><b>実績</b> T/O ${l.off} → L/D ${l.on}(飛行時間 ${l.dur}${l.legs&&l.legs.length>1?'・'+l.legs.length+'レグ':''})</div>
         ${l.legs&&l.legs.length>1?'<div><b>レグ</b> '+l.legs.map((g,k)=>(k+1)+') '+g.off+'→'+g.on).join(' / ')+'</div>':''}
         <div><b>経路</b> ${l.route}</div>
-        ${l.wp&&l.wp.length?'<button class="btn sh" style="margin-top:6px" id="logShowRt">この経路を地図に表示</button>'
-          :'<div style="color:var(--dim)">経路の座標データなし(旧形式のログ)</div>'}
+        ${ts?`<div><b>軌跡</b> ${ts.d.toFixed(1)}NM`+
+             (ts.maxAlt!==null?` / 最高${ts.maxAlt}ft`:'')+
+             (ts.maxSpd!==null?` / 最高${ts.maxSpd}kt`:'')+
+             ` <span style="color:var(--dim)">(${ts.n}点)</span></div>`
+           :'<div style="color:var(--dim)">GPS軌跡なし(GPS OFFで飛行/旧形式のログ)</div>'}
+        <div class="row" style="margin-top:6px;gap:6px;display:flex;flex-wrap:wrap">
+          ${l.wp&&l.wp.length?'<button class="btn sh" id="logShowRt">計画経路を地図に</button>':''}
+          ${ts?'<button class="btn go" id="logShowTrk">軌跡を地図に</button><button class="btn sh" id="logGpx">GPX書出</button>':''}
+        </div>
       </div></td>`;
       const sb=d.querySelector('#logShowRt');
       if(sb)sb.onclick=e=>{e.stopPropagation();
@@ -1820,6 +1879,17 @@ function renderLogs(){
         loadRouteObj({wp:l.wp},true);
         setScreen('plan');
         document.querySelector('.tabs button[data-tab="wp"]').click();
+      };
+      const tb=d.querySelector('#logShowTrk');
+      if(tb)tb.onclick=e=>{e.stopPropagation();
+        trackShow(l.trk);
+        setScreen('main');setFollow(false);
+        map.fitBounds(trackLine.getBounds().pad(0.1),ovlPad());
+      };
+      const gb=d.querySelector('#logGpx');
+      if(gb)gb.onclick=e=>{e.stopPropagation();
+        dl(`track_${l.date.replace(/\//g,'')}_${l.off.replace(':','')}.gpx`,
+           'application/gpx+xml',trackGpx(l));
       };
       tr.after(d);
     };
@@ -1939,6 +2009,9 @@ document.querySelectorAll('.tabs button').forEach(btn=>{
   setScreen('main');setOvl(1); // 起動はメイン(地図)画面+諸元1段
   const sl=store.get('hnav.logs');
   if(Array.isArray(sl)&&sl.length){sl.forEach(l=>logs.push(l));renderLogs()}
+  // 飛行中にアプリが落ちた場合、退避しておいた軌跡を地図に復元(参考表示)
+  const ft=store.get('hnav.fltTrk');
+  if(ft&&Array.isArray(ft.trk)&&ft.trk.length)trackShow(ft.trk);
   const sv=store.get('hnav.route');
   if(sv&&Array.isArray(sv.wp)&&sv.wp.length){
     try{loadRouteObj(sv,true);return}catch(e){}
