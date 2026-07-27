@@ -138,8 +138,12 @@
   tr.fixB td{border-bottom:1px solid var(--line)}
   table.fltlog td input{width:100%;min-width:78px;background:none;border:none;color:var(--txt);
     font-family:var(--sans);font-size:12px;outline:none;text-align:left}
-  .cFix{min-width:104px}.cRte{min-width:52px}.cNav{min-width:52px}.cCrs{min-width:42px}
+  .cFix{min-width:104px}.cNav{min-width:56px}.cCrs{min-width:42px}
   .cNum{min-width:52px}.cAct{min-width:118px}
+  /* 上段(区間値)は左詰め、下段のREMAINは右詰めで対比させる */
+  table.fltlog td.cNum{text-align:left}
+  table.fltlog td.cNum.rem{text-align:right}
+  table.fltlog td.cNav{text-align:left;font-size:11px}
   tr.total td{color:var(--amb);font-weight:600}
   /* 印刷: A4横に同じログを2面付け(切るとA5×2枚) */
   #printArea{display:none}
@@ -159,6 +163,9 @@
     table.prLog th{font-size:5.6pt;line-height:1.1;font-weight:400}
     table.prLog td.fixNo{text-align:left;font-style:italic}
     table.prLog td.fixName{text-align:left;font-size:7.5pt}
+    table.prLog td.cNum{text-align:left}
+    table.prLog td.cNum.rem{text-align:right}
+    table.prLog td.cNav{text-align:left}
     table.prLog tr.fixA td{border-bottom:none}
     .noprint{display:none!important}
   }
@@ -396,7 +403,6 @@
       <thead>
         <tr>
           <th rowspan="2" class="cFix">FIX</th>
-          <th class="cRte">ROUTE</th>
           <th class="cNav">IDENT</th>
           <th class="cNav">IDENT</th>
           <th rowspan="2" class="cCrs">MAG<br>CRS</th>
@@ -409,7 +415,6 @@
           <th rowspan="2" class="cAct noprint"></th>
         </tr>
         <tr>
-          <th class="cRte"></th>
           <th class="cNav">FREQ</th>
           <th class="cNav">FREQ</th>
           <th class="cNum">REMAIN</th>
@@ -495,8 +500,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.min.js"></script>
 <script>
+/* 飛行場の通信周波数(tools/gen_freq.py が生成・手編集しないこと) */
+/*ADFREQ_GEN_START*/
+const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2","GND":"121.95","ATIS":"128.25"},"RJAF":{"RDO":"118.65"},"RJAH":{"TCA":"124.8"},"RJAK":{"TWR":"126.2"},"RJAM":{"RDO":"126.2"},"RJAN":{"RDO":"124.3"},"RJAZ":{"RDO":"124.3"},"RJBB":{"APP":"120.25","DEP":"119.2","TCA":"121.1","TWR":"118.2","GND":"121.6","ATIS":"127.85"},"RJBD":{"RDO":"118.55"},"RJBE":{"APP":"121.15","TCA":"121.1","TWR":"118.5","GND":"122.075","ATIS":"128.075"},"RJBK":{"RDO":"130.75"},"RJBT":{"RDO":"118.4"},"RJCA":{"TWR":"126.2"},"RJCB":{"APP":"128.325","TWR":"118.7"},"RJCC":{"APP":"120.1","DEP":"124.7","TCA":"127.7","TWR":"118.8","GND":"121.6","ATIS":"128.6"},"RJCH":{"APP":"120.85","TWR":"118.35","ATIS":"126.6"},"RJCJ":{"TCA":"127.7"},"RJCK":{"APP":"128.325","TWR":"118.05"},"RJCM":{"APP":"128.325","TWR":"118.85"},"RJCN":{"APP":"128.325","RDO":"122.7"},"RJCO":{"APP":"119.225","DEP":"121.075","TWR":"126.2","GND":"121.8"},"RJCT":{"APP":"128.325","TWR":"122.2"},"RJCW":{"RDO":"118.3"},"RJDA":{"RDO":"130.775"},"RJDB":{"RDO":"118.2"},"RJDC":{"RDO":"118.05"},"RJDM":{"TWR":"126.2"},"RJDT":{"RDO":"124.3"},"RJDU":{"APP":"119.175","DEP":"119.175","TCA":"121.175","TWR":"118.5","GND":"121.6","RDO":"118.5"},"RJEB":{"RDO":"118.15"},"RJEC":{"APP":"128.325","TWR":"118.55"},"RJEO":{"RDO":"122.7"},"RJER":{"RDO":"122.7"},"RJFC":{"RDO":"118.65"},"RJFE":{"RDO":"118.35"},"RJFF":{"APP":"119.65","DEP":"127.9","TCA":"121.275","TWR":"118.4","GND":"121.7","ATIS":"127.2"},"RJFG":{"RDO":"118.75"},"RJFK":{"APP":"126.0","DEP":"119.4","TCA":"120.0","TWR":"118.2","GND":"121.7","ATIS":"127.05"},"RJFM":{"APP":"121.4","DEP":"120.1","TWR":"118.3","TCA":"121.25","GND":"121.9","ATIS":"126.8"},"RJFO":{"APP":"120.6","DEP":"127.7","TWR":"118.8","GND":"121.6","ATIS":"127.8"},"RJFR":{"TWR":"118.85","GND":"121.9","RDO":"118.85"},"RJFS":{"APP":"119.7","TWR":"118.025","ATIS":"126.825","RDO":"118.025"},"RJFT":{"APP":"127.0","DEP":"126.5","TCA":"123.85","TWR":"118.7","GND":"121.8","ATIS":"128.8"},"RJFU":{"APP":"119.175","DEP":"119.175","TCA":"121.175","TWR":"118.5","GND":"121.6","ATIS":"126.85","RDO":"118.5"},"RJFY":{"APP":"122.15"},"RJFZ":{"TCA":"127.95"},"RJGG":{"APP":"121.05","DEP":"120.0","TCA":"119.25","TWR":"118.85","GND":"121.8","ATIS":"127.075"},"RJKA":{"APP":"124.95","RDO":"118.15"},"RJKI":{"APP":"124.95","RDO":"118.0"},"RJKN":{"APP":"124.95","RDO":"122.7"},"RJNA":{"APP":"119.175","DEP":"121.225","TCA":"119.25"},"RJNF":{"RDO":"118.6"},"RJNH":{"TCA":"127.95"},"RJNK":{"TCA":"127.95"},"RJNO":{"RDO":"118.65"},"RJNS":{"RDO":"118.0"},"RJNT":{"TWR":"124.3"},"RJNW":{"RDO":"118.05"},"RJNY":{"TWR":"126.2"},"RJOA":{"APP":"124.05","DEP":"119.9","TWR":"118.6","ATIS":"127.25"},"RJOB":{"APP":"121.2","DEP":"121.2","TWR":"124.3"},"RJOC":{"RDO":"122.7"},"RJOF":{"GND":"133.0"},"RJOH":{"APP":"120.1","DEP":"120.1"},"RJOK":{"APP":"125.0","DEP":"124.8","TWR":"118.75","ATIS":"126.45"},"RJOM":{"TWR":"118.35","APP":"126.2","ATIS":"126.65"},"RJOO":{"APP":"120.45","DEP":"119.5","TWR":"118.1","GND":"121.7","ATIS":"128.6"},"RJOR":{"RDO":"118.15"},"RJOT":{"APP":"121.2","DEP":"121.2","TCA":"119.025","TWR":"118.3","ATIS":"127.45"},"RJOW":{"RDO":"122.2"},"RJOY":{"TWR":"124.35","GND":"121.8"},"RJSA":{"APP":"120.85","TWR":"118.3"},"RJSC":{"RDO":"122.7"},"RJSF":{"RDO":"118.05"},"RJSI":{"APP":"119.25","RDO":"118.2"},"RJSK":{"APP":"119.25","TWR":"118.6"},"RJSM":{"TCA":"124.05","ATIS":"128.4"},"RJSN":{"APP":"121.4","DEP":"119.05","TWR":"118.0","ATIS":"128.45"},"RJSO":{"TWR":"126.2"},"RJSR":{"APP":"119.25","RDO":"118.75"},"RJSS":{"APP":"120.4","DEP":"120.0","TCA":"121.025","TWR":"118.7","GND":"121.7","ATIS":"126.45","RDO":"118.7"},"RJST":{"APP":"120.1","DEP":"120.1","TCA":"123.85"},"RJSU":{"TWR":"122.2"},"RJSY":{"RDO":"118.8"},"RJTC":{"TWR":"118.85"},"RJTE":{"TWR":"126.2"},"RJTF":{"RDO":"130.8"},"RJTH":{"RDO":"118.7"},"RJTJ":{"APP":"126.2"},"RJTK":{"TWR":"126.2"},"RJTO":{"RDO":"118.6"},"RJTQ":{"RDO":"118.05"},"RJTT":{"APP":"119.1","DEP":"126.0","TCA":"124.75","TWR":"118.1","GND":"118.225","ATIS":"128.8"},"RJTU":{"APP":"120.1","TWR":"126.2"},"RJTY":{"APP":"118.3","DEP":"122.1","TWR":"134.3","GND":"133.2","ATIS":"128.4"},"ROAH":{"DEP":"119.1","APP":"119.1","TCA":"120.0","TWR":"118.1","GND":"121.8","ATIS":"127.8"},"ROIG":{"APP":"120.3","TWR":"118.0","ATIS":"128.675"},"ROKJ":{"RDO":"122.7"},"ROMD":{"RDO":"118.55"},"ROMY":{"TWR":"118.2","APP":"125.0","DEP":"125.0"},"RORK":{"RDO":"118.55"},"RORS":{"APP":"125.0","DEP":"125.0","TWR":"118.3","GND":"121.7","RDO":"118.3"},"RORT":{"RDO":"118.6"},"RORY":{"APP":"124.95","RDO":"118.3"},"ROTM":{"GND":"122.8"},"ROYN":{"RDO":"118.5"},"RJFH":{"RDO":"130.675"},"RJOP":{"TWR":"126.2"},"RJTI":{"RDO":"122.7"},"RJTS":{"TWR":"126.2"}};
+/*ADFREQ_GEN_END*/
+
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-47';
+const VER_TAG='v6-49';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -1249,6 +1259,25 @@ routeHit.on('contextmenu',e=>{ // 長押し: その区間にWPを挿入
   insertWpAt(leg,e.latlng.lat,e.latlng.lng);
 });
 
+/* ポイントが飛行場ならIDENT/FREQ欄を自動で埋める(名称のICAO or 0.8NM以内のARPで判定) */
+function adFreqOf(w){
+  const empty={id1:'',f1:'',id2:'',f2:''};
+  let icao=null;
+  const m=/\b(R[JO][A-Z]{2})\b/i.exec(w.name||'');
+  if(m)icao=m[1].toUpperCase();
+  if(!icao){ // 名称にICAOが無ければ近傍の飛行場を探す
+    let best=null,bd=0.8;
+    ASP.forEach(a=>{if(!a.icao)return;const d=distNM(w,a);if(d<bd){bd=d;best=a}});
+    if(best)icao=best.icao;
+  }
+  const f=icao&&AD_FREQ[icao];
+  if(!f)return empty;
+  const pri=['TWR','RDO','APP','TCA','GND','ATIS','DEP'].filter(k=>f[k]);
+  const k1=pri[0],k2=pri[1];
+  return {id1:k1?icao:'',f1:k1?f[k1]:'',
+          id2:k2?k2:'',   f2:k2?f[k2]:''};
+}
+
 function redraw(){
   const lls=wps.map(w=>[w.lat,w.lng]);
   routeLine.setLatLngs(lls);
@@ -1306,10 +1335,11 @@ function redraw(){
     const mark=isNext?'▶':(isDct?'▷':'');
 
     // 上段: 番号 / ROUTE / IDENT / MAG CRS(2行) / DISTANCE / GS(2行) / EET / ETA / LEG / ACTUAL(2行) / 操作(2行)
+    const F=adFreqOf(w); // 飛行場なら周波数を自動で埋める
     const a=document.createElement('tr');
     a.className='fixA'+(isNext?' nextwp':'')+(isDct?' dctOnRow':'');
     a.innerHTML=`<td class="fixNo grip">≡ ${mark}(${i+1})</td>
-      <td class="cRte"></td><td class="cNav"></td><td class="cNav"></td>
+      <td class="cNav">${F.id1}</td><td class="cNav">${F.id2}</td>
       <td rowspan="2" class="cCrs">${mc}</td>
       <td class="cNum">${leg}</td>
       <td rowspan="2" class="cNum">${gs}</td>
@@ -1320,13 +1350,13 @@ function redraw(){
         <button class="fav${isFav(w.name)?' on':''}"${isFav(w.name)?' disabled':''}>★</button>
         ${i<wps.length-1?'<button class="ins" title="この区間に検索した地点を挿入">＋</button>':''}
         <button class="del">削除</button></td>`;
-    // 下段: 名称 / (FREQ欄) / REMAIN類
+    // 下段: 名称 / FREQ / REMAIN類(残り値は右詰め)
     const b=document.createElement('tr');
     b.className='fixB'+(isNext?' nextwp':'')+(isDct?' dctOnRow':'');
     b.innerHTML=`<td class="fixName"><input value="${w.name.replace(/"/g,'&quot;')}"></td>
-      <td class="cRte"></td><td class="cNav"></td><td class="cNav"></td>
-      <td class="cNum">${rD}</td>
-      <td class="cNum">${rH}</td><td class="cNum"></td><td class="cNum">${rF}</td>`;
+      <td class="cNav">${F.f1}</td><td class="cNav">${F.f2}</td>
+      <td class="cNum rem">${rD}</td>
+      <td class="cNum rem">${rH}</td><td class="cNum rem"></td><td class="cNum rem">${rF}</td>`;
     b.querySelector('input').oninput=e=>{w.name=e.target.value;syncWpIcons();saveState()};
     a.querySelector('.del').onclick=()=>{
       pushUndo();
@@ -1344,9 +1374,9 @@ function redraw(){
   });
   if(wps.length>1){
     const trT=document.createElement('tr');trT.className='total';
-    trT.innerHTML=`<td class="fixName">TOTAL</td><td></td><td></td><td></td><td></td>
-      <td>${totD.toFixed(1)}</td><td></td><td>${anyBad?'—':fmtHM(totH)}</td><td></td>
-      <td>${ff>0&&!anyBad?totF.toFixed(0):'—'}</td><td></td><td class="noprint"></td>`;
+    trT.innerHTML=`<td class="fixName">TOTAL</td><td></td><td></td><td></td>
+      <td class="rem">${totD.toFixed(1)}</td><td></td><td class="rem">${anyBad?'—':fmtHM(totH)}</td><td></td>
+      <td class="rem">${ff>0&&!anyBad?totF.toFixed(0):'—'}</td><td></td><td class="noprint"></td>`;
     body.appendChild(trT);
   }
   if(ed&&ed.i>=0){ // 編集中だった名称入力へフォーカスを戻す
@@ -2057,9 +2087,9 @@ document.getElementById('btnPrint').onclick=()=>{
     t.querySelectorAll('td.fixNo').forEach(td=>{
       td.textContent=td.textContent.replace(/[≡▶▷]/g,'').trim();
     });
-    return t.outerHTML;
+    return t; // DOM要素で返す(面ごとに行を間引くため)
   };
-  const tbl=build();
+  const full=build();
   const dep=wps[0]?wps[0].name:'';
   const dst=wps.length>1?wps[wps.length-1].name:'';
   const totD=document.getElementById('dDist').textContent.trim();
@@ -2070,12 +2100,34 @@ document.getElementById('btnPrint').onclick=()=>{
     <tr><th>AIRCRAFT<br>IDENT</th><th>DEPARTURE<br>TIME</th><th>TOTAL<br>DISTANCE</th><th>TOTAL<br>EET</th><th>TOTAL<br>AMT FUEL</th></tr>
     <tr><td style="height:7mm"></td><td></td><td class="v">${totD}</td><td class="v">${totE}</td><td class="v">${totF}</td></tr>
   </table>`;
-  const copy=`<div class="prCopy">
-    <div class="prTitle">FLIGHT LOG${dep?`　${dep}${dst?' → '+dst:''}`:''}</div>
-    ${head}${tbl}
-  </div>`;
+  // ルートが長い場合は左に前半・右に続きを載せる(A5相当の1面あたり最大16FIX)
+  const PER=16;
+  const half=(from,to)=>{
+    const t=full.cloneNode(true);
+    const tb=t.querySelector('tbody');
+    const rows=[...tb.children];
+    const fixA=rows.filter(r=>r.classList.contains('fixA'));
+    fixA.forEach((ra,k)=>{
+      if(k>=from&&k<to)return;
+      const rb=ra.nextElementSibling;
+      ra.remove();if(rb&&rb.classList.contains('fixB'))rb.remove();
+    });
+    if(to<fixA.length)tb.querySelector('tr.total')?.remove(); // 続きがある面には合計を出さない
+    return t.outerHTML;
+  };
+  const n=wps.length;
+  const pane=(title,inner,withHead)=>`<div class="prCopy">
+    <div class="prTitle">${title}</div>${withHead?head:''}${inner}</div>`;
   const area=document.getElementById('printArea');
-  area.innerHTML=copy+copy;         // 同じものを2面付け
+  const t0=`FLIGHT LOG${dep?`　${dep}${dst?' → '+dst:''}`:''}`;
+  if(n<=PER){
+    // 短いルートは同じものを2面付け(切って2枚使える)
+    const one=pane(t0,full.outerHTML,true);
+    area.innerHTML=one+one;
+  }else{
+    // 長いルートは左=前半, 右=続き
+    area.innerHTML=pane(t0,half(0,PER),true)+pane(t0+`（続き ${PER+1}-${n}）`,half(PER,n),false);
+  }
   const done=()=>{area.innerHTML='';window.removeEventListener('afterprint',done)};
   window.addEventListener('afterprint',done);
   setTimeout(()=>window.print(),60);
