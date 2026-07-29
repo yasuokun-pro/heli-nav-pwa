@@ -530,7 +530,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-72';
+const VER_TAG='v6-73';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -884,9 +884,11 @@ document.getElementById('btnSup').onclick=async function(){
    演習場は射撃等で上空を避けたい場所なので、駐屯地とは色を分けている */
 let JSDF=null,jsdfOn=false;
 const jsdfLayer=L.layerGroup(),jsdfRenderer=ovRenderer;
-const JS_COL={'演':'#e0574f','米':'#7fb2ff','陸':'#6fbf73','海':'#4da3ff','空':'#5fd0c8','防':'#b48ee8','他':'#9aa7b4'};
+const JS_COL={'演':'#e0574f','米':'#7fb2ff','陸':'#6fbf73','海':'#4da3ff','空':'#5fd0c8',
+  '防':'#b48ee8','官':'#f2f5f8','他':'#9aa7b4'};
 const JS_KIND={'飛':'飛行場','駐':'駐屯地・分屯地','演':'演習場','基':'基地','他':'施設'};
-const JS_SVC={'陸':'陸上自衛隊','海':'海上自衛隊','空':'航空自衛隊','米':'在日米軍','防':'防衛省','他':'—'};
+const JS_SVC={'陸':'陸上自衛隊','海':'海上自衛隊','空':'航空自衛隊','米':'在日米軍',
+  '防':'防衛省','官':'政府(官邸・内閣府)','他':'—'};
 function jsColOf(f){return JS_COL[f.t==='演'?'演':f.s]||JS_COL['他']}
 async function loadJsdf(){
   if(JSDF)return JSDF;

@@ -46,6 +46,13 @@ KEEP = re.compile(r'駐屯地|分屯地|分屯基地|基地|飛行場|演習場|
 # OSMの名称が通称と違うものを直す。市ヶ谷は「防衛省市ヶ谷地区」で登録されていて
 # 「駐屯地」も「基地」も付かないため、名前での絞り込みから漏れていた
 NAME_FIX = {'防衛省市ヶ谷地区': '市ヶ谷駐屯地'}
+
+# 軍事タグが付かないので上の抽出には入らないが、載せておきたい施設。
+# OSMのID直指定でAPIから取る(所属は '官' = 官邸・内閣府)
+EXTRA = [
+    ('way/145495603', '内閣府8号館(中央合同庁舎第8号館)', '官', '他'),
+    ('relation/7826113', '首相官邸', '官', '他'),
+]
 KEEP_TAG = {'airfield', 'naval_base', 'range', 'base'}
 # 除外(戦跡・記念物、警察/海保など自衛隊以外、返還済み)
 DROP = re.compile(r'掩体|防空壕|跡$|跡地|返還|旧|historical|記念|資料館|史跡|公園|'
@@ -175,6 +182,38 @@ def wp_api(params):
     return {}
 
 
+def fetch_extra():
+    """OSM APIからID指定で取る。Overpassは混むと落ちるうえ、
+       件数が数件なら公式APIのほうが確実"""
+    path = '/tmp/jsdf_extra.json'
+    if '--cache' in sys.argv and os.path.exists(path):
+        return json.load(open(path))
+    out = []
+    for oid, name, svc, kind_ in EXTRA:
+        req = urllib.request.Request(
+            f'https://api.openstreetmap.org/api/0.6/{oid}/full.json',
+            headers={'User-Agent': 'heli-nav-pwa/1.0 (github.com/yasuokun-pro/heli-nav-pwa)'})
+        d = json.loads(urllib.request.urlopen(req, timeout=60).read())['elements']
+        nodes = {e['id']: [e['lat'], e['lon']] for e in d if e['type'] == 'node'}
+        ways = {e['id']: e for e in d if e['type'] == 'way'}
+        if oid.startswith('way/'):
+            ring = [nodes[n] for n in ways[int(oid.split('/')[1])]['nodes'] if n in nodes]
+        else:   # relationは外周のwayを繋いで使う
+            rel = [e for e in d if e['type'] == 'relation'][0]
+            ring = []
+            for m in rel['members']:
+                if m['type'] == 'way' and m.get('role') in ('outer', '') and m['ref'] in ways:
+                    ring += [nodes[n] for n in ways[m['ref']]['nodes'] if n in nodes]
+        if len(ring) < 3: continue
+        out.append({'n': name, 's': svc, 't': kind_,
+                    'lat': round(sum(p[0] for p in ring) / len(ring), 5),
+                    'lng': round(sum(p[1] for p in ring) / len(ring), 5),
+                    'p': [[round(a, 5), round(b, 5)] for a, b in ring]})
+        time.sleep(1.0)
+    json.dump(out, open(path, 'w'), ensure_ascii=False)
+    return out
+
+
 def fetch_wp():
     """カテゴリを1階層だけ辿って記事名を集め、まとめて座標を引く"""
     path = '/tmp/jsdf_wp.json'
@@ -279,6 +318,9 @@ def main():
                     'lat': round(lat, 5), 'lng': round(lng, 5), 'w': 1})
         add += 1
     print(f'  {add} 件を補完')
+    for x in fetch_extra():
+        if not any(r['n'] == x['n'] for r in out): out.append(x)
+
     out.sort(key=lambda r: (r['s'], r['n']))
     here = os.path.dirname(os.path.abspath(__file__))
     dst = os.path.join(here, '..', 'jsdf.json')
