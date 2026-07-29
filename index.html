@@ -530,7 +530,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-67';
+const VER_TAG='v6-68';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -1076,6 +1076,12 @@ async function loadCiv(){
   if(CIV)return CIV;
   try{const r=await fetch('civ.json?v='+VER_TAG);CIV=await r.json()}catch(e){CIV={f:[]}}
   CIV.f.forEach(f=>{
+    // 通報時に「KK4-1、4-3を飛行します」と言うので、拡大したら区分名を出す
+    if(f.osm)f._lbl=L.marker([f.pts.reduce((a,p)=>a+p[0],0)/f.pts.length,
+                              f.pts.reduce((a,p)=>a+p[1],0)/f.pts.length],
+      {interactive:false,icon:L.divIcon({className:'',iconSize:null,iconAnchor:[18,8],
+        html:`<div style="font:700 12px var(--sans);color:${CIV_COL};`+
+             `text-shadow:0 0 3px #000,0 1px 3px #000;white-space:nowrap">KK${f.n}</div>`})});
     L.polygon(f.pts,{renderer:civRenderer,color:CIV_COL,weight:1.8,dashArray:'4 3',
       fillColor:CIV_COL,fillOpacity:.08})
       .bindPopup(()=>{
@@ -1083,16 +1089,29 @@ async function loadCiv(){
         el.innerHTML=`<h5 style="color:${CIV_COL}">民間訓練試験空域 ${f.rg} ${f.n||''}</h5>`+
           `<dl><dt>高度</dt><dd>${ftLbl(f.lo)} — ${ftLbl(f.up)}</dd>`+
           `<dt>連絡先</dt><dd>${f.fac||'—'}</dd>`+
-          (f.rmk?`<dt>AIP原文</dt><dd style="font-size:10px">${f.rmk}</dd>`:'')+`</dl>`+
-          (f.rmk?`<div class="note" style="color:var(--amb)">⚠ この区画は円弧・除外の指定がある。`+
-                 `表示は点を直線で結んだ概略形なのでAIP原文で確認すること</div>`:'')+
+          (f.rmk?`<dt>${f.osm?'形状':'AIP原文'}</dt><dd style="font-size:10px">${f.rmk}</dd>`:'')+`</dl>`+
+          (f.osm?`<div class="note" style="color:var(--amb)">⚠ 境界は新幹線・河川・高速道路等の`+
+                 `中心線。形状はOpenStreetMap(ODbL)の線形から再現した目安で、`+
+                 `境界付近では地形図で確認すること</div>`
+               :(f.rmk?`<div class="note" style="color:var(--amb)">⚠ この区画は円弧・除外の指定がある。`+
+                 `表示は点を直線で結んだ概略形なのでAIP原文で確認すること</div>`:''))+
           `<div class="note">AIP ENR 5.3.1。使用にはATMセンターへの訓練計画提出が必要。`+
           `通過時も連絡先へ連絡</div>`;
         return el;
       }).addTo(civLayer);
   });
+  civRelabel();
   return CIV;
 }
+let civLabeled=null;
+function civRelabel(){ // 区分名はズーム9以上のときだけ(引くと重なって読めない)
+  if(!CIV)return;
+  const on=map.getZoom()>=9;
+  if(on===civLabeled)return;
+  civLabeled=on;
+  CIV.f.forEach(f=>{if(f._lbl)on?f._lbl.addTo(civLayer):civLayer.removeLayer(f._lbl)});
+}
+map.on('zoomend',()=>{if(civOn)civRelabel()});
 document.getElementById('btnCiv').onclick=async function(){
   civOn=!civOn;this.classList.toggle('on',civOn);
   if(civOn){await loadCiv();civLayer.addTo(map)}else map.removeLayer(civLayer);

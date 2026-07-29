@@ -168,7 +168,21 @@ def main():
                     'fac': fac[:70], 'rmk': b.get('rmk', ''), 'pts': b['pts'],
                     'inh': inh})
 
+    # KK4は座標ではなく新幹線・河川・道路の中心線で8区分されている。
+    # tools/gen_kk4.py が作った形を差し込む(無ければ4-1だけのまま)
     here = os.path.dirname(os.path.abspath(__file__))
+    kk4p = os.path.join(here, '..', 'kk4.json')
+    if os.path.exists(kk4p):
+        base = next((f for f in out if f['rg'] == '関東/甲信越' and f['n'] == '4-1'), None)
+        if base:
+            i = out.index(base); out.pop(i)
+            for k in reversed(json.load(open(kk4p))['f']):
+                out.insert(i, {**base, 'n': k['n'], 'pts': k['pts'],
+                               'rmk': 'AIPは新幹線・河川・高速道路等の中心線で区分。'
+                                      '形状はOSMの線形から再現した目安',
+                               'osm': 1})
+            print(f'  KK4を {len(json.load(open(kk4p))["f"])} 区分に差し替え')
+
     dst = os.path.join(here, '..', 'civ.json')
     json.dump({'eff': eff, 'src': 'AIP Japan ENR 5.3.1', 'f': out},
               open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
