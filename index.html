@@ -195,6 +195,12 @@
   .js-pin b{display:inline-block;width:15px;height:15px;line-height:15px;text-align:center;
     border-radius:50%;font-size:10px;font-weight:700;color:#04120a;box-shadow:0 1px 3px #000;pointer-events:auto}
   .js-pin span{font-size:10px;color:#e8eef5;text-shadow:0 0 3px #000,0 1px 3px #000;font-family:var(--sans)}
+  /* 原子力施設(AIPで上空の飛行を避けるよう求められている区域) */
+  .nk-pin{display:flex;align-items:center;gap:3px;white-space:nowrap;pointer-events:none}
+  .nk-pin b{display:inline-block;width:16px;height:16px;line-height:16px;text-align:center;
+    border-radius:3px;font-size:11px;background:#ffd24d;color:#2a1400;font-weight:700;
+    box-shadow:0 1px 3px #000;pointer-events:auto}
+  .nk-pin span{font-size:10px;color:#ffd24d;text-shadow:0 0 3px #000,0 1px 3px #000;font-family:var(--sans)}
   .obst-ico{font-family:var(--mono);font-size:9px;font-weight:700;color:#ffd24d;text-shadow:0 1px 3px #000;white-space:nowrap}
   .obst-ico i{font-style:normal;font-size:12px}
   .cat{display:inline-block;font-family:var(--mono);font-weight:700;font-size:11px;padding:1px 6px;border-radius:3px;color:#04120a}
@@ -364,6 +370,7 @@
         <button id="btnObst">障害物</button>
         <button id="btnSup">臨時</button>
         <button id="btnJsdf">自衛隊</button>
+        <button id="btnNuke">原子力</button>
       </div>
     </div>
     <div class="mtGrp" data-grp="wx">
@@ -520,7 +527,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-61';
+const VER_TAG='v6-62';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -929,6 +936,56 @@ document.getElementById('btnJsdf').onclick=async function(){
   restackOverlays();
 };
 
+/* ── 原子力施設レイヤー(AIP ENR 5.3.2.4) ──
+   「航空機による原子力施設に対する災害を防止するため、下記の施設付近の
+     上空の飛行は、できる限り避けること。」
+   禁止空域ではないが回避が求められる区域。AIPに座標(多角形)が載っている。
+   ★は黄色の閃光式灯火(10万カンデラ・毎分40〜60回)が設置されている施設 */
+let NUKE=null,nukeOn=false;
+const nukeLayer=L.layerGroup(),nukeRenderer=ovRenderer,NK_COL='#ffd24d';
+async function loadNuke(){
+  if(NUKE)return NUKE;
+  try{const r=await fetch('nuke.json?v='+VER_TAG);NUKE=await r.json()}catch(e){NUKE={f:[]}}
+  NUKE.f.forEach(f=>{
+    const pop=()=>{
+      const el=document.createElement('div');el.className='apPop';
+      el.innerHTML=`<h5 style="color:${NK_COL}">${f.lit?'★ ':''}${f.n}</h5>`+
+        `<dl><dt>種類</dt><dd>${f.ty||'—'}</dd>`+
+        `<dt>所在</dt><dd>${f.adr||'—'}</dd>`+
+        (f.lit?`<dt>灯火</dt><dd>黄色閃光 10万cd 40〜60回/分</dd>`:'')+`</dl>`+
+        `<div class="note">AIP ENR 5.3.2.4「上空の飛行はできる限り避けること」`+
+        `(禁止空域ではない)。${NUKE.eff?'EFF '+NUKE.eff:''}</div>`;
+      return el;
+    };
+    L.polygon(f.pts,{renderer:nukeRenderer,color:NK_COL,weight:2,dashArray:'6 3',
+      fillColor:NK_COL,fillOpacity:.2}).bindPopup(pop).addTo(nukeLayer);
+    const c=f.pts.reduce((a,p)=>[a[0]+p[0]/f.pts.length,a[1]+p[1]/f.pts.length],[0,0]);
+    f._m=L.marker(c,{icon:nkIcon(f,false)}).bindPopup(pop).addTo(nukeLayer);
+  });
+  nkRelabel();
+  return NUKE;
+}
+function nkIcon(f,label){
+  // 名称は法人名が長いので、ラベルは「◯◯発電所」等の末尾側だけ出す
+  const short=f.n.replace(/^.*?(株式会社|大学|機構|法人)/,'')||f.n;
+  return L.divIcon({className:'',iconSize:null,iconAnchor:[8,8],
+    html:`<div class="nk-pin"><b>☢</b>`+(label?`<span>${short}</span>`:'')+`</div>`});
+}
+let nkLabeled=null;
+function nkRelabel(){
+  if(!NUKE)return;
+  const on=map.getZoom()>=9;
+  if(on===nkLabeled)return;
+  nkLabeled=on;
+  NUKE.f.forEach(f=>{if(f._m)f._m.setIcon(nkIcon(f,on))});
+}
+map.on('zoomend',()=>{if(nukeOn)nkRelabel()});
+document.getElementById('btnNuke').onclick=async function(){
+  nukeOn=!nukeOn;this.classList.toggle('on',nukeOn);
+  if(nukeOn){await loadNuke();nukeLayer.addTo(map)}else map.removeLayer(nukeLayer);
+  restackOverlays();
+};
+
 /* 重なった場所では小さい図形を優先してタップできるよう並び順を整える
    (空域=最背面 → 臨時空域 → 障害物=最前面) */
 function restackOverlays(){
@@ -936,6 +993,8 @@ function restackOverlays(){
     aspLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof jsdfLayer!=='undefined'&&map.hasLayer(jsdfLayer))
     jsdfLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
+  if(typeof nukeLayer!=='undefined'&&map.hasLayer(nukeLayer))
+    nukeLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
   if(typeof supLayer!=='undefined'&&map.hasLayer(supLayer))
     supLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
   if(typeof obstLayer!=='undefined'&&map.hasLayer(obstLayer))
