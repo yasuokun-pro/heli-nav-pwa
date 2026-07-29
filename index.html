@@ -514,7 +514,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-54';
+const VER_TAG='v6-55';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -1059,15 +1059,38 @@ async function loadMetar(force){
   document.querySelectorAll('.leaflet-popup .metarSlot').forEach(s=>s.innerHTML=metarHtml(s.dataset.icao));
 }
 function catCls(c){return c&&['VFR','MVFR','IFR','LIFR'].includes(c)?c:'NA'}
-function metarHtml(icao){
-  const m=METAR&&METAR.m&&METAR.m[icao];
-  if(!METAR)return '<span style="color:var(--dim)">METAR読込中…</span>';
-  if(!m)return '<span style="color:var(--dim)">METAR配信なし</span>';
+/* 自衛隊飛行場(立川・入間・厚木・木更津・館山・宇都宮・下総・小牧・浜松)や
+   運用時間のみ観測する小規模空港はMETARが国際的に配信されない。
+   その場合は代わりに最寄りの配信局を「代替」として出す(自場の観測ではない旨を明示)。
+   ALT_MAX_NM以内に無ければ何も出さない(遠すぎる観測は誤解のもとなので) */
+const ALT_MAX_NM=35;
+function altMetar(icao){
+  const a=ASP.find(x=>x.icao===icao);
+  if(!a||!METAR||!METAR.m)return null;
+  let best=null;
+  ASP.forEach(x=>{
+    if(!x.icao||x.icao===icao||!METAR.m[x.icao])return;
+    const d=distNM({lat:a.lat,lng:a.lng},{lat:x.lat,lng:x.lng});
+    if(d<=ALT_MAX_NM&&(!best||d<best.d))best={ap:x,d,m:METAR.m[x.icao]};
+  });
+  return best;
+}
+function metarBody(m){
   const w=(m.wdir!=null&&m.wspd!=null)?`${fmt3(m.wdir)}°/${m.wspd}kt`:'';
   return `<span class="cat ${catCls(m.cat)}">${m.cat||'N/A'}</span>`+
     (w?` 風${w}`:'')+(m.temp!=null?` ${m.temp}℃`:'')+
-    `<div class="metarRaw">${m.raw||''}</div>`+
-    `<div style="font-size:9px;color:var(--dim)">${METAR.updated} 更新(UTC)</div>`;
+    `<div class="metarRaw">${m.raw||''}</div>`;
+}
+function metarHtml(icao){
+  const m=METAR&&METAR.m&&METAR.m[icao];
+  if(!METAR)return '<span style="color:var(--dim)">METAR読込中…</span>';
+  const upd=`<div style="font-size:9px;color:var(--dim)">${METAR.updated} 更新(UTC)</div>`;
+  if(m)return metarBody(m)+upd;
+  const alt=altMetar(icao);
+  if(!alt)return '<span style="color:var(--dim)">METAR配信なし</span>';
+  return `<div style="font-size:10px;color:var(--amb)">METAR配信なし → 代替 `+
+    `<b>${alt.ap.icao}</b> ${alt.ap.n} ${alt.d.toFixed(0)}NM</div>`+
+    metarBody(alt.m)+upd;
 }
 function obsHM(ts){ // UNIX秒 → UTC HH:MMZ
   if(!ts)return'';const d=new Date(ts*1000);
@@ -1082,19 +1105,24 @@ function renderMetarTab(){
   b.innerHTML='';
   rows.forEach(({a,d})=>{
     const m=METAR&&METAR.m&&METAR.m[a.icao];
+    const alt=m?null:altMetar(a.icao);   // 配信の無い飛行場は最寄り局で代用
+    const s=m||(alt&&alt.m);
     const tr=document.createElement('tr');
     if(metSel===a.icao)tr.className='metSel';
     tr.innerHTML=`<td class="jp">${a.icao} ${a.n}</td>`+
-      `<td>${m?`<span class="cat ${catCls(m.cat)}">${m.cat||'—'}</span>`:'—'}</td>`+
-      `<td colspan="3" class="metarRaw">${m&&m.raw?m.raw:'—'}</td>`+
+      `<td>${s?`<span class="cat ${catCls(s.cat)}">${s.cat||'—'}</span>`:'—'}</td>`+
+      `<td colspan="3" class="metarRaw">`+
+        (alt?`<span style="color:var(--amb)">代替 ${alt.ap.icao} ${alt.d.toFixed(0)}NM </span>`:'')+
+        (s&&s.raw?s.raw:'—')+`</td>`+
       `<td>${d.toFixed(0)}</td>`;
     tr.onclick=()=>{metSel=(metSel===a.icao)?null:a.icao;renderMetarTab()}; // 地図は動かさない
     b.appendChild(tr);
     if(metSel===a.icao){ // 直下に過去3時間分を表示
       const h=document.createElement('tr');h.className='metHist';
-      const hist=(m&&m.hist)||[];
+      const hist=(s&&s.hist)||[];
       h.innerHTML=`<td colspan="6">`+
-        (m?`<div style="color:var(--dim);font-size:10px;margin-bottom:3px">最新 ${obsHM(m.obs)}</div>`:'')+
+        (s?`<div style="color:var(--dim);font-size:10px;margin-bottom:3px">`+
+            (alt?`${alt.ap.icao} ${alt.ap.n}(代替) `:'')+`最新 ${obsHM(s.obs)}</div>`:'')+
         (hist.length
           ? hist.map(z=>`<div style="margin:2px 0"><span class="cat ${catCls(z.cat)}">${z.cat||'—'}</span> `+
               `<span style="color:var(--dim)">${obsHM(z.obs)}</span> ${z.raw}</div>`).join('')

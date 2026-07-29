@@ -168,8 +168,16 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
   大量ポリゴンは **Canvasレンダラ(L.canvas)** で描画(SVGだと重い)
 - **METAR**: aviationweather.govはブラウザCORS不可 → **GitHub Actions**
   (`.github/workflows/metar.yml`, 毎時05/35分)が取得して `metar.json` をコミット。
-  PWAは同一オリジンで取得。駅リスト=`tools/metar_stations.json`。
+  PWAは同一オリジンで取得。局リスト=`tools/metar_stations.json`(66局)。
   ※ワークフロー編集には gh の `workflow` スコープが必要(認証済)
+  - **自衛隊単独の飛行場はMETARが国際配信されない**(NOAAに元データが無い):
+    立川RJTC・入間RJTJ・厚木RJTA・木更津RJTK・館山RJTE・宇都宮RJTU・下総RJTL・
+    小牧RJNA・浜松RJNH。運用時間のみ観測の小空港(天草RJDA・屋久島RJFC・久米島ROKJ)も同様。
+    米軍横田RJTYと共用飛行場(百里RJAH=茨城 等)は配信あり。
+    → 配信の無い飛行場は **35NM以内の最寄り局を「代替」表示**(`altMetar()`)。
+    自場の観測ではない旨をアンバーで明示すること(消さない)
+  - GitHub Actionsのcronは**ベストエフォート**で数時間遅延・スキップされる。
+    METARが古いことがある(タブに更新時刻UTCを表示済み)
 
 ### 実装メモ
 - 幾何計算はshapely(局所equirect平面、NM単位)。円=buffer、半平面クリップ、
