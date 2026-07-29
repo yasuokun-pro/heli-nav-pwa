@@ -39,6 +39,15 @@
   .cell input{width:76px;background:none;border:none;border-bottom:1px solid var(--line);color:var(--grn);font-family:var(--mono);font-size:23px;font-weight:600;outline:none}
   .cell.timer span{color:var(--amb)}
   .cell small{font-size:11px}
+  /* 更新通知。ホーム画面アプリだと更新に気づけないので明示する */
+  #updBar{position:fixed;left:8px;right:8px;bottom:8px;z-index:2000;display:none;
+    background:var(--panel2);border:1px solid var(--grn);border-radius:8px;
+    padding:9px 12px;box-shadow:0 4px 16px #000a;align-items:center;gap:10px;font-size:12px}
+  #updBar.on{display:flex}
+  #updBar b{color:var(--grn);font-family:var(--mono)}
+  #updBar button{margin-left:auto;background:var(--grn);color:#04120a;border:0;
+    border-radius:5px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+  #updBar .x{background:none;color:var(--dim);border:1px solid var(--line);margin-left:0}
   .livebtn{display:inline-block;margin-left:8px;background:none;border:1px solid var(--line);color:var(--dim);border-radius:4px;font-size:10px;padding:2px 8px;cursor:pointer;vertical-align:3px;font-family:var(--sans)}
   .livebtn.on{border-color:var(--cyn);color:var(--cyn)}
   .livetag{font-size:9px;border:1px solid var(--cyn);color:var(--cyn);border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:3px;font-family:var(--sans);display:none}
@@ -456,14 +465,17 @@
       <button class="btn go" id="btnRtSave">ルート保存</button>
       <button class="btn" id="btnLib">保存一覧</button>
       <button class="btn" id="btnDrawNew">＋レイヤー作成</button>
+      <button class="btn sh" id="btnBk">端末データ書出</button>
+      <button class="btn sh" id="btnBkIn">端末データ読込</button>
       <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
+      <input type="file" id="bkIn" accept=".json" style="display:none">
     </div>
     <div class="btnrow">
       <button class="btn danger" id="btnClear">経路クリア</button>
       <button class="btn go" id="btnRev">⇅ リバース</button>
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
-    <div class="hint"><b>地図を長押しでポイント登録</b>(末尾に追加/作図モード中はレイヤーへ描画)。<b>経路線を長押しするとその区間に挿入</b>、表の<span style="color:var(--grn)">＋</span>は検索した地点をその区間に挿入します。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
+    <div class="hint"><b>地図を長押しでポイント登録</b>(末尾に追加/作図モード中はレイヤーへ描画)。<b>経路線を長押しするとその区間に挿入</b>、表の<span style="color:var(--grn)">＋</span>は検索した地点をその区間に挿入します。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。<b>ホーム画面に追加したアプリとSafariは保存領域が別</b>なので、移すときは<span style="color:var(--blu)">端末データ書出→読込</span>を使ってください。</div>
     <details id="cfgWind">
       <summary>風・燃料の設定(航法計算用)</summary>
       <div class="strip">
@@ -530,12 +542,54 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-74';
+const VER_TAG='v6-76';
 
-/* ───────── PWA: Service Worker 登録 ───────── */
+/* ───────── PWA: Service Worker 登録と更新通知 ─────────
+   ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
+   (アドレスバーも再読込ボタンも無い)。新しいSWが入ったらバナーを出し、
+   タップで再読込させる。起動時と30分ごとに更新を確認する */
+let swReg=null;
+async function showUpdBar(ver){
+  const b=document.getElementById('updBar');if(!b)return;
+  b.classList.add('on');
+  const e=document.getElementById('updVer');
+  e.textContent=ver||'…';
+  if(ver)return;
+  // 新しい版の番号はsw.jsのVERから読む(表示しないと何が変わったか分からない)
+  try{
+    const t=await (await fetch('sw.js',{cache:'no-store'})).text();
+    const m=t.match(/VER\s*=\s*'hnav-(v[\d-]+)'/);
+    e.textContent=m?m[1]:'新版';
+  }catch(_){e.textContent='新版'}
+}
 if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  window.addEventListener('load',async()=>{
+    try{
+      swReg=await navigator.serviceWorker.register('sw.js');
+      swReg.addEventListener('updatefound',()=>{
+        const nw=swReg.installing;if(!nw)return;
+        nw.addEventListener('statechange',()=>{
+          // controllerがある=初回インストールではなく「更新」
+          if(nw.state==='installed'&&navigator.serviceWorker.controller)showUpdBar();
+        });
+      });
+      setInterval(()=>swReg&&swReg.update().catch(()=>{}),30*60*1000);
+      // 復帰時にも確認(iOSのホーム画面アプリは長時間常駐する)
+      document.addEventListener('visibilitychange',()=>{
+        if(!document.hidden&&swReg)swReg.update().catch(()=>{});
+      });
+    }catch(e){}
+  });
+  // 新しいSWが実際に制御を握ったときにも出す(skipWaiting済みなので早い)
+  let reloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(reloading)return;
+    showUpdBar();
+  });
+  window.addEventListener('DOMContentLoaded',()=>{
+    const go=document.getElementById('updGo'),no=document.getElementById('updNo');
+    if(go)go.onclick=()=>{reloading=true;location.reload()};
+    if(no)no.onclick=()=>document.getElementById('updBar').classList.remove('on');
   });
 }
 
@@ -2197,6 +2251,41 @@ ${rte}
   </rte>
 </gpx>`);
 };
+/* ── 端末データの引っ越し ──
+   iOSはホーム画面に追加したアプリとSafariで保存領域が別なので、ブラウザで
+   作ったルート・登録地点・ログはアプリ側に出てこない。全部まとめて
+   書き出し/読み込みできるようにして、1回で移せるようにする */
+const BK_KEYS=['hnav.route','hnav.routes','hnav.pts','hnav.logs','hnav.draws','hnav.base','hnav.varAuto'];
+document.getElementById('btnBk').onclick=()=>{
+  const d={};BK_KEYS.forEach(k=>{const v=store.get(k);if(v!==null&&v!==undefined)d[k]=v});
+  const n=(d['hnav.routes']||[]).length, p=(d['hnav.pts']||[]).length, l=(d['hnav.logs']||[]).length;
+  dl(`heli_backup_${new Date().toISOString().slice(0,10)}.json`,'application/json',
+     JSON.stringify({app:'HELI NAV',ver:VER_TAG,at:new Date().toISOString(),data:d},null,1));
+  alert(`書き出しました(保存ルート${n}件・登録地点${p}件・飛行ログ${l}件)。\n`+
+        `ホーム画面のアプリ側で「端末データ読込」から取り込んでください。`);
+};
+document.getElementById('btnBkIn').onclick=()=>document.getElementById('bkIn').click();
+document.getElementById('bkIn').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const j=JSON.parse(rd.result);
+      const d=j.data||j;
+      const ks=BK_KEYS.filter(k=>d[k]!==undefined);
+      if(!ks.length)throw new Error('中身がありません');
+      const n=(d['hnav.routes']||[]).length,p=(d['hnav.pts']||[]).length,l=(d['hnav.logs']||[]).length;
+      if(!confirm(`保存ルート${n}件・登録地点${p}件・飛行ログ${l}件を取り込みます。\n`+
+                  `この端末の同じ種類のデータは上書きされます。よろしいですか?`))return;
+      ks.forEach(k=>store.set(k,d[k]));
+      alert('取り込みました。再読込します。');
+      location.reload();
+    }catch(err){alert('読み込めませんでした: '+err.message)}
+  };
+  rd.readAsText(f);
+  e.target.value='';
+};
+
 document.getElementById('btnJsonIn').onclick=()=>document.getElementById('fileIn').click();
 document.getElementById('fileIn').onchange=function(){
   const f=this.files[0];if(!f)return;
@@ -2736,5 +2825,9 @@ document.querySelectorAll('.tabs button').forEach(btn=>{
   redraw();
 })();
 </script>
+<div id="updBar">
+  <span>新しいバージョン <b id="updVer">—</b> があります</span>
+  <button id="updGo">更新</button><button class="x" id="updNo">あとで</button>
+</div>
 </body>
 </html>
