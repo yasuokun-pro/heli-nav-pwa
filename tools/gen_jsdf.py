@@ -41,7 +41,11 @@ out tags center;"""
 
 # 拾う施設(名称 or militaryタグで判定)。掩体壕・防空壕・検問所等の細かい物件は除く
 KEEP = re.compile(r'駐屯地|分屯地|分屯基地|基地|飛行場|演習場|航空隊|地方総監部|'
-                  r'補給処|補給廠|射場|試験場|Camp |Air (Base|Station)|Naval')
+                  r'補給処|補給廠|射場|試験場|防衛省|Camp |Air (Base|Station)|Naval')
+
+# OSMの名称が通称と違うものを直す。市ヶ谷は「防衛省市ヶ谷地区」で登録されていて
+# 「駐屯地」も「基地」も付かないため、名前での絞り込みから漏れていた
+NAME_FIX = {'防衛省市ヶ谷地区': '市ヶ谷駐屯地'}
 KEEP_TAG = {'airfield', 'naval_base', 'range', 'base'}
 # 除外(戦跡・記念物、警察/海保など自衛隊以外、返還済み)
 DROP = re.compile(r'掩体|防空壕|跡$|跡地|返還|旧|historical|記念|資料館|史跡|公園|'
@@ -60,7 +64,8 @@ def in_japan(lat, lng):
 # 名前から所属が読み取れないもの(共用飛行場・沖縄の米軍施設など)を手当て
 SVC_FIX = {'厚木海軍飛行場': '海', '普天間飛行場': '米', 'キャンプ桑江': '米',
            '北部訓練場': '米', '小松飛行場': '空', '美保飛行場': '空',
-           '徳島飛行場': '海', '札幌飛行場': '陸'}
+           '徳島飛行場': '海', '札幌飛行場': '陸',
+           '市ヶ谷駐屯地': '防'}     # 防衛省本省の所在地なので所属は防衛省とする
 
 
 def service(name, tags):
@@ -92,7 +97,7 @@ def kind(name, tags):
 
 def clean(name):
     """「陸上自衛隊 立川駐屯地」→「立川駐屯地」。所属は s に持たせるので前置きを外す"""
-    n = name.split(';')[0].strip()
+    n = NAME_FIX.get(name.strip(), name).split(';')[0].strip()
     n = re.sub(r'^(陸上|海上|航空)自衛隊\s*', '', n)
     n = re.sub(r'\s*[（(]?JGSDF|JASDF|JMSDF[）)]?\s*', '', n)
     # ウィキペディアの曖昧さ回避「佐世保基地 (アメリカ海軍)」→「佐世保基地」
@@ -221,6 +226,7 @@ def main():
         t = meta.get((e['type'], e['id']))
         if not t: continue
         raw = t.get('name') or t.get('name:ja') or ''
+        raw = NAME_FIX.get(raw.strip(), raw)
         n = clean(raw)
         pts = None
         if e['type'] == 'node':
