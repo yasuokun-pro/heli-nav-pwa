@@ -530,7 +530,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-70';
+const VER_TAG='v6-71';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -899,8 +899,15 @@ async function loadJsdf(){
         `<dl><dt>所属</dt><dd>${JS_SVC[f.s]||'—'}</dd>`+
         `<dt>種別</dt><dd>${JS_KIND[f.t]||'施設'}</dd>`+
         `<dt>座標</dt><dd>${f.lat.toFixed(4)}, ${f.lng.toFixed(4)}</dd></dl>`+
+        `<div class="row"><button class="apDct">D→ ここへ</button>`+
+        `<button class="add">ルートに追加</button></div>`+
         `<div class="note">※出典 ${f.w?'ウィキペディア日本語版(CC BY-SA)・位置のみで敷地範囲なし'
           :'OpenStreetMap(ODbL)'}。網羅性・範囲は保証されない参考表示</div>`;
+      // 飛行場と同じくD→/ルート追加を出す。基準点は施設の中心
+      el.querySelector('.apDct').onclick=()=>{
+        setDct({name:f.n,lat:f.lat,lng:f.lng,isWp:false});map.closePopup()};
+      el.querySelector('.add').onclick=()=>{
+        addWp(f.lat,f.lng,f.n);redraw();map.closePopup()};
       return el;
     };
     // 外形があれば描く。外形の有無にかかわらずピンは必ず立てる(一目で分かるように)
@@ -956,8 +963,17 @@ async function loadNuke(){
         `<dl><dt>種類</dt><dd>${f.ty||'—'}</dd>`+
         `<dt>所在</dt><dd>${f.adr||'—'}</dd>`+
         (f.lit?`<dt>灯火</dt><dd>黄色閃光 10万cd 40〜60回/分</dd>`:'')+`</dl>`+
+        `<div class="row"><button class="apDct">D→ ここへ</button>`+
+        `<button class="add">ルートに追加</button></div>`+
         `<div class="note">AIP ENR 5.3.2.4「上空の飛行はできる限り避けること」`+
         `(禁止空域ではない)。${NUKE.eff?'EFF '+NUKE.eff:''}</div>`;
+      // 基準点は多角形の重心。名称は法人名が長いので短縮形をWP名にする
+      const c=f.pts.reduce((a,p)=>[a[0]+p[0]/f.pts.length,a[1]+p[1]/f.pts.length],[0,0]);
+      const nm=nkShort(f);
+      el.querySelector('.apDct').onclick=()=>{
+        setDct({name:nm,lat:c[0],lng:c[1],isWp:false});map.closePopup()};
+      el.querySelector('.add').onclick=()=>{
+        addWp(c[0],c[1],nm);redraw();map.closePopup()};
       return el;
     };
     L.polygon(f.pts,{renderer:nukeRenderer,color:NK_COL,weight:2,dashArray:'6 3',
@@ -968,9 +984,11 @@ async function loadNuke(){
   nkRelabel();
   return NUKE;
 }
+function nkShort(f){ // 法人名が長いので「◯◯発電所」等の末尾側だけにする
+  return f.n.replace(/^.*?(株式会社|大学|機構|法人)/,'')||f.n;
+}
 function nkIcon(f,label){
-  // 名称は法人名が長いので、ラベルは「◯◯発電所」等の末尾側だけ出す
-  const short=f.n.replace(/^.*?(株式会社|大学|機構|法人)/,'')||f.n;
+  const short=nkShort(f);
   return L.divIcon({className:'',iconSize:null,iconAnchor:[8,8],
     html:`<div class="nk-pin"><b>☢</b>`+(label?`<span>${short}</span>`:'')+`</div>`});
 }
