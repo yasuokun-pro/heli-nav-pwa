@@ -3,15 +3,20 @@
 """
 自衛隊・在日米軍施設レイヤー 生成 (jsdf.json)
 =============================================
-出典: OpenStreetMap (ODbL)。AIPには飛行場しか載らないため、
-駐屯地・分屯地・演習場といった「飛行場ではない施設」はOSMから拾う。
+出典: OpenStreetMap (ODbL) + ウィキペディア日本語版 (CC BY-SA)。
+AIPには飛行場しか載らないため、駐屯地・分屯地・演習場といった
+「飛行場ではない施設」はこの2つから拾う。
+
+  OSM      … 敷地の外形ポリゴンが取れる。ただし2割ほど欠落がある
+  ウィキペ … 座標(点)だけだが一覧としては網羅性が高い。OSMに無い分の穴埋めに使う
 
   ⚠ OSMは有志が作るデータなので網羅性・位置精度は保証されない。
     「そこに施設がある」目安として使い、進入可否等の判断には使わないこと。
     アプリ側にもその旨を表示している(消さないこと)。
 
-出力: jsdf.json  {"src":"OpenStreetMap (ODbL)","f":[{n,s,t,lat,lng,p?},...]}
-  n=名称 s=所属(陸/海/空/米/防) t=種別(飛/駐/演/基/他) p=外周座標(簡略化済・任意)
+出力: jsdf.json  {"src":...,"f":[{n,s,t,lat,lng,p?,w?},...]}
+  n=名称 s=所属(陸/海/空/米/防) t=種別(飛/駐/演/基/他)
+  p=外周座標(簡略化済・OSM由来のみ) w=1ならウィキペディア由来の点データ
 
 使い方:
   python3 tools/gen_jsdf.py            … Overpassから取得して生成
@@ -40,7 +45,8 @@ KEEP = re.compile(r'駐屯地|分屯地|分屯基地|基地|飛行場|演習場|
 KEEP_TAG = {'airfield', 'naval_base', 'range', 'base'}
 # 除外(戦跡・記念物、警察/海保など自衛隊以外、返還済み)
 DROP = re.compile(r'掩体|防空壕|跡$|跡地|返還|旧|historical|記念|資料館|史跡|公園|'
-                  r'免許センター|協力本部|援護|警察|機動隊|海上保安|消防')
+                  r'免許センター|協力本部|援護|警察|機動隊|海上保安|消防|'
+                  r'Residental|Residential|Classroom|福岡第一')  # 基地内の細かい区画は除く
 # bboxが日本国外にはみ出すので国外の施設を落とす(千島=ロシア、舟山=中国 等)
 FOREIGN = re.compile(r'[\u0400-\u04FF]')          # キリル文字(千島のロシア施設)
 # 除外は「はみ出す隣国」だけを箱で指定する。緯度経度の大小で切ると
@@ -51,8 +57,16 @@ def in_japan(lat, lng):
     return not any(a <= lat <= c and b <= lng <= d for a, b, c, d in EXCLUDE)
 
 
+# 名前から所属が読み取れないもの(共用飛行場・沖縄の米軍施設など)を手当て
+SVC_FIX = {'厚木海軍飛行場': '海', '普天間飛行場': '米', 'キャンプ桑江': '米',
+           '北部訓練場': '米', '小松飛行場': '空', '美保飛行場': '空',
+           '徳島飛行場': '海', '札幌飛行場': '陸'}
+
+
 def service(name, tags):
     """所属を1文字に。米軍を先に判定する(「米軍◯◯基地」を空自と誤らせない)"""
+    for k, v in SVC_FIX.items():
+        if k in name: return v
     s = name + ' ' + (tags.get('operator', '') or '') + ' ' + (tags.get('operator:en', '') or '')
     if re.search(r'米軍|在日米|United States|U\.S\.|US (Army|Navy|Air|Marine)|USMC|USAF', s): return '米'
     if re.search(r'航空自衛隊|空自|JASDF|Air Self', s): return '空'
@@ -63,6 +77,7 @@ def service(name, tags):
     if '駐屯地' in name or '分屯地' in name: return '陸'
     if '航空基地' in name: return '海'
     if '基地' in name: return '空'
+    if re.search(r'演習場|射撃場|訓練場', name): return '陸'  # 演習場はほぼ陸自
     return '他'
 
 
@@ -80,6 +95,8 @@ def clean(name):
     n = name.split(';')[0].strip()
     n = re.sub(r'^(陸上|海上|航空)自衛隊\s*', '', n)
     n = re.sub(r'\s*[（(]?JGSDF|JASDF|JMSDF[）)]?\s*', '', n)
+    # ウィキペディアの曖昧さ回避「佐世保基地 (アメリカ海軍)」→「佐世保基地」
+    n = re.sub(r'\s*[（(][^）)]*[）)]?\s*$', '', n)
     n = re.sub(r'\s+', ' ', n).strip(' （）()')
     return n
 
@@ -133,6 +150,55 @@ def fetch_geom(ids):
     d = json.loads(urllib.request.urlopen(req, timeout=220).read())
     json.dump(d, open(path, 'w'))
     return d
+
+
+WP_CATS = ['自衛隊基地', '在日米軍基地', '海上自衛隊の陸上施設']
+WP_KEEP = re.compile(r'駐屯地|分屯地|分屯基地|基地|演習場|飛行場|航空隊|訓練場|射場|試験場')
+
+
+def wp_api(params):
+    """ja.wikipedia API。連続で叩くと429が返るので必ず間を空けて呼ぶこと"""
+    import urllib.parse
+    for a in range(5):
+        try:
+            u = 'https://ja.wikipedia.org/w/api.php?format=json&' + urllib.parse.urlencode(params)
+            req = urllib.request.Request(u, headers={
+                'User-Agent': 'heli-nav-pwa/1.0 (github.com/yasuokun-pro/heli-nav-pwa)'})
+            return json.loads(urllib.request.urlopen(req, timeout=30).read())
+        except Exception:
+            time.sleep(2 + a * 2)
+    return {}
+
+
+def fetch_wp():
+    """カテゴリを1階層だけ辿って記事名を集め、まとめて座標を引く"""
+    path = '/tmp/jsdf_wp.json'
+    if '--cache' in sys.argv and os.path.exists(path):
+        return json.load(open(path))
+
+    def members(cat, depth=0):
+        out = []
+        d = wp_api({'action': 'query', 'list': 'categorymembers',
+                    'cmtitle': 'Category:' + cat, 'cmlimit': 500})
+        time.sleep(1.0)
+        for m in d.get('query', {}).get('categorymembers', []):
+            if m['ns'] == 14 and depth < 1:      # サブカテゴリは1段だけ(都道府県別は巨大)
+                out += members(m['title'].split(':', 1)[1], depth + 1)
+            elif m['ns'] == 0:
+                out.append(m['title'])
+        return out
+
+    titles = sorted({t for c in WP_CATS for t in members(c) if WP_KEEP.search(t)})
+    coords = {}
+    for i in range(0, len(titles), 40):
+        d = wp_api({'action': 'query', 'prop': 'coordinates',
+                    'titles': '|'.join(titles[i:i+40]), 'colimit': 'max'})
+        for pg in d.get('query', {}).get('pages', {}).values():
+            c = pg.get('coordinates')
+            if c: coords[pg['title']] = [c[0]['lat'], c[0]['lon']]
+        time.sleep(1.0)
+    json.dump(coords, open(path, 'w'), ensure_ascii=False)
+    return coords
 
 
 def main():
@@ -191,15 +257,32 @@ def main():
             continue
         merged.append(r)
     out = merged
+
+    # OSMに無い施設をウィキペディアの座標で補う(点データ・外形なし)
+    print('ウィキペディアで欠落分を補完中…')
+    add = 0
+    for title, (lat, lng) in fetch_wp().items():
+        # カテゴリには学校・宿舎・弾薬庫等も入るので施設名で絞る(キャッシュ経由でも効かせる)
+        if not WP_KEEP.search(title) or DROP.search(title): continue
+        n = clean(title)
+        base = re.sub(r'(駐屯地|分屯地|分屯基地|基地|飛行場|航空基地|演習場)$', '', n)
+        if any(abs(m['lat']-lat) < 0.03 and abs(m['lng']-lng) < 0.04 and
+               (base and (base in m['n'] or m['n'].replace(' ', '') in n)) for m in out):
+            continue
+        out.append({'n': n, 's': service(title, {}), 't': kind(title, {}),
+                    'lat': round(lat, 5), 'lng': round(lng, 5), 'w': 1})
+        add += 1
+    print(f'  {add} 件を補完')
     out.sort(key=lambda r: (r['s'], r['n']))
     here = os.path.dirname(os.path.abspath(__file__))
     dst = os.path.join(here, '..', 'jsdf.json')
-    json.dump({'src': 'OpenStreetMap (ODbL)', 'f': out},
+    json.dump({'src': 'OpenStreetMap (ODbL) / ウィキペディア日本語版 (CC BY-SA)', 'f': out},
               open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
     import collections
     print(f'{len(out)} 件 → jsdf.json ({os.path.getsize(dst)/1024:.0f}KB)')
     print(' 所属:', dict(collections.Counter(r['s'] for r in out)))
     print(' 種別:', dict(collections.Counter(r['t'] for r in out)))
+    print(' 外形あり:', sum(1 for r in out if r.get('p')), '/ 点のみ:', sum(1 for r in out if not r.get('p')))
 
 
 if __name__ == '__main__': main()

@@ -190,6 +190,11 @@
   body.alerting .mapwrap .leaflet-bottom.leaflet-right .leaflet-control-zoom{margin-bottom:196px}
   .nav-ico{font-size:15px;line-height:1;color:#7ea8d8;text-shadow:0 1px 3px rgba(0,0,0,.9)}
   .nav-ico b{font-family:var(--mono);font-size:9px;color:#9fc0e6;margin-left:2px;text-shadow:0 1px 3px #000}
+  /* 自衛隊施設のピン。外形ポリゴンだけだとパッと見て気づけないので必ず併記する */
+  .js-pin{display:flex;align-items:center;gap:3px;white-space:nowrap;pointer-events:none}
+  .js-pin b{display:inline-block;width:15px;height:15px;line-height:15px;text-align:center;
+    border-radius:50%;font-size:10px;font-weight:700;color:#04120a;box-shadow:0 1px 3px #000;pointer-events:auto}
+  .js-pin span{font-size:10px;color:#e8eef5;text-shadow:0 0 3px #000,0 1px 3px #000;font-family:var(--sans)}
   .obst-ico{font-family:var(--mono);font-size:9px;font-weight:700;color:#ffd24d;text-shadow:0 1px 3px #000;white-space:nowrap}
   .obst-ico i{font-style:normal;font-size:12px}
   .cat{display:inline-block;font-family:var(--mono);font-weight:700;font-size:11px;padding:1px 6px;border-radius:3px;color:#04120a}
@@ -515,7 +520,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-59';
+const VER_TAG='v6-61';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -884,25 +889,43 @@ async function loadJsdf(){
         `<dl><dt>所属</dt><dd>${JS_SVC[f.s]||'—'}</dd>`+
         `<dt>種別</dt><dd>${JS_KIND[f.t]||'施設'}</dd>`+
         `<dt>座標</dt><dd>${f.lat.toFixed(4)}, ${f.lng.toFixed(4)}</dd></dl>`+
-        `<div class="note">※出典OpenStreetMap(ODbL)。網羅性・範囲は保証されない参考表示</div>`;
+        `<div class="note">※出典 ${f.w?'ウィキペディア日本語版(CC BY-SA)・位置のみで敷地範囲なし'
+          :'OpenStreetMap(ODbL)'}。網羅性・範囲は保証されない参考表示</div>`;
       return el;
     };
-    const o=(f.p&&f.p.length>3)
-      ? L.polygon(f.p,{renderer:jsdfRenderer,color:col,weight:2,
-          fillColor:col,fillOpacity:.18})
-      : L.circleMarker([f.lat,f.lng],{renderer:jsdfRenderer,radius:5,color:col,weight:1.8,
-          fillColor:col,fillOpacity:.35});
-    o.bindPopup(pop).addTo(jsdfLayer);
+    // 外形があれば描く。外形の有無にかかわらずピンは必ず立てる(一目で分かるように)
+    if(f.p&&f.p.length>3)
+      L.polygon(f.p,{renderer:jsdfRenderer,color:col,weight:2,
+        fillColor:col,fillOpacity:.18}).bindPopup(pop).addTo(jsdfLayer);
+    f._m=L.marker([f.lat,f.lng],{icon:jsIcon(f,false)}).bindPopup(pop).addTo(jsdfLayer);
   });
+  jsRelabel();
   return JSDF;
 }
+function jsIcon(f,label){
+  const col=jsColOf(f);
+  // 演習場は▲、それ以外は所属の1文字。外形の無い(点だけの)ものは枠線を破線にして区別
+  const mark=f.t==='演'?'▲':(f.s==='他'?'•':f.s);
+  const dash=f.p?'':';border:1px dashed #fff';
+  return L.divIcon({className:'',iconSize:null,iconAnchor:[7,7],
+    html:`<div class="js-pin"><b style="background:${col}${dash}">${mark}</b>`+
+         (label?`<span>${f.n}</span>`:'')+`</div>`});
+}
+let jsLabeled=null;
+function jsRelabel(){ // 名称は拡大時だけ(全国324件を常時出すと地図が埋まる)
+  if(!JSDF)return;
+  const on=map.getZoom()>=11;
+  if(on===jsLabeled)return;
+  jsLabeled=on;
+  JSDF.f.forEach(f=>{if(f._m)f._m.setIcon(jsIcon(f,on))});
+}
+map.on('zoomend',()=>{if(jsdfOn)jsRelabel()});
 document.getElementById('btnJsdf').onclick=async function(){
   jsdfOn=!jsdfOn;this.classList.toggle('on',jsdfOn);
   if(jsdfOn){await loadJsdf();jsdfLayer.addTo(map)}else map.removeLayer(jsdfLayer);
   // ODbLは出典表示が条件なので、表示中は地図のクレジットにも出す
-  const ac=map.attributionControl;
-  if(ac)jsdfOn?ac.addAttribution('&copy; OpenStreetMap contributors')
-             :ac.removeAttribution('&copy; OpenStreetMap contributors');
+  const ac=map.attributionControl,cr='&copy; OpenStreetMap contributors / ウィキペディア';
+  if(ac)jsdfOn?ac.addAttribution(cr):ac.removeAttribution(cr);
   restackOverlays();
 };
 
