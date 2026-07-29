@@ -115,10 +115,20 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 // waypoint(メモリ上)
 {name:'WP1', lat:35.5, lng:139.7, marker:<Leaflet Marker>, isWp:true}
 
-// 共有コード = 'HNAV1.' + base64(JSON):
+// 共有コード = 'HNAV1.' + base64(JSON) … 今のルート1本
 {v:1,
  set:{tas,wDir,wSpd,varW,ff,fob},
  wp:[[lat,lng,'名称'], ...]}
+
+// まとめ共有 = 'HNAVL1.' + base64(JSON) … 保存一覧から複数選択したもの
+{v:1, t:'lib',
+ routes:[{name,folder,color,o:<上のルート>}, ...],
+ pts:[{name,folder,color,icon,lat,lng}, ...]}
+// 取り込みは libImport()。同名は上書きか「(2)」を付けるかを選ばせる
+
+// 端末データ書出 … localStorageのキーをまとめたもの(引っ越し・バックアップ用)
+{app:'HELI NAV', ver, at, data:{'hnav.route':…,'hnav.routes':…,'hnav.pts':…,
+ 'hnav.logs':…,'hnav.draws':…,'hnav.base':…,'hnav.varAuto':…}}
 
 // 飛行ログ(logs[] / localStorage 'hnav.logs')
 {date:'2026/7/8', off:'09:12', on:'10:03', dur:'00:51', route:'WP1→WP2'}

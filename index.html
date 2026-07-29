@@ -48,6 +48,10 @@
   #updBar button{margin-left:auto;background:var(--grn);color:#04120a;border:0;
     border-radius:5px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans)}
   #updBar .x{background:none;color:var(--dim);border:1px solid var(--line);margin-left:0}
+  /* ボタンの用途別の見出し。横一列だと保存系と受け渡し系の区別が付かない */
+  .grpHead{font-size:10px;color:var(--dim);letter-spacing:.1em;margin:12px 0 5px;
+    border-top:1px solid var(--line);padding-top:9px}
+  .grpHead small{color:var(--dim);opacity:.75;letter-spacing:0;margin-left:8px;font-size:10px}
   .livebtn{display:inline-block;margin-left:8px;background:none;border:1px solid var(--line);color:var(--dim);border-radius:4px;font-size:10px;padding:2px 8px;cursor:pointer;vertical-align:3px;font-family:var(--sans)}
   .livebtn.on{border-color:var(--cyn);color:var(--cyn)}
   .livetag{font-size:9px;border:1px solid var(--cyn);color:var(--cyn);border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:3px;font-family:var(--sans);display:none}
@@ -243,6 +247,14 @@
   #libModal .sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 0 0;width:100%;max-width:560px;max-height:78vh;overflow:auto;padding:16px}
   #libModal h4{font-size:12px;color:var(--dim);letter-spacing:.12em;margin:14px 0 6px}
   #libModal h4:first-child{margin-top:0}
+  /* 複数選択して共有するためのバー。選択モード中だけ操作ボタンが出る */
+  #libSelBar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  #libSelBar #libSelCnt{font-family:var(--mono);color:var(--grn);font-size:12px}
+  #libSelBar button{font-size:11px;padding:5px 10px}
+  #libSelBar.off #btnSelAll,#libSelBar.off #btnSelShare,
+  #libSelBar.off #btnSelOff,#libSelBar.off #libSelCnt{display:none}
+  #libSelBar.on #btnSelMode{display:none}
+  .libRow input.sel{width:17px;height:17px;accent-color:var(--grn);margin-right:2px}
   .libRow{display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px}
   .libRow .nm{flex:1;font-family:var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .libRow small{color:var(--dim);font-family:var(--mono)}
@@ -457,22 +469,29 @@
     </table>
     </div>
     <div class="btnrow" style="margin-top:16px">
-      <button class="btn sh" id="btnShare">共有コード生成</button>
-      <button class="btn sh" id="btnLoad">コード読込</button>
-      <button class="btn sh" id="btnGpx">GPX書出</button>
-      <button class="btn sh" id="btnJson">JSON書出</button>
-      <button class="btn sh" id="btnJsonIn">JSON読込</button>
+      <button class="btn danger" id="btnClear">経路クリア</button>
+      <button class="btn go" id="btnRev">⇅ リバース</button>
+    </div>
+    <div class="grpHead">アプリに保存</div>
+    <div class="btnrow">
       <button class="btn go" id="btnRtSave">ルート保存</button>
       <button class="btn" id="btnLib">保存一覧</button>
       <button class="btn" id="btnDrawNew">＋レイヤー作成</button>
+    </div>
+    <div class="grpHead">受け渡し<small>今のルート1本が対象</small></div>
+    <div class="btnrow">
+      <button class="btn sh" id="btnShare">共有コード生成</button>
+      <button class="btn sh" id="btnLoad">コード読込</button>
+      <button class="btn sh" id="btnJson">JSON書出</button>
+      <button class="btn sh" id="btnGpx">GPX書出</button>
+      <button class="btn sh" id="btnJsonIn">JSON/GPX読込</button>
+    </div>
+    <div class="grpHead">引っ越し・バックアップ<small>保存物ぜんぶ</small></div>
+    <div class="btnrow">
       <button class="btn sh" id="btnBk">端末データ書出</button>
       <button class="btn sh" id="btnBkIn">端末データ読込</button>
       <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
       <input type="file" id="bkIn" accept=".json" style="display:none">
-    </div>
-    <div class="btnrow">
-      <button class="btn danger" id="btnClear">経路クリア</button>
-      <button class="btn go" id="btnRev">⇅ リバース</button>
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
     <div class="hint"><b>地図を長押しでポイント登録</b>(末尾に追加/作図モード中はレイヤーへ描画)。<b>経路線を長押しするとその区間に挿入</b>、表の<span style="color:var(--grn)">＋</span>は検索した地点をその区間に挿入します。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。<b>ホーム画面に追加したアプリとSafariは保存領域が別</b>なので、移すときは<span style="color:var(--blu)">端末データ書出→読込</span>を使ってください。</div>
@@ -524,6 +543,13 @@
 <div id="printArea"></div>
 
 <div id="libModal"><div class="sheet">
+  <div id="libSelBar">
+    <button class="btn sh" id="btnSelMode">選んで共有</button>
+    <span id="libSelCnt"></span>
+    <button class="btn sh" id="btnSelAll">全選択</button>
+    <button class="btn go" id="btnSelShare">共有</button>
+    <button class="btn" id="btnSelOff">やめる</button>
+  </div>
   <h4>保存済みルート</h4><div id="libRoutes"></div>
   <h4>お気に入りポイント</h4><div id="libPts"></div>
   <h4>作図レイヤー</h4><div id="libDraws"></div>
@@ -542,7 +568,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-76';
+const VER_TAG='v6-77';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1981,10 +2007,13 @@ function renderLib(){
   };
   const rowR=(r,i)=>{
     const d=document.createElement('div');d.className='libRow';
-    d.innerHTML=`<button class="eye${r.show?' on':''}">👁</button>
+    d.innerHTML=(libSel?`<input type="checkbox" class="sel"${libSel.rt.has(r.name)?' checked':''}>`:'')+
+      `<button class="eye${r.show?' on':''}">👁</button>
       <span style="color:${r.color};font-family:var(--mono)">―</span>
       <span class="nm">${r.name}</span><small>${r.o.wp.length}pt</small>
       <button class="use">読込</button><button class="gear">⚙</button><button class="del2">削除</button>`;
+    if(libSel)d.querySelector('.sel').onchange=e=>{
+      e.target.checked?libSel.rt.add(r.name):libSel.rt.delete(r.name);libSelCount()};
     d.querySelector('.eye').onclick=()=>{r.show=!r.show;saveR()};
     d.querySelector('.use').onclick=()=>{
       if(wps.length&&!confirm('現在のルートを置き換えます。よろしいですか?'))return;
@@ -1999,10 +2028,13 @@ function renderLib(){
   rowR.isRt=true;rowR.save=saveR;
   const rowP=(p,i)=>{
     const d=document.createElement('div');d.className='libRow';
-    d.innerHTML=`<button class="eye${p.show?' on':''}">👁</button>
+    d.innerHTML=(libSel?`<input type="checkbox" class="sel"${libSel.pt.has(p.name)?' checked':''}>`:'')+
+      `<button class="eye${p.show?' on':''}">👁</button>
       <span style="color:${p.color}">${p.icon}</span>
       <span class="nm">${p.name}</span><small>${p.lat.toFixed(3)},${p.lng.toFixed(3)}</small>
       <button class="use">追加</button><button class="gear">⚙</button><button class="del2">削除</button>`;
+    if(libSel)d.querySelector('.sel').onchange=e=>{
+      e.target.checked?libSel.pt.add(p.name):libSel.pt.delete(p.name);libSelCount()};
     d.querySelector('.eye').onclick=()=>{p.show=!p.show;saveP()};
     d.querySelector('.use').onclick=()=>{pushUndo();addWp(p.lat,p.lng,p.name);redraw();libModal.style.display='none'};
     d.querySelector('.gear').onclick=()=>{
@@ -2038,7 +2070,55 @@ function renderLib(){
     if(libEditKey&&libEditKey.t==='dw'&&libEditKey.name===d.name)dEl.appendChild(libEditor(d,true,saveD));
   });
 }
-document.getElementById('btnLib').onclick=()=>{renderLib();libModal.style.display='flex'};
+/* ── 保存一覧の複数選択と共有 ──
+   保存済みルート・お気に入りポイントをまとめて1つのコード/ファイルにする。
+   共有コード(HNAV1.)は今のルート1本だけなので、複数まとめ用に HNAVL1. を使う */
+let libSel=null;   // {rt:Set(ルート名), pt:Set(ポイント名)}
+function libSelCount(){
+  const n=libSel?libSel.rt.size+libSel.pt.size:0;
+  const e=document.getElementById('libSelCnt');
+  if(e)e.textContent=n?`${n}件 選択中`:'選択してください';
+  const b=document.getElementById('btnSelShare');
+  if(b)b.style.opacity=n?1:.45;
+}
+function libSelMode(on){
+  libSel=on?{rt:new Set(),pt:new Set()}:null;
+  const bar=document.getElementById('libSelBar');
+  bar.classList.toggle('on',!!on);bar.classList.toggle('off',!on);
+  renderLib();libSelCount();
+}
+function libSelPack(){
+  const rts=libRtsGet().filter(r=>libSel.rt.has(r.name))
+        .map(r=>({name:r.name,folder:r.folder||'',color:r.color,o:r.o}));
+  const pts=libPtsGet().filter(p=>libSel.pt.has(p.name))
+        .map(p=>({name:p.name,folder:p.folder||'',color:p.color,icon:p.icon,lat:p.lat,lng:p.lng}));
+  return {v:1,t:'lib',routes:rts,pts};
+}
+document.getElementById('btnSelMode').onclick=()=>libSelMode(true);
+document.getElementById('btnSelOff').onclick=()=>libSelMode(false);
+document.getElementById('btnSelAll').onclick=()=>{
+  const all=libSel.rt.size+libSel.pt.size >= libRtsGet().length+libPtsGet().length;
+  libSel={rt:new Set(all?[]:libRtsGet().map(r=>r.name)),
+          pt:new Set(all?[]:libPtsGet().map(p=>p.name))};
+  renderLib();libSelCount();
+};
+document.getElementById('btnSelShare').onclick=async()=>{
+  const d=libSelPack();
+  const n=d.routes.length+d.pts.length;
+  if(!n){alert('共有するものを選んでください');return}
+  const code='HNAVL1.'+btoa(unescape(encodeURIComponent(JSON.stringify(d))));
+  // 長くなるとコードは扱いにくいので、大きいときはファイルを勧める
+  const msg=`ルート${d.routes.length}件・ポイント${d.pts.length}件を共有します。\n`+
+    `OK=コードをコピー(相手は「コード読込」)\nキャンセル=ファイルで書き出し`;
+  if(confirm(msg)){
+    try{await navigator.clipboard.writeText(code);alert('コードをコピーしました('+code.length+'文字)')}
+    catch(e){const b=document.getElementById('shareBox');b.style.display='block';b.value=code;
+      libModal.style.display='none';setScreen('route');alert('コピーできないので下の欄に出しました')}
+  }else{
+    dl(`heli_lib_${new Date().toISOString().slice(0,10)}.json`,'application/json',JSON.stringify(d,null,1));
+  }
+};
+document.getElementById('btnLib').onclick=()=>{libSelMode(false);libModal.style.display='flex'};
 document.getElementById('btnLibClose').onclick=()=>libModal.style.display='none';
 libModal.addEventListener('click',e=>{if(e.target===libModal)libModal.style.display='none'});
 document.getElementById('btnPtHere').onclick=()=>{
@@ -2223,11 +2303,43 @@ document.getElementById('btnLoad').onclick=()=>{
   const t=shareBox.value.trim();
   if(!t){alert('コードを貼り付けてください');return}
   try{
-    const b64=t.startsWith('HNAV1.')?t.slice(6):t;
-    loadRouteObj(JSON.parse(decodeURIComponent(escape(atob(b64)))),true);
+    const lib=t.startsWith('HNAVL1.');
+    const b64=lib?t.slice(7):(t.startsWith('HNAV1.')?t.slice(6):t);
+    const o=JSON.parse(decodeURIComponent(escape(atob(b64))));
+    if(lib||o.t==='lib'){ if(!libImport(o))throw new Error('bad'); }
+    else loadRouteObj(o,true);
     shareBox.style.display='none';
   }catch(e){alert('コードを読み込めませんでした。形式を確認してください。')}
 };
+/* 複数まとめ(HNAVL1./{t:'lib'})の取り込み。同名は上書き確認する */
+function libImport(d){
+  if(!d||d.t!=='lib')return false;
+  const rts=libRtsGet(),pts=libPtsGet();
+  const dupR=(d.routes||[]).filter(r=>rts.some(x=>x.name===r.name)).map(r=>r.name);
+  const dupP=(d.pts||[]).filter(p=>pts.some(x=>x.name===p.name)).map(p=>p.name);
+  let over=true;
+  if(dupR.length||dupP.length)
+    over=confirm(`同じ名前が ${dupR.length+dupP.length} 件あります。\n`+
+      `OK=上書き / キャンセル=名前に (2) を付けて別に保存\n`+
+      [...dupR,...dupP].slice(0,6).join(', '));
+  const uniq=(name,arr)=>{let n=name,i=2;while(arr.some(x=>x.name===n))n=`${name} (${i++})`;return n};
+  (d.routes||[]).forEach(r=>{
+    const i=rts.findIndex(x=>x.name===r.name);
+    const rec={name:r.name,o:r.o,folder:r.folder||'',color:r.color||'#3df5ff',show:false};
+    if(i>=0&&over)rts[i]=rec; else if(i>=0){rec.name=uniq(r.name,rts);rts.push(rec)} else rts.push(rec);
+  });
+  (d.pts||[]).forEach(p=>{
+    const i=pts.findIndex(x=>x.name===p.name);
+    const rec={name:p.name,lat:p.lat,lng:p.lng,folder:p.folder||'',
+               color:p.color||'#ffd24d',icon:p.icon||'★',show:false};
+    if(i>=0&&over)pts[i]=rec; else if(i>=0){rec.name=uniq(p.name,pts);pts.push(rec)} else pts.push(rec);
+  });
+  store.set('hnav.routes',rts);store.set('hnav.pts',pts);
+  rebuildLibLayer();
+  alert(`取り込みました(ルート${(d.routes||[]).length}件・ポイント${(d.pts||[]).length}件)。`+
+        `保存一覧で確認できます。`);
+  return true;
+}
 function dl(name,mime,text){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([text],{type:mime}));
@@ -2303,7 +2415,8 @@ document.getElementById('fileIn').onchange=function(){
           (p.querySelector('name')||{}).textContent||('WP'+(i+1))));
         redraw();map.fitBounds(routeLine.getBounds().pad(0.3));
       }else{
-        loadRouteObj(JSON.parse(txt),true);
+        const o=JSON.parse(txt);
+        if(o.t==='lib')libImport(o); else loadRouteObj(o,true);
       }
     }catch(e){alert('ファイルを読み込めませんでした')}
     this.value='';
