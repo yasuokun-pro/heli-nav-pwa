@@ -439,7 +439,10 @@
       <button class="btn" id="btnDrawNew">＋レイヤー作成</button>
       <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
     </div>
-    <div class="btnrow"><button class="btn danger" id="btnClear">経路クリア</button></div>
+    <div class="btnrow">
+      <button class="btn danger" id="btnClear">経路クリア</button>
+      <button class="btn go" id="btnRev">⇅ リバース</button>
+    </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
     <div class="hint"><b>地図を長押しでポイント登録</b>(末尾に追加/作図モード中はレイヤーへ描画)。<b>経路線を長押しするとその区間に挿入</b>、表の<span style="color:var(--grn)">＋</span>は検索した地点をその区間に挿入します。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。</div>
     <details id="cfgWind">
@@ -508,7 +511,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-50';
+const VER_TAG='v6-51';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -1411,6 +1414,20 @@ document.getElementById('btnClear').onclick=()=>{ // 誤消去防止のため確
   if(!wps.length){alert('ポイントがありません');return}
   if(!confirm('ルートのポイントを全て消去します。よろしいですか?\n(↩ボタンで元に戻せます)'))return;
   pushUndo();clearAllWp();redraw();
+};
+/* 復路を作る: ポイントの順序を逆にする(名称・座標はそのまま) */
+document.getElementById('btnRev').onclick=()=>{
+  if(wps.length<2){alert('ポイントが2つ以上必要です');return}
+  pushUndo();
+  const snap=wps.map(w=>[w.lat,w.lng,w.name]).reverse();
+  const dctName=dctTarget&&dctTarget.isWp?dctTarget.name:null;
+  clearDct();
+  wps.forEach(w=>map.removeLayer(w.marker));wps.length=0;
+  snap.forEach(s=>addWp(s[0],s[1],s[2]));
+  nextIdx=0;                       // 復路の先頭から案内し直す
+  if(dctName){const t=wps.find(w=>w.name===dctName);if(t)setDct(t)}
+  redraw();
+  if(wps.length>1)map.fitBounds(routeLine.getBounds().pad(0.15),ovlPad());
 };
 
 /* ───────── ポイント並べ替え(≡を長押しドラッグ) ───────── */
