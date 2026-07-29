@@ -371,6 +371,7 @@
         <button id="btnSup">臨時</button>
         <button id="btnJsdf">自衛隊</button>
         <button id="btnNuke">原子力</button>
+        <button id="btnTra" title="自衛隊低高度訓練/試験空域(AIP ENR 5.2.1)。SFCから上限まで・2200-1200UTC">低訓</button>
         <button id="btnDid" title="人口集中地区(2020年国勢調査)。最低安全高度=600m以内の最高障害物+300m">DID</button>
       </div>
     </div>
@@ -528,7 +529,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-64';
+const VER_TAG='v6-65';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -1026,11 +1027,47 @@ document.getElementById('btnDid').onclick=async function(){
 };
 map.on('moveend zoomend',()=>{if(didOn){drawDid();restackOverlays()}});
 
+/* ── 自衛隊低高度訓練／試験空域(AIP ENR 5.2.1) ──
+   自衛隊機が最低安全高度以下で訓練するためにAIPで公示されている空域。
+   下限はすべてSFC、上限は区画ごと。使用時間は2200-1200UTC(=0700-2100JST)。
+   進入が禁止されているわけではないが、低空を訓練機が飛ぶので避けたい場所。
+   pts は「外周リング+穴」の配列(相馬原管制圏のように内側を除外する区画がある) */
+let TRA=null,traOn=false;
+const traLayer=L.layerGroup(),traRenderer=ovRenderer,TRA_COL='#ff8c42';
+async function loadTra(){
+  if(TRA)return TRA;
+  try{const r=await fetch('tra.json?v='+VER_TAG);TRA=await r.json()}catch(e){TRA={f:[]}}
+  TRA.f.forEach(f=>{
+    const alt=f.up>=18000?('FL'+(f.up/100)):(f.up.toLocaleString()+'ft');
+    L.polygon(f.pts,{renderer:traRenderer,color:TRA_COL,weight:2,dashArray:'8 4',
+      fillColor:TRA_COL,fillOpacity:.1})
+      .bindPopup(()=>{
+        const el=document.createElement('div');el.className='apPop';
+        el.innerHTML=`<h5 style="color:${TRA_COL}">自衛隊低高度訓練空域 ${f.n}</h5>`+
+          `<dl><dt>高度</dt><dd>SFC — ${f.n==='Area 6'?'FL150':alt}</dd>`+
+          `<dt>使用時間</dt><dd>${f.hr}</dd>`+
+          `<dt>管制部隊</dt><dd>${f.unit}</dd>`+
+          (f.rmk?`<dt>備考</dt><dd>${f.rmk}</dd>`:'')+`</dl>`+
+          `<div class="note">AIP ENR 5.2.1${TRA.eff?' (EFF '+TRA.eff+')':''}。`+
+          `進入禁止ではないが低空の訓練機に注意</div>`;
+        return el;
+      }).addTo(traLayer);
+  });
+  return TRA;
+}
+document.getElementById('btnTra').onclick=async function(){
+  traOn=!traOn;this.classList.toggle('on',traOn);
+  if(traOn){await loadTra();traLayer.addTo(map)}else map.removeLayer(traLayer);
+  restackOverlays();
+};
+
 /* 重なった場所では小さい図形を優先してタップできるよう並び順を整える
    (空域=最背面 → 臨時空域 → 障害物=最前面) */
 function restackOverlays(){
   if(typeof didLayer!=='undefined'&&map.hasLayer(didLayer))
     didLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
+  if(typeof traLayer!=='undefined'&&map.hasLayer(traLayer))
+    traLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof aspLayer!=='undefined'&&map.hasLayer(aspLayer))
     aspLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof jsdfLayer!=='undefined'&&map.hasLayer(jsdfLayer))
