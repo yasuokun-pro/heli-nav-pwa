@@ -17,11 +17,11 @@ KANTO = {'RJTT','RJAA','RJAH','RJTA','RJTC','RJTJ','RJTY','RJTK','RJTL','RJTE','
 # ICAO→和名(AD2から機械抽出できないものを補う)
 JP = {'RJNS':'静岡','RJNY':'静浜','RJSU':'霞目','RJFZ':'築城','RJFA':'芦屋','RJNG':'岐阜',
       'RJOB':'岡山','RJSI':'花巻','RJCA':'旭川(陸)','RJCJ':'千歳','RJAK':'霞ヶ浦',
-      'RJKB':'徳之島','RJKN':'沖永良部','RJNF':'福井','RJST':'松島','RJSH':'八戸',
-      'RJSM':'三沢','RJDC':'山口宇部','RJEB':'紋別','RJER':'新島','RJTQ':'三宅島',
-      'RJTH':'南紀白浜','RJCN':'中標津','RJCW':'稚内','RJDM':'大村','RJNO':'隠岐',
-      'RJOE':'大分','RJOF':'広島西','RJSY':'庄内','RJAN':'新島(空)','RJAZ':'神津島',
-      'ROMD':'南大東','RORK':'北大東','RORS':'与論','ROYN':'与那国','RJFY':'鹿屋'}
+      'RJKB':'沖永良部','RJKN':'徳之島','RJNF':'福井','RJST':'松島','RJSH':'八戸',
+      'RJSM':'三沢','RJDC':'山口宇部','RJEB':'紋別','RJER':'利尻','RJTQ':'三宅島',
+      'RJTH':'八丈島','RJCN':'中標津','RJCW':'稚内','RJDM':'目達原','RJNO':'隠岐',
+      'RJOE':'明野','RJOF':'防府','RJSY':'庄内','RJAN':'新島(空)','RJAZ':'神津島',
+      'ROMD':'南大東','RORK':'北大東','RORS':'下地島','ROYN':'与那国','RJFY':'鹿屋','RORY':'与論'}
 
 def dms(s):
     m = re.match(r'(\d{2,3})(\d{2})(\d{2}(?:\.\d+)?)', s)
