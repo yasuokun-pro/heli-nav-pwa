@@ -358,6 +358,7 @@
         <button id="btnNav">NAV</button>
         <button id="btnObst">障害物</button>
         <button id="btnSup">臨時</button>
+        <button id="btnJsdf">自衛隊</button>
       </div>
     </div>
     <div class="mtGrp" data-grp="wx">
@@ -514,7 +515,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-56';
+const VER_TAG='v6-59';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -862,12 +863,56 @@ document.getElementById('btnSup').onclick=async function(){
   restackOverlays();
 };
 
+/* ── 自衛隊・在日米軍施設レイヤー(出典OSM・tools/gen_jsdf.py) ──
+   AIPに載るのは飛行場だけなので、駐屯地・分屯地・演習場はOSMから拾っている。
+   有志データなので網羅性・位置は保証されない旨をポップアップに必ず出すこと。
+   演習場は射撃等で上空を避けたい場所なので、駐屯地とは色を分けている */
+let JSDF=null,jsdfOn=false;
+const jsdfLayer=L.layerGroup(),jsdfRenderer=ovRenderer;
+const JS_COL={'演':'#e0574f','米':'#7fb2ff','陸':'#6fbf73','海':'#4da3ff','空':'#5fd0c8','防':'#b48ee8','他':'#9aa7b4'};
+const JS_KIND={'飛':'飛行場','駐':'駐屯地・分屯地','演':'演習場','基':'基地','他':'施設'};
+const JS_SVC={'陸':'陸上自衛隊','海':'海上自衛隊','空':'航空自衛隊','米':'在日米軍','防':'防衛省','他':'—'};
+function jsColOf(f){return JS_COL[f.t==='演'?'演':f.s]||JS_COL['他']}
+async function loadJsdf(){
+  if(JSDF)return JSDF;
+  try{const r=await fetch('jsdf.json?v='+VER_TAG);JSDF=await r.json()}catch(e){JSDF={f:[]}}
+  JSDF.f.forEach(f=>{
+    const col=jsColOf(f);
+    const pop=()=>{
+      const el=document.createElement('div');el.className='apPop';
+      el.innerHTML=`<h5 style="color:${col}">${f.n}</h5>`+
+        `<dl><dt>所属</dt><dd>${JS_SVC[f.s]||'—'}</dd>`+
+        `<dt>種別</dt><dd>${JS_KIND[f.t]||'施設'}</dd>`+
+        `<dt>座標</dt><dd>${f.lat.toFixed(4)}, ${f.lng.toFixed(4)}</dd></dl>`+
+        `<div class="note">※出典OpenStreetMap(ODbL)。網羅性・範囲は保証されない参考表示</div>`;
+      return el;
+    };
+    const o=(f.p&&f.p.length>3)
+      ? L.polygon(f.p,{renderer:jsdfRenderer,color:col,weight:2,
+          fillColor:col,fillOpacity:.18})
+      : L.circleMarker([f.lat,f.lng],{renderer:jsdfRenderer,radius:5,color:col,weight:1.8,
+          fillColor:col,fillOpacity:.35});
+    o.bindPopup(pop).addTo(jsdfLayer);
+  });
+  return JSDF;
+}
+document.getElementById('btnJsdf').onclick=async function(){
+  jsdfOn=!jsdfOn;this.classList.toggle('on',jsdfOn);
+  if(jsdfOn){await loadJsdf();jsdfLayer.addTo(map)}else map.removeLayer(jsdfLayer);
+  // ODbLは出典表示が条件なので、表示中は地図のクレジットにも出す
+  const ac=map.attributionControl;
+  if(ac)jsdfOn?ac.addAttribution('&copy; OpenStreetMap contributors')
+             :ac.removeAttribution('&copy; OpenStreetMap contributors');
+  restackOverlays();
+};
 
 /* 重なった場所では小さい図形を優先してタップできるよう並び順を整える
    (空域=最背面 → 臨時空域 → 障害物=最前面) */
 function restackOverlays(){
   if(typeof aspLayer!=='undefined'&&map.hasLayer(aspLayer))
     aspLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
+  if(typeof jsdfLayer!=='undefined'&&map.hasLayer(jsdfLayer))
+    jsdfLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
   if(typeof supLayer!=='undefined'&&map.hasLayer(supLayer))
     supLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
   if(typeof obstLayer!=='undefined'&&map.hasLayer(obstLayer))
