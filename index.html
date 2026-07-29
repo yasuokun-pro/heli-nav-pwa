@@ -276,6 +276,9 @@
   .apPop dt{color:var(--dim)}
   .apPop dd{font-family:var(--mono)}
   .apPop .note{color:var(--dim);font-size:10px;margin-top:4px}
+  /* 臨時空域は文言が長いので幅と高さを抑える */
+  .supPop{max-width:240px;max-height:190px;overflow:auto}
+  .supPop dd{white-space:normal;word-break:break-word;font-size:11px}
   .apPop .row{display:flex;gap:6px;margin-top:7px}
   .apPop button{flex:1;background:none;border:1px solid var(--cyn);color:var(--cyn);border-radius:4px;font-size:11px;padding:4px;cursor:pointer;font-family:var(--sans)}
   .apPop button.add{border-color:var(--mag);color:var(--mag)}
@@ -511,7 +514,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-51';
+const VER_TAG='v6-52';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -692,7 +695,10 @@ const NAVAIDS=[{"n":"Minamitorishima","t":"TACAN","id":"MLT","f":"984MHz","ch":"
 /*NAVAIDS_GEN_END*/
 
 const aspLayer=L.layerGroup();
-const aspRenderer=L.canvas({padding:.5}); // 全国138ポリゴンをCanvasで軽量描画
+/* 空域・障害物・臨時空域は1枚のCanvasを共有する。
+   レンダラを分けると後から表示したCanvasが全面を覆い、下のレイヤーがタップを拾えなくなる */
+const ovRenderer=L.canvas({padding:.5});
+const aspRenderer=ovRenderer;
 const ASP_POLY_ICAO=new Set(ASP_POLY.map(x=>x.icao)); // AIP形状がある飛行場
 ASP.forEach(a=>{
   if(a.poly||a.t==='ap'||ASP_POLY_ICAO.has(a.icao))return; // AIP形状済み・圏なしは概略円を描かない
@@ -726,6 +732,7 @@ document.getElementById('btnAsp').onclick=function(){
   aspOn=!aspOn;
   this.classList.toggle('on',aspOn);
   if(aspOn)aspLayer.addTo(map);else map.removeLayer(aspLayer);
+  restackOverlays();
 };
 
 /* ── nav aids レイヤー(全国 ENR 4.1・タップで情報表示) ── */
@@ -764,7 +771,7 @@ function viewBox(){ // 画面四隅から緯度経度範囲を出す(leaflet-rot
   return[Math.min(...la),Math.max(...la),Math.min(...lo),Math.max(...lo)];
 }
 let OBST=null,obstOn=false;
-const obstLayer=L.layerGroup(),obstRenderer=L.canvas({padding:.3});
+const obstLayer=L.layerGroup(),obstRenderer=ovRenderer;
 async function loadObst(){
   if(OBST)return OBST;
   try{const r=await fetch('obst.json?v='+VER_TAG);OBST=await r.json()}catch(e){OBST={types:[],o:[]}}
@@ -794,13 +801,14 @@ function drawObst(){
 document.getElementById('btnObst').onclick=async function(){
   obstOn=!obstOn;this.classList.toggle('on',obstOn);
   if(obstOn){await loadObst();obstLayer.addTo(map)}else map.removeLayer(obstLayer);
+  restackOverlays();
   drawObst();
 };
-map.on('moveend zoomend',()=>{if(obstOn)drawObst()});
+map.on('moveend zoomend',()=>{if(obstOn){drawObst();restackOverlays()}});
 
 /* ── 臨時空域(SUP)レイヤー: 射撃訓練・臨時訓練空域・無人機運用など ── */
 let SUP=null,supOn=false;
-const supLayer=L.layerGroup(),supRenderer=L.canvas({padding:.3});
+const supLayer=L.layerGroup(),supRenderer=ovRenderer;
 async function loadSup(){
   if(SUP)return SUP;
   try{const r=await fetch('sup.json?v='+VER_TAG);SUP=await r.json()}catch(e){SUP={s:[]}}
@@ -809,10 +817,17 @@ async function loadSup(){
     const col=drone?'#b48ee8':'#ff9f40'; // ドローン=紫 / 訓練・射撃等=オレンジ
     L.polygon(x.pts,{renderer:supRenderer,color:col,weight:1.6,dashArray:'5 4',
       fillColor:col,fillOpacity:.08})
-      .bindTooltip(`<div style="font-family:var(--mono)"><b>${x.n} ${x.id||''}</b><br>`+
-        `${x.subj||''}<br>高度: ${x.alt||'—'}<br>`+
-        `<span style="font-size:10px">期間: ${x.period||'—'}<br>${x.rmk?x.rmk+'<br>':''}`+
-        `※期限切れを含む・要NOTAM/AIP確認</span></div>`,{sticky:true})
+      .bindPopup(()=>{
+        const el=document.createElement('div');el.className='apPop supPop';
+        const cut=(s,n)=>!s?'':(s.length>n?s.slice(0,n)+'…':s);
+        el.innerHTML=`<h5 style="color:${col}">${x.n} ${x.id||''}</h5>`+
+          `<dl><dt>種別</dt><dd>${cut(x.subj,40)}</dd>`+
+          `<dt>高度</dt><dd>${x.alt||'—'}</dd>`+
+          `<dt>期間</dt><dd>${cut(x.period,60)}</dd>`+
+          (x.rmk?`<dt>備考</dt><dd>${cut(x.rmk,60)}</dd>`:'')+`</dl>`+
+          `<div class="note">※期限切れを含む・要NOTAM/AIP確認</div>`;
+        return el;
+      })
       .addTo(supLayer);
   });
   return SUP;
@@ -820,7 +835,20 @@ async function loadSup(){
 document.getElementById('btnSup').onclick=async function(){
   supOn=!supOn;this.classList.toggle('on',supOn);
   if(supOn){await loadSup();supLayer.addTo(map)}else map.removeLayer(supLayer);
+  restackOverlays();
 };
+
+
+/* 重なった場所では小さい図形を優先してタップできるよう並び順を整える
+   (空域=最背面 → 臨時空域 → 障害物=最前面) */
+function restackOverlays(){
+  if(typeof aspLayer!=='undefined'&&map.hasLayer(aspLayer))
+    aspLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
+  if(typeof supLayer!=='undefined'&&map.hasLayer(supLayer))
+    supLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
+  if(typeof obstLayer!=='undefined'&&map.hasLayer(obstLayer))
+    obstLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
+}
 
 /* ── 地図ボタンのカテゴリ折りたたみ(既定は閉じてボタン数を減らす) ── */
 document.querySelectorAll('.mtGrp').forEach(g=>{
