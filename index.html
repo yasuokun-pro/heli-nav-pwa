@@ -372,6 +372,7 @@
         <button id="btnJsdf">自衛隊</button>
         <button id="btnNuke">原子力</button>
         <button id="btnTra" title="自衛隊低高度訓練/試験空域(AIP ENR 5.2.1)。SFCから上限まで・2200-1200UTC">低訓</button>
+        <button id="btnCiv" title="民間訓練試験空域(AIP ENR 5.3.1)。使用にはATMセンターへの訓練計画提出が必要">民訓</button>
         <button id="btnDid" title="人口集中地区(2020年国勢調査)。最低安全高度=600m以内の最高障害物+300m">DID</button>
       </div>
     </div>
@@ -529,7 +530,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-65';
+const VER_TAG='v6-66';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -1061,6 +1062,43 @@ document.getElementById('btnTra').onclick=async function(){
   restackOverlays();
 };
 
+/* ── 民間訓練試験空域(AIP ENR 5.3.1) ──
+   技能証明実地試験・耐空証明・社内試験・訓練飛行に使う空域。使用には
+   ATMセンターへの訓練計画の提出と承認が要る。通過するだけなら提出不要だが、
+   Controlling / Communication Facility への連絡が必要。
+   ⚠ AIPには円弧や除外区域(「Excluding…」「minor arc…」)の指定がある区画が
+     半数近くあるが、本レイヤーは**記載された点を直線で結んだ概略形**である。
+     該当する区画はポップアップにその旨と原文を出す(消さないこと) */
+let CIV=null,civOn=false;
+const civLayer=L.layerGroup(),civRenderer=ovRenderer,CIV_COL='#a8d84a';
+function ftLbl(v){return v>=18000?('FL'+(v/100)):(v?v.toLocaleString()+'ft':'SFC')}
+async function loadCiv(){
+  if(CIV)return CIV;
+  try{const r=await fetch('civ.json?v='+VER_TAG);CIV=await r.json()}catch(e){CIV={f:[]}}
+  CIV.f.forEach(f=>{
+    L.polygon(f.pts,{renderer:civRenderer,color:CIV_COL,weight:1.8,dashArray:'4 3',
+      fillColor:CIV_COL,fillOpacity:.08})
+      .bindPopup(()=>{
+        const el=document.createElement('div');el.className='apPop';
+        el.innerHTML=`<h5 style="color:${CIV_COL}">民間訓練試験空域 ${f.rg} ${f.n||''}</h5>`+
+          `<dl><dt>高度</dt><dd>${ftLbl(f.lo)} — ${ftLbl(f.up)}</dd>`+
+          `<dt>連絡先</dt><dd>${f.fac||'—'}</dd>`+
+          (f.rmk?`<dt>AIP原文</dt><dd style="font-size:10px">${f.rmk}</dd>`:'')+`</dl>`+
+          (f.rmk?`<div class="note" style="color:var(--amb)">⚠ この区画は円弧・除外の指定がある。`+
+                 `表示は点を直線で結んだ概略形なのでAIP原文で確認すること</div>`:'')+
+          `<div class="note">AIP ENR 5.3.1。使用にはATMセンターへの訓練計画提出が必要。`+
+          `通過時も連絡先へ連絡</div>`;
+        return el;
+      }).addTo(civLayer);
+  });
+  return CIV;
+}
+document.getElementById('btnCiv').onclick=async function(){
+  civOn=!civOn;this.classList.toggle('on',civOn);
+  if(civOn){await loadCiv();civLayer.addTo(map)}else map.removeLayer(civLayer);
+  restackOverlays();
+};
+
 /* 重なった場所では小さい図形を優先してタップできるよう並び順を整える
    (空域=最背面 → 臨時空域 → 障害物=最前面) */
 function restackOverlays(){
@@ -1068,6 +1106,8 @@ function restackOverlays(){
     didLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof traLayer!=='undefined'&&map.hasLayer(traLayer))
     traLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
+  if(typeof civLayer!=='undefined'&&map.hasLayer(civLayer))
+    civLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof aspLayer!=='undefined'&&map.hasLayer(aspLayer))
     aspLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof jsdfLayer!=='undefined'&&map.hasLayer(jsdfLayer))
