@@ -26,8 +26,9 @@ AIRAC更新のたびに再実行し、区画数と上限高度の差分を確認
 """
 import re, os, sys, glob, subprocess, json
 
-# 地域コード。KK=甲信越、CK=中部/近畿、CS=中国/四国 で、字面から推測すると間違える
-REGION = {'HK': '北海道', 'TH': '東北', 'KK': '甲信越', 'CK': '中部/近畿',
+# 地域コードは表の見出し(Kanto/Koshinetsu Area (KK) 等)そのまま。
+# KK=関東/甲信越、CK=中部/近畿、CS=中国/四国。字面から推測すると間違える
+REGION = {'HK': '北海道', 'TH': '東北', 'KK': '関東/甲信越', 'CK': '中部/近畿',
           'CS': '中国/四国', 'KS': '九州', 'SM': '下地島'}
 NOISE = re.compile(r'AIP Japan|Civil Aviation|^ENR 5\.|Name\s+Area|TRAINING TESTING')
 
@@ -115,17 +116,26 @@ def main():
 
     # 連絡先も同じく縦結合される(複数区画で1つのセル)。行が続いている間を
     # 1つのまとまりとして扱い、区画には一番近いまとまりを割り当てる
+    # 「Controlling / Communication Facility」の見出しが新しいセルの始まり。
+    # 行の隙間だけで切ると、隣り合う2つの機関(松本Radioと新千歳Information)が
+    # くっついてしまう
+    HEAD = re.compile(r'Controll?ing|Communication')
     fcells, FCELL = [], []
     for l in sorted(facs):
-        if fcells and l - fcells[-1][-1] <= 2: fcells[-1].append(l)
+        if fcells and l - fcells[-1][-1] <= 2 and not HEAD.search(facs[l]):
+            fcells[-1].append(l)
         else: fcells.append([l])
     for c in fcells:
-        txt = re.sub(r'\s+', ' ', ' '.join(facs[l] for l in c)).strip(' -')
+        # 高度セルの罫線(-----)が機関の列にはみ出してくるので落とす
+        txt = re.sub(r'-{2,}', ' ', ' '.join(facs[l] for l in c))
+        txt = re.sub(r'\s+', ' ', txt).strip(' -')
         if txt: FCELL.append({'c': sum(c) / len(c), 't': txt})
 
-    out = []
+    out, nogeom = [], 0
     for b in blocks:
-        if len(b['pts']) < 3: continue
+        if len(b['pts']) < 3:
+            nogeom += 1     # 新幹線や河川の中心線で定義された区画は座標が無く描けない
+            continue
         # 区画の行範囲に高度セルがあればそれ。無ければ**一番近いセル**を採る。
         # AIPは複数区画で高度が同じとき1つのセルを縦結合するので、
         # 値が無い区画は隣の区画と同じ高度帯という意味になる
@@ -145,7 +155,9 @@ def main():
         # 「直前のまとまり」を引き継ぐ(直近の前後で選ぶと次のグループを拾う)
         ins = [c for c in FCELL if b['s0'] <= c['c'] <= b['l1']]
         prev = [c for c in FCELL if c['c'] < b['s0']]
-        fc = ins[0] if ins else (prev[-1] if prev else (FCELL[0] if FCELL else None))
+        # 区画の範囲に複数入るときは**後のほう**。前の区画のセルの末尾が
+        # 食い込んでいるだけで、その区画の機関は後から始まるため
+        fc = ins[-1] if ins else (prev[-1] if prev else (FCELL[0] if FCELL else None))
         fac = fc['t'] if fc else ''
         # 「13-3-4〜13-3-14」のように範囲で書くのは、同じ形に高度セルが
         # 何段も積まれている場合だけ。単に説明文が隣の区画に食い込んだだけの
@@ -167,6 +179,9 @@ def main():
     print(f'{len(out)} 区画 → civ.json ({os.path.getsize(dst)/1024:.0f}KB) EFF:{eff}')
     import collections
     print(' 地域別:', dict(collections.Counter(f['rg'] for f in out)))
+    if nogeom:
+        print(f' 座標が無く描けない区画: {nogeom}件'
+              f'(新幹線・河川・高速道路の中心線で定義されているもの)')
 
 
 if __name__ == '__main__': main()
