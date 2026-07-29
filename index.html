@@ -530,7 +530,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-73';
+const VER_TAG='v6-74';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -904,6 +904,7 @@ async function loadJsdf(){
         `<div class="row"><button class="apDct">D→ ここへ</button>`+
         `<button class="add">ルートに追加</button></div>`+
         `<div class="note">※出典 ${f.w?'ウィキペディア日本語版(CC BY-SA)・位置のみで敷地範囲なし'
+          :f.g?'住所を国土地理院のジオコーダで座標化・位置のみで敷地範囲なし'
           :'OpenStreetMap(ODbL)'}。網羅性・範囲は保証されない参考表示</div>`;
       // 飛行場と同じくD→/ルート追加を出す。基準点は施設の中心
       el.querySelector('.apDct').onclick=()=>{

@@ -45,7 +45,21 @@ KEEP = re.compile(r'駐屯地|分屯地|分屯基地|基地|飛行場|演習場|
 
 # OSMの名称が通称と違うものを直す。市ヶ谷は「防衛省市ヶ谷地区」で登録されていて
 # 「駐屯地」も「基地」も付かないため、名前での絞り込みから漏れていた
-NAME_FIX = {'防衛省市ヶ谷地区': '市ヶ谷駐屯地'}
+NAME_FIX = {'防衛省市ヶ谷地区': '市ヶ谷駐屯地', '防衛省 目黒地区': '目黒駐屯地'}
+
+# ウィキペディアのカテゴリには**廃止された施設**も入っている
+# (檜町駐屯地は2000年に市ヶ谷へ移転して廃止、芝浦分屯地も同年廃止で現在は公園)。
+# 判定は**冒頭2文だけ**を見て、施設の存在が過去形で書かれているものを落とす。
+#   ⚠「返還」「移転し」を含めると現役の基地まで落ちる
+#     (恩納分屯基地=沖縄返還協定で移管、千歳基地/熊谷基地も沿革に出てくる)
+WP_GONE = re.compile(r'所在していた|にあった|駐屯していた|配置されていた|'
+                     r'(廃止|閉鎖)された')
+
+# OSMに無い施設を座標直指定で足す。座標は国土地理院のジオコーディング
+# (https://msearch.gsi.go.jp/address-search/AddressSearch) で住所から求めたもの
+EXTRA_PT = [
+    ('用賀駐屯地', '陸', '駐', 35.63307, 139.63788),   # 世田谷区上用賀1-20-1
+]
 
 # 軍事タグが付かないので上の抽出には入らないが、載せておきたい施設。
 # OSMのID直指定でAPIから取る(所属は '官' = 官邸・内閣府)
@@ -72,7 +86,8 @@ def in_japan(lat, lng):
 SVC_FIX = {'厚木海軍飛行場': '海', '普天間飛行場': '米', 'キャンプ桑江': '米',
            '北部訓練場': '米', '小松飛行場': '空', '美保飛行場': '空',
            '徳島飛行場': '海', '札幌飛行場': '陸',
-           '市ヶ谷駐屯地': '防'}     # 防衛省本省の所在地なので所属は防衛省とする
+           '市ヶ谷駐屯地': '防',     # 防衛省本省の所在地なので所属は防衛省とする
+           '目黒駐屯地': '陸'}       # 防衛研究所等が入るが陸自の駐屯地
 
 
 def service(name, tags):
@@ -234,13 +249,19 @@ def fetch_wp():
 
     titles = sorted({t for c in WP_CATS for t in members(c) if WP_KEEP.search(t)})
     coords = {}
-    for i in range(0, len(titles), 40):
-        d = wp_api({'action': 'query', 'prop': 'coordinates',
-                    'titles': '|'.join(titles[i:i+40]), 'colimit': 'max'})
+    for i in range(0, len(titles), 20):
+        d = wp_api({'action': 'query', 'prop': 'coordinates|extracts',
+                    'exintro': 1, 'explaintext': 1, 'exlimit': 'max',
+                    'titles': '|'.join(titles[i:i+20]), 'colimit': 'max'})
         for pg in d.get('query', {}).get('pages', {}).values():
             c = pg.get('coordinates')
-            if c: coords[pg['title']] = [c[0]['lat'], c[0]['lon']]
-        time.sleep(1.0)
+            if not c: continue
+            head = '。'.join((pg.get('extract') or '').split('。')[:2])
+            if WP_GONE.search(head):
+                print(f'  廃止済みとして除外: {pg["title"]}')
+                continue
+            coords[pg['title']] = [c[0]['lat'], c[0]['lon']]
+        time.sleep(2.0)         # 連打すると429になる
     json.dump(coords, open(path, 'w'), ensure_ascii=False)
     return coords
 
@@ -320,6 +341,9 @@ def main():
     print(f'  {add} 件を補完')
     for x in fetch_extra():
         if not any(r['n'] == x['n'] for r in out): out.append(x)
+    for n, sv, ki, la, lo in EXTRA_PT:
+        if not any(r['n'] == n for r in out):
+            out.append({'n': n, 's': sv, 't': ki, 'lat': la, 'lng': lo, 'g': 1})
 
     out.sort(key=lambda r: (r['s'], r['n']))
     here = os.path.dirname(os.path.abspath(__file__))
