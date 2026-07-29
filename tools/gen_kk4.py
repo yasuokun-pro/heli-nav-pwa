@@ -255,6 +255,23 @@ def main():
     ring = sub('JOETSU', p1, p2, 60) + [(KK41[2][1], KK41[2][0]), (KK41[3][1], KK41[3][0])]
     out.append(('4-1', Polygon(ring).buffer(0)))
 
+    # ── 区分どうしの隙間を埋める ─────────────────────────────────────
+    # 県道38号がOSMでは東北道まで届かず直線で延長しているため、加須の西に
+    # 9km²ほどの隙間が残る。SWIMの表示ではこの空間は4-2側で、境界は
+    # 4-5と同じ線(東北自動車道)になっている(ユーザー確認済み)
+    GAP_TO = '4-2'
+    u = unary_union([f for _, f in out])
+    for g in ([u] if u.geom_type == 'Polygon' else list(u.geoms)):
+        holes = Polygon(g.exterior).difference(g)
+        for h in ([holes] if holes.geom_type == 'Polygon' else list(getattr(holes, 'geoms', []))):
+            if h.area * 111 * 111 < 0.2: continue
+            for k, (n, f) in enumerate(out):
+                if n != GAP_TO: continue
+                m = unary_union([f, h]).buffer(1e-7).buffer(-1e-7)
+                if m.geom_type == 'MultiPolygon': m = max(m.geoms, key=lambda z: z.area)
+                out[k] = (n, m)
+                print(f'  隙間 {h.area*111*111:.1f}km² を {n} に取り込み')
+
     out.sort(key=lambda x: x[0])
     res = [{'n': n, 'pts': [[round(y, 5), round(x, 5)] for x, y in f.exterior.coords]}
            for n, f in out]
