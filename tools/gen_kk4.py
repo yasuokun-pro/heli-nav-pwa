@@ -134,36 +134,6 @@ def main():
     for k, (a, b) in P.items():
         L[k] = LineString([(a[1], a[0]), (b[1], b[0])])
 
-    # ── 東側(4-4〜4-8): 線をそのまま平面グラフにして面に割る ────────────
-    faces = [f for f in polygonize(unary_union(list(L.values()))) if f.area * 111 * 111 > 3]
-
-    def bounded_by(f):
-        ring = f.exterior; got = set()
-        for k, g in L.items():
-            if ring.intersection(g.buffer(25 / 111320)).length / ring.length > 0.03: got.add(k)
-        return got
-
-    # 区分と面の対応は**全体最適**で決める。順番に貪欲で選ぶと、
-    # 4-5{高速,新幹線,利根川}が4-6の面(+線C)を先に取ってしまう
-    import itertools
-    names = ('4-4', '4-5', '4-6', '4-7', '4-8')
-    bset = {i: bounded_by(f) for i, f in enumerate(faces)}
-    big = sorted(range(len(faces)), key=lambda i: -faces[i].area)[:len(names) + 3]
-    bestasg = min(itertools.permutations(big, len(names)),
-                  key=lambda pm: sum(len(bset[pm[k]] ^ SPEC[n]) for k, n in enumerate(names)))
-    out, used = [], set(bestasg)
-    for k, name in enumerate(names):
-        want = SPEC[name]; i = bestasg[k]; f = faces[i]
-        # AIPが境界に挙げていない線で分断された面は、隣を足して1つに戻す
-        # (4-4は東北新幹線と東北自動車道の交点より南で高速道路が内側を通る)
-        for j, g in enumerate(faces):
-            if j in used or not f.touches(g): continue
-            if bounded_by(g) <= want | {'TOHOKU_EX', 'JOETSU'} and g.area < f.area * 0.3:
-                m = unary_union([f, g])
-                if m.geom_type == 'Polygon': f = m; used.add(j)
-        out.append((name, f))
-
-    # ── 西側(4-2/4-3): polygonizeでは閉じないので境界を明示して組み立てる ──
     def near(key, p, q):
         """pとqの両方に近い成分を選び、届かない分は同じ路線の隣の断片を継ぎ足す。
         新幹線・高速は上下線が別wayなうえ駅や橋でも切れているので、
@@ -202,6 +172,59 @@ def main():
         g = L[a].intersection(L[b])
         return [p for p in getattr(g, 'geoms', [g]) if p.geom_type == 'Point']
 
+
+
+    # ── 東側(4-4〜4-8): 線をそのまま平面グラフにして面に割る ────────────
+    faces = [f for f in polygonize(unary_union(list(L.values()))) if f.area * 111 * 111 > 3]
+
+    # ── 4-4: 南辺Bを西へ伸ばして東北新幹線に当て、利根川まで回す ──────────
+    #    東北新幹線と東北自動車道の交点(久喜付近)より南では高速道路が区域の
+    #    内側を通るため、polygonizeだと高速道路で切れてしまう。
+    #    SWIMの空域プロファイルサービスの表示でも、南辺は西に伸びて
+    #    その空間まで4-4に含まれている
+    B0, B1 = P['B']                      # B0=東端(利根川側) B1=西端(新幹線側)
+    _, bw = nearest_points(Point((B1[1], B1[0])), L['TOHOKU_SK'])
+    tone_sk = min(xp('TOHOKU_SK', 'TONE'), key=lambda p: abs(p.y - 36.133))
+    ring44 = [(bw.x, bw.y), (B1[1], B1[0]), (B0[1], B0[0])] \
+        + sub('TONE', (B0[1], B0[0]), (tone_sk.x, tone_sk.y)) \
+        + sub('TOHOKU_SK', (tone_sk.x, tone_sk.y), (bw.x, bw.y))
+    f44 = Polygon(ring44).buffer(0)
+    # 利根川は蛇行して自己交差を生むことがあるので、最大の面だけ採る
+    if f44.geom_type == 'MultiPolygon': f44 = max(f44.geoms, key=lambda g: g.area)
+    print(f'  4-4 南辺Bの西延長 {Point((B1[1], B1[0])).distance(bw)*111320:.0f}m')
+    # 4-4が覆う面はpolygonizeの候補から外す(4-5が4-4の面を取ってしまうため)
+    faces = [f for f in faces if not f44.contains(f.representative_point())]
+
+    def bounded_by(f):
+        ring = f.exterior; got = set()
+        for k, g in L.items():
+            if ring.intersection(g.buffer(25 / 111320)).length / ring.length > 0.03: got.add(k)
+        return got
+
+    # 区分と面の対応は**全体最適**で決める。順番に貪欲で選ぶと、
+    # 4-5{高速,新幹線,利根川}が4-6の面(+線C)を先に取ってしまう
+    import itertools
+    names = ('4-5', '4-6', '4-7', '4-8')      # 4-4 は後で明示的に組み立てる
+    bset = {i: bounded_by(f) for i, f in enumerate(faces)}
+    big = sorted(range(len(faces)), key=lambda i: -faces[i].area)[:len(names) + 3]
+    bestasg = min(itertools.permutations(big, len(names)),
+                  key=lambda pm: sum(len(bset[pm[k]] ^ SPEC[n]) for k, n in enumerate(names)))
+    out, used = [('4-4', f44)], set(bestasg)
+    for k, name in enumerate(names):
+        want = SPEC[name]; i = bestasg[k]; f = faces[i]
+        # AIPが境界に挙げていない線で分断された面は、隣を足して1つに戻す。
+        # 4-4は東北新幹線と東北自動車道の交点(久喜付近)より南では高速道路が
+        # 区域の内側を通るので、そこで切れた帯も4-4に含める(SWIMの表示で確認)。
+        # touches()は境界がわずかに重なると偽になるため微小バッファで隣接判定する
+        for _ in range(3):
+            for j, g in enumerate(faces):
+                if j in used or not f.buffer(1e-6).intersects(g): continue
+                if bounded_by(g) <= want | {'TOHOKU_EX', 'JOETSU'} and g.area < f.area * 0.5:
+                    m = unary_union([f, g]).buffer(1e-6).buffer(-1e-6)
+                    if m.geom_type == 'Polygon': f = m; used.add(j)
+        out.append((name, f))
+
+    # ── 西側(4-2/4-3): polygonizeでは閉じないので境界を明示して組み立てる ──
     A0, A1 = P['A']
     skex = xp('TOHOKU_SK', 'TOHOKU_EX')[0]              # 久喜付近で新幹線と高速が交差
     josk = max(xp('JOETSU', 'TOHOKU_SK'), key=lambda p: p.y)   # 大宮の分岐
