@@ -371,6 +371,7 @@
         <button id="btnSup">臨時</button>
         <button id="btnJsdf">自衛隊</button>
         <button id="btnNuke">原子力</button>
+        <button id="btnDid" title="人口集中地区(2020年国勢調査)。最低安全高度=600m以内の最高障害物+300m">DID</button>
       </div>
     </div>
     <div class="mtGrp" data-grp="wx">
@@ -527,7 +528,7 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 /*ADFREQ_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-62';
+const VER_TAG='v6-64';
 
 /* ───────── PWA: Service Worker 登録 ───────── */
 if('serviceWorker' in navigator){
@@ -986,9 +987,50 @@ document.getElementById('btnNuke').onclick=async function(){
   restackOverlays();
 };
 
+/* ── DID(人口集中地区)レイヤー ──
+   航空法81条・施行規則174条: 人又は家屋の密集している地域の上空は
+   「航空機を中心とする水平距離600m以内で最も高い障害物の上端から300m」以上。
+   DIDそのものが法定の区域ではないが、その密集地域の実務上の目安として使われる。
+   全国1049面(8.6万頂点)あるので、障害物レイヤーと同じく画面内のものだけ描く */
+let DID=null,didOn=false;
+const didLayer=L.layerGroup(),didRenderer=ovRenderer,DID_COL='#ff7ac8';
+async function loadDid(){
+  if(DID)return DID;
+  try{const r=await fetch('did.json?v='+VER_TAG);DID=await r.json()}catch(e){DID={a:[]}}
+  return DID;
+}
+function drawDid(){
+  didLayer.clearLayers();
+  if(!didOn||!DID)return;
+  const [s,n,w,e]=viewBox();
+  // 外接矩形が画面と重なるものだけ。重なり判定は矩形同士でよい
+  const inview=DID.a.filter(x=>x.b[0]<=n&&x.b[1]>=s&&x.b[2]<=e&&x.b[3]>=w);
+  inview.slice(0,400).forEach(x=>{
+    // 塗りはごく薄く、境界線をはっきり。地図の読みやすさを潰さないため。
+    // interactive:false は必須(画面全体を覆う面がタップを奪うとWP追加ができなくなる)
+    L.polygon(x.r,{renderer:didRenderer,color:DID_COL,weight:1.8,
+      fillColor:DID_COL,fillOpacity:.07,interactive:false}).addTo(didLayer);
+  });
+  if(map.getZoom()<7)  // 全国表示だと面が潰れて意味が無いので注記を出す
+    didLayer.addLayer(L.marker(map.getCenter(),{interactive:false,icon:L.divIcon({className:'',
+      html:'<div class="obst-ico" style="background:rgba(13,26,41,.9);color:'+DID_COL+
+        ';padding:3px 7px;border-radius:4px">DID: 拡大すると形状が見えます</div>',iconAnchor:[80,8]})}));
+}
+document.getElementById('btnDid').onclick=async function(){
+  didOn=!didOn;this.classList.toggle('on',didOn);
+  if(didOn){await loadDid();didLayer.addTo(map)}else map.removeLayer(didLayer);
+  // 国土数値情報は利用規約で出典明示が必要
+  const ac=map.attributionControl,cr='国土数値情報(人口集中地区)';
+  if(ac)didOn?ac.addAttribution(cr):ac.removeAttribution(cr);
+  drawDid();restackOverlays();
+};
+map.on('moveend zoomend',()=>{if(didOn){drawDid();restackOverlays()}});
+
 /* 重なった場所では小さい図形を優先してタップできるよう並び順を整える
    (空域=最背面 → 臨時空域 → 障害物=最前面) */
 function restackOverlays(){
+  if(typeof didLayer!=='undefined'&&map.hasLayer(didLayer))
+    didLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof aspLayer!=='undefined'&&map.hasLayer(aspLayer))
     aspLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof jsdfLayer!=='undefined'&&map.hasLayer(jsdfLayer))
