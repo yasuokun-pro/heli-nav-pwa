@@ -312,6 +312,10 @@
   .apPop dl{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;margin:4px 0}
   .apPop dt{color:var(--dim)}
   .apPop dd{font-family:var(--mono)}
+  .apPop .adProc{margin:5px 0;font-size:10px}
+  .apPop .adProc summary{color:var(--cyn);cursor:pointer}
+  .apPop .adProc div{margin-top:3px;white-space:normal;line-height:1.45}
+  .apPop .adProc b{color:var(--amb)}
   .apPop .note{color:var(--dim);font-size:10px;margin-top:4px}
   /* 臨時空域は文言が長いので幅と高さを抑える */
   .supPop{max-width:240px;max-height:190px;overflow:auto}
@@ -578,7 +582,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /*IMOC_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-83';
+const VER_TAG='v6-85';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1564,9 +1568,11 @@ async function loadAd(){
       if(x.elev!==undefined)a.elev=x.elev;
       if(x.rwy)a.rwy=x.rwy;
       if(x.n&&/^[A-Za-z ]+$/.test(a.n||''))a.n=x.n;
+      a.hr=x.hr;a.tp=x.tp;a.heli=x.heli;a.vfr=x.vfr;
     }else{                       // 圏を持たない飛行場は新規に足す
       ASP.push({n:x.n,icao:x.icao,t:'ap',lat:x.lat,lng:x.lng,
-                elev:x.elev,rwy:x.rwy,aip:1,src:x.src||''});
+                elev:x.elev,rwy:x.rwy,hr:x.hr,tp:x.tp,heli:x.heli,vfr:x.vfr,
+                aip:1,src:x.src||''});
     }
   });
   buildApLayer();
@@ -1590,8 +1596,15 @@ ASP.forEach(a=>{
         <dt>種別</dt><dd>${a.t==='ctr'?'管制圏(タワー)':a.t==='inf'?'情報圏(レディオ/リモート)':'飛行場(圏なし)'}</dd>
         <dt>標高</dt><dd>${a.elev!==undefined?a.elev+' ft':'AIP参照'}</dd>
         <dt>滑走路</dt><dd style="white-space:normal">${a.rwy||'AIP参照'}</dd>
+        ${a.hr?`<dt>運用時間</dt><dd style="white-space:normal">${a.hr} <small style="color:var(--dim)">UTC</small></dd>`:''}
+        ${a.vfr?`<dt>交通</dt><dd>${a.vfr}</dd>`:''}
         <dt>位置</dt><dd>${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}</dd>
       </dl>
+      ${(a.tp||a.heli)?`<details class="adProc"><summary>場周経路・進入方式(AIP原文)</summary>`+
+        (a.heli?`<div><b>回転翼機</b> ${a.heli}</div>`:'')+
+        (a.tp?`<div><b>Traffic pattern</b> ${a.tp}</div>`:'')+
+        `</details>`
+        :`<div class="note">場周経路は本文に記載なし → AD 2.24のチャート参照</div>`}
       <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>
       <div class="note">${a.src?`位置は${a.src}。AIPにAD2/AD3のページが無い飛行場`
         :(a.elev!==undefined||a.rwy)?'標高・滑走路はAIP AD 2.2/2.12'
