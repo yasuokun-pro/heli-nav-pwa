@@ -218,6 +218,8 @@
   .obst-ico i{font-style:normal;font-size:12px}
   .cat{display:inline-block;font-family:var(--mono);font-weight:700;font-size:11px;padding:1px 6px;border-radius:3px;color:#04120a}
   .cat.VFR{background:var(--grn)}.cat.MVFR{background:#4da3ff}.cat.IFR{background:var(--red);color:#fff}.cat.LIFR{background:#c060e0;color:#fff}.cat.NA{background:var(--line);color:var(--dim)}
+  a.imoc{display:inline-block;color:var(--cyn);border:1px solid var(--cyn);border-radius:4px;
+    padding:3px 9px;font-size:11px;text-decoration:none;font-family:var(--sans)}
   .metarRaw{font-family:var(--mono);font-size:11px;color:var(--txt);white-space:normal;word-break:break-all;margin-top:3px}
   #metarList td{cursor:pointer}
   #searchBar{position:absolute;z-index:960;left:52px;top:calc(var(--ovlH) + 12px);width:min(72%,380px);display:none}
@@ -567,8 +569,13 @@
 const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2","GND":"121.95","ATIS":"128.25"},"RJAF":{"RDO":"118.65"},"RJAH":{"TCA":"124.8"},"RJAK":{"TWR":"126.2"},"RJAM":{"RDO":"126.2"},"RJAN":{"RDO":"124.3"},"RJAZ":{"RDO":"124.3"},"RJBB":{"APP":"120.25","DEP":"119.2","TCA":"121.1","TWR":"118.2","GND":"121.6","ATIS":"127.85"},"RJBD":{"RDO":"118.55"},"RJBE":{"APP":"121.15","TCA":"121.1","TWR":"118.5","GND":"122.075","ATIS":"128.075"},"RJBK":{"RDO":"130.75"},"RJBT":{"RDO":"118.4"},"RJCA":{"TWR":"126.2"},"RJCB":{"APP":"128.325","TWR":"118.7"},"RJCC":{"APP":"120.1","DEP":"124.7","TCA":"127.7","TWR":"118.8","GND":"121.6","ATIS":"128.6"},"RJCH":{"APP":"120.85","TWR":"118.35","ATIS":"126.6"},"RJCJ":{"TCA":"127.7"},"RJCK":{"APP":"128.325","TWR":"118.05"},"RJCM":{"APP":"128.325","TWR":"118.85"},"RJCN":{"APP":"128.325","RDO":"122.7"},"RJCO":{"APP":"119.225","DEP":"121.075","TWR":"126.2","GND":"121.8"},"RJCT":{"APP":"128.325","TWR":"122.2"},"RJCW":{"RDO":"118.3"},"RJDA":{"RDO":"130.775"},"RJDB":{"RDO":"118.2"},"RJDC":{"RDO":"118.05"},"RJDM":{"TWR":"126.2"},"RJDT":{"RDO":"124.3"},"RJDU":{"APP":"119.175","DEP":"119.175","TCA":"121.175","TWR":"118.5","GND":"121.6","RDO":"118.5"},"RJEB":{"RDO":"118.15"},"RJEC":{"APP":"128.325","TWR":"118.55"},"RJEO":{"RDO":"122.7"},"RJER":{"RDO":"122.7"},"RJFC":{"RDO":"118.65"},"RJFE":{"RDO":"118.35"},"RJFF":{"APP":"119.65","DEP":"127.9","TCA":"121.275","TWR":"118.4","GND":"121.7","ATIS":"127.2"},"RJFG":{"RDO":"118.75"},"RJFK":{"APP":"126.0","DEP":"119.4","TCA":"120.0","TWR":"118.2","GND":"121.7","ATIS":"127.05"},"RJFM":{"APP":"121.4","DEP":"120.1","TWR":"118.3","TCA":"121.25","GND":"121.9","ATIS":"126.8"},"RJFO":{"APP":"120.6","DEP":"127.7","TWR":"118.8","GND":"121.6","ATIS":"127.8"},"RJFR":{"TWR":"118.85","GND":"121.9","RDO":"118.85"},"RJFS":{"APP":"119.7","TWR":"118.025","ATIS":"126.825","RDO":"118.025"},"RJFT":{"APP":"127.0","DEP":"126.5","TCA":"123.85","TWR":"118.7","GND":"121.8","ATIS":"128.8"},"RJFU":{"APP":"119.175","DEP":"119.175","TCA":"121.175","TWR":"118.5","GND":"121.6","ATIS":"126.85","RDO":"118.5"},"RJFY":{"APP":"122.15"},"RJFZ":{"TCA":"127.95"},"RJGG":{"APP":"121.05","DEP":"120.0","TCA":"119.25","TWR":"118.85","GND":"121.8","ATIS":"127.075"},"RJKA":{"APP":"124.95","RDO":"118.15"},"RJKI":{"APP":"124.95","RDO":"118.0"},"RJKN":{"APP":"124.95","RDO":"122.7"},"RJNA":{"APP":"119.175","DEP":"121.225","TCA":"119.25"},"RJNF":{"RDO":"118.6"},"RJNH":{"TCA":"127.95"},"RJNK":{"TCA":"127.95"},"RJNO":{"RDO":"118.65"},"RJNS":{"RDO":"118.0"},"RJNT":{"TWR":"124.3"},"RJNW":{"RDO":"118.05"},"RJNY":{"TWR":"126.2"},"RJOA":{"APP":"124.05","DEP":"119.9","TWR":"118.6","ATIS":"127.25"},"RJOB":{"APP":"121.2","DEP":"121.2","TWR":"124.3"},"RJOC":{"RDO":"122.7"},"RJOF":{"GND":"133.0"},"RJOH":{"APP":"120.1","DEP":"120.1"},"RJOK":{"APP":"125.0","DEP":"124.8","TWR":"118.75","ATIS":"126.45"},"RJOM":{"TWR":"118.35","APP":"126.2","ATIS":"126.65"},"RJOO":{"APP":"120.45","DEP":"119.5","TWR":"118.1","GND":"121.7","ATIS":"128.6"},"RJOR":{"RDO":"118.15"},"RJOT":{"APP":"121.2","DEP":"121.2","TCA":"119.025","TWR":"118.3","ATIS":"127.45"},"RJOW":{"RDO":"122.2"},"RJOY":{"TWR":"124.35","GND":"121.8"},"RJSA":{"APP":"120.85","TWR":"118.3"},"RJSC":{"RDO":"122.7"},"RJSF":{"RDO":"118.05"},"RJSI":{"APP":"119.25","RDO":"118.2"},"RJSK":{"APP":"119.25","TWR":"118.6"},"RJSM":{"TCA":"124.05","ATIS":"128.4"},"RJSN":{"APP":"121.4","DEP":"119.05","TWR":"118.0","ATIS":"128.45"},"RJSO":{"TWR":"126.2"},"RJSR":{"APP":"119.25","RDO":"118.75"},"RJSS":{"APP":"120.4","DEP":"120.0","TCA":"121.025","TWR":"118.7","GND":"121.7","ATIS":"126.45","RDO":"118.7"},"RJST":{"APP":"120.1","DEP":"120.1","TCA":"123.85"},"RJSU":{"TWR":"122.2"},"RJSY":{"RDO":"118.8"},"RJTC":{"TWR":"118.85"},"RJTE":{"TWR":"126.2"},"RJTF":{"RDO":"130.8"},"RJTH":{"RDO":"118.7"},"RJTJ":{"APP":"126.2"},"RJTK":{"TWR":"126.2"},"RJTO":{"RDO":"118.6"},"RJTQ":{"RDO":"118.05"},"RJTT":{"APP":"119.1","DEP":"126.0","TCA":"124.75","TWR":"118.1","GND":"118.225","ATIS":"128.8"},"RJTU":{"APP":"120.1","TWR":"126.2"},"RJTY":{"APP":"118.3","DEP":"122.1","TWR":"134.3","GND":"133.2","ATIS":"128.4"},"ROAH":{"DEP":"119.1","APP":"119.1","TCA":"120.0","TWR":"118.1","GND":"121.8","ATIS":"127.8"},"ROIG":{"APP":"120.3","TWR":"118.0","ATIS":"128.675"},"ROKJ":{"RDO":"122.7"},"ROMD":{"RDO":"118.55"},"ROMY":{"TWR":"118.2","APP":"125.0","DEP":"125.0"},"RORK":{"RDO":"118.55"},"RORS":{"APP":"125.0","DEP":"125.0","TWR":"118.3","GND":"121.7","RDO":"118.3"},"RORT":{"RDO":"118.6"},"RORY":{"APP":"124.95","RDO":"118.3"},"ROTM":{"GND":"122.8"},"ROYN":{"RDO":"118.5"},"RJFH":{"RDO":"130.675"},"RJOP":{"TWR":"126.2"},"RJTI":{"RDO":"122.7"},"RJTS":{"TWR":"126.2"}};
 /*ADFREQ_GEN_END*/
 
+/* IMOCのMETARページの地域番号(tools/gen_imoc.py が生成・手編集しないこと) */
+/*IMOC_GEN_START*/
+const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,"RJAO":3,"RJAT":4,"RJAW":3,"RJAZ":3,"RJBB":5,"RJBD":5,"RJBE":5,"RJBM":4,"RJBT":5,"RJCA":0,"RJCB":0,"RJCC":0,"RJCH":0,"RJCJ":0,"RJCK":0,"RJCM":0,"RJCN":0,"RJCO":0,"RJCT":0,"RJCW":0,"RJDA":9,"RJDB":8,"RJDC":6,"RJDM":8,"RJDT":8,"RJEB":0,"RJEC":0,"RJEO":0,"RJER":0,"RJFA":8,"RJFC":9,"RJFE":8,"RJFF":8,"RJFG":9,"RJFH":8,"RJFK":9,"RJFM":9,"RJFN":9,"RJFO":8,"RJFR":8,"RJFS":8,"RJFT":9,"RJFU":8,"RJFY":9,"RJFZ":8,"RJGG":4,"RJKA":9,"RJKB":9,"RJKI":9,"RJKN":9,"RJNA":4,"RJNF":4,"RJNG":4,"RJNH":4,"RJNK":4,"RJNO":6,"RJNS":4,"RJNT":4,"RJNW":4,"RJNY":4,"RJOA":6,"RJOB":6,"RJOC":6,"RJOE":5,"RJOF":6,"RJOH":6,"RJOK":7,"RJOM":7,"RJOO":5,"RJOP":7,"RJOR":6,"RJOS":7,"RJOT":7,"RJOW":6,"RJOY":5,"RJOZ":6,"RJSA":1,"RJSC":1,"RJSD":4,"RJSF":1,"RJSH":1,"RJSI":1,"RJSK":1,"RJSM":1,"RJSN":4,"RJSO":1,"RJSR":1,"RJSS":1,"RJST":1,"RJSU":1,"RJSY":1,"RJTA":2,"RJTC":2,"RJTE":2,"RJTF":2,"RJTH":3,"RJTI":2,"RJTJ":2,"RJTK":2,"RJTL":2,"RJTO":3,"RJTQ":3,"RJTS":2,"RJTT":2,"RJTU":2,"RJTX":2,"ROAH":10,"ROIG":10,"ROKJ":10,"ROMD":10,"ROMY":10,"RORK":10,"RORS":10,"RORT":10,"RORY":9,"ROYN":10};
+/*IMOC_GEN_END*/
+
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-77';
+const VER_TAG='v6-78';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1426,20 +1433,22 @@ async function loadMetar(force){
 }
 function catCls(c){return c&&['VFR','MVFR','IFR','LIFR'].includes(c)?c:'NA'}
 /* 自衛隊飛行場(立川・入間・厚木・木更津・館山・宇都宮・下総・小牧・浜松)や
-   運用時間のみ観測する小規模空港はMETARが国際的に配信されない。
-   その場合は代わりに最寄りの配信局を「代替」として出す(自場の観測ではない旨を明示)。
-   ALT_MAX_NM以内に無ければ何も出さない(遠すぎる観測は誤解のもとなので) */
-const ALT_MAX_NM=35;
-function altMetar(icao){
-  const a=ASP.find(x=>x.icao===icao);
-  if(!a||!METAR||!METAR.m)return null;
-  let best=null;
-  ASP.forEach(x=>{
-    if(!x.icao||x.icao===icao||!METAR.m[x.icao])return;
-    const d=distNM({lat:a.lat,lng:a.lng},{lat:x.lat,lng:x.lng});
-    if(d<=ALT_MAX_NM&&(!best||d<best.d))best={ap:x,d,m:METAR.m[x.icao]};
-  });
-  return best;
+   運用時間のみ観測する小規模空港は、METARが**国際交換に載らない**ので
+   NOAA経由では取れない。気象庁の国内配信にはあるが、SWIMの気象情報は
+   個人契約ができず、支援センターの配信も個人には現実的でない。
+   →**IMOC(国際気象海洋)のページを開くリンク**を出す。
+     先方のデータを取り込むのではなく誘導するだけなので規約上も問題がない。
+   近傍局の値を代わりに出すのは誤解のもとなので**やらない** */
+function imocUrl(icao){
+  const a=IMOC_AREA[icao];
+  return a===undefined?null:
+    `https://www.imoc.co.jp/SmartPhone/d/metar.php?Lang=Jpn&Area=${a}&Port=${icao}`;
+}
+function imocLink(icao,label){
+  const u=imocUrl(icao);
+  if(!u)return '';
+  return `<a class="imoc" href="${u}" target="_blank" rel="noopener noreferrer">`+
+         `${label||'IMOCで見る'} ↗</a>`;
 }
 function metarBody(m){
   const w=(m.wdir!=null&&m.wspd!=null)?`${fmt3(m.wdir)}°/${m.wspd}kt`:'';
@@ -1452,11 +1461,10 @@ function metarHtml(icao){
   if(!METAR)return '<span style="color:var(--dim)">METAR読込中…</span>';
   const upd=`<div style="font-size:9px;color:var(--dim)">${METAR.updated} 更新(UTC)</div>`;
   if(m)return metarBody(m)+upd;
-  const alt=altMetar(icao);
-  if(!alt)return '<span style="color:var(--dim)">METAR配信なし</span>';
-  return `<div style="font-size:10px;color:var(--amb)">METAR配信なし → 代替 `+
-    `<b>${alt.ap.icao}</b> ${alt.ap.n} ${alt.d.toFixed(0)}NM</div>`+
-    metarBody(alt.m)+upd;
+  const l=imocLink(icao);
+  return `<div style="font-size:10px;color:var(--dim)">`+
+    `国際配信なし(自衛隊飛行場等)${l?' — 気象庁の国内配信はIMOCで見られます':''}</div>`+
+    (l?`<div style="margin-top:4px">${l}</div>`:'');
 }
 function obsHM(ts){ // UNIX秒 → UTC HH:MMZ
   if(!ts)return'';const d=new Date(ts*1000);
@@ -1471,15 +1479,13 @@ function renderMetarTab(){
   b.innerHTML='';
   rows.forEach(({a,d})=>{
     const m=METAR&&METAR.m&&METAR.m[a.icao];
-    const alt=m?null:altMetar(a.icao);   // 配信の無い飛行場は最寄り局で代用
-    const s=m||(alt&&alt.m);
+    const s=m;
     const tr=document.createElement('tr');
     if(metSel===a.icao)tr.className='metSel';
     tr.innerHTML=`<td class="jp">${a.icao} ${a.n}</td>`+
       `<td>${s?`<span class="cat ${catCls(s.cat)}">${s.cat||'—'}</span>`:'—'}</td>`+
       `<td colspan="3" class="metarRaw">`+
-        (alt?`<span style="color:var(--amb)">代替 ${alt.ap.icao} ${alt.d.toFixed(0)}NM </span>`:'')+
-        (s&&s.raw?s.raw:'—')+`</td>`+
+        (s&&s.raw?s.raw:(imocLink(a.icao,'IMOCで見る')||'—'))+`</td>`+
       `<td>${d.toFixed(0)}</td>`;
     tr.onclick=()=>{metSel=(metSel===a.icao)?null:a.icao;renderMetarTab()}; // 地図は動かさない
     b.appendChild(tr);
@@ -1488,7 +1494,10 @@ function renderMetarTab(){
       const hist=(s&&s.hist)||[];
       h.innerHTML=`<td colspan="6">`+
         (s?`<div style="color:var(--dim);font-size:10px;margin-bottom:3px">`+
-            (alt?`${alt.ap.icao} ${alt.ap.n}(代替) `:'')+`最新 ${obsHM(s.obs)}</div>`:'')+
+            `最新 ${obsHM(s.obs)}</div>`
+          :`<div style="color:var(--dim);font-size:10px;margin-bottom:3px">`+
+            `NOAAは自衛隊飛行場等のMETARを配信していません。`+
+            `気象庁の国内配信は ${imocLink(a.icao,'IMOC(国際気象海洋)')} で見られます</div>`)+
         (hist.length
           ? hist.map(z=>`<div style="margin:2px 0"><span class="cat ${catCls(z.cat)}">${z.cat||'—'}</span> `+
               `<span style="color:var(--dim)">${obsHM(z.obs)}</span> ${z.raw}</div>`).join('')
