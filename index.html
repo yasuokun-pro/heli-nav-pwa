@@ -220,6 +220,9 @@
   .cat.VFR{background:var(--grn)}.cat.MVFR{background:#4da3ff}.cat.IFR{background:var(--red);color:#fff}.cat.LIFR{background:#c060e0;color:#fff}.cat.NA{background:var(--line);color:var(--dim)}
   a.imoc{display:inline-block;color:var(--cyn);border:1px solid var(--cyn);border-radius:4px;
     padding:3px 9px;font-size:11px;text-decoration:none;font-family:var(--sans)}
+  /* 空域から引いた連絡先。飛行場そのものの周波数と区別する */
+  td.aspFrq{color:var(--amb)}
+  @media print{ td.aspFrq{color:#000} }
   .metarRaw{font-family:var(--mono);font-size:11px;color:var(--txt);white-space:normal;word-break:break-all;margin-top:3px}
   #metarList td{cursor:pointer}
   #searchBar{position:absolute;z-index:960;left:52px;top:calc(var(--ovlH) + 12px);width:min(72%,380px);display:none}
@@ -575,7 +578,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /*IMOC_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-79';
+const VER_TAG='v6-81';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1760,16 +1763,68 @@ function adIcaoOf(w){
   ASP.forEach(a=>{if(!a.icao)return;const d=distNM(w,a);if(d<bd){bd=d;best=a}});
   return best?best.icao:null;
 }
-/* ポイントが飛行場ならIDENT/FREQ欄を自動で埋める */
+/* 点が多角形の中か(レイキャスティング)。ptsは[[lat,lng],..] */
+function inRing(lat,lng,pts){
+  let c=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+    const a=pts[i],b=pts[j];
+    if((a[0]>lat)!==(b[0]>lat) &&
+       lng < (b[1]-a[1])*(lat-a[0])/(b[0]-a[0])+a[1]) c=!c;
+  }
+  return c;
+}
+/* ptsが「外周+穴」の配列形式(tra.json)にも対応する */
+function inArea(lat,lng,pts){
+  if(!pts||!pts.length)return false;
+  if(typeof pts[0][0]==='number')return inRing(lat,lng,pts);
+  if(!inRing(lat,lng,pts[0]))return false;
+  for(let i=1;i<pts.length;i++)if(inRing(lat,lng,pts[i]))return false;  // 穴の中
+  return true;
+}
+/* その地点で連絡すべき空域を探す。
+   管制圏→情報圏→特別管制区→訓練空域 の順で、上にあるものほど義務が強い。
+   訓練空域(民間/自衛隊)はレイヤーを開いたときだけ判定できる(遅延読込のため) */
+const ASP_LBL={ctr:'管制圏',inf:'情報圏',pca:'特別管制区'};
+function airspaceAt(w){
+  const hit=[];
+  ASP_POLY.forEach(a=>{
+    if(inArea(w.lat,w.lng,a.pts))
+      hit.push({pri:{ctr:0,inf:1,pca:2}[a.t],kind:ASP_LBL[a.t]||'空域',n:a.n,rmk:a.rmk||''});
+  });
+  if(typeof CIV!=='undefined'&&CIV)CIV.f.forEach(a=>{
+    if(inArea(w.lat,w.lng,a.pts))
+      hit.push({pri:3,kind:'民間訓練試験空域',n:`${a.rg} ${a.n}`,rmk:a.fac||''});
+  });
+  if(typeof TRA!=='undefined'&&TRA)TRA.f.forEach(a=>{
+    if(inArea(w.lat,w.lng,a.pts))
+      hit.push({pri:4,kind:'自衛隊低高度訓練空域',n:a.n,rmk:a.unit||''});
+  });
+  hit.sort((x,y)=>x.pri-y.pri);
+  return hit;
+}
+/* 「Tokyo Tower 118.1/124.35」から呼出名と周波数を切り出す */
+function splitCall(rmk){
+  const m=String(rmk||'').match(/^(.*?)\s*((?:\d{3}\.\d{1,3})(?:\s*\/\s*\d{3}\.\d{1,3})*)/);
+  if(!m)return {call:String(rmk||'').split('/')[0].trim(),freq:''};
+  return {call:m[1].trim(),freq:m[2].replace(/\s/g,'')};
+}
+/* ポイントの IDENT/FREQ 欄を自動で埋める。
+   飛行場そのものならその周波数、そうでなければ**その地点を含む空域**の連絡先 */
 function adFreqOf(w){
-  const empty={id1:'',f1:'',id2:'',f2:''};
   const icao=adIcaoOf(w);
   const f=icao&&AD_FREQ[icao];
-  if(!f)return empty;
-  const pri=['TWR','RDO','APP','TCA','GND','ATIS','DEP'].filter(k=>f[k]);
-  const k1=pri[0],k2=pri[1];
-  return {id1:k1?icao:'',f1:k1?f[k1]:'',
-          id2:k2?k2:'',   f2:k2?f[k2]:''};
+  if(f){
+    const pri=['TWR','RDO','APP','TCA','GND','ATIS','DEP'].filter(k=>f[k]);
+    const k1=pri[0],k2=pri[1];
+    return {id1:k1?icao:'',f1:k1?f[k1]:'',
+            id2:k2?k2:'',   f2:k2?f[k2]:'',
+            asp:airspaceAt(w)};
+  }
+  const hit=airspaceAt(w);
+  const a=hit[0],b=hit[1];
+  const s1=a?splitCall(a.rmk):null, s2=b?splitCall(b.rmk):null;
+  return {id1:s1?(s1.call||a.n):'', f1:s1?s1.freq:'',
+          id2:s2?(s2.call||b.n):'', f2:s2?s2.freq:'', asp:hit};
 }
 
 function redraw(){
@@ -1833,8 +1888,14 @@ function redraw(){
     const F=adFreqOf(w); // 飛行場なら周波数を自動で埋める
     const a=document.createElement('tr');
     a.className='fixA'+(isNext?' nextwp':'')+(isDct?' dctOnRow':'');
+    // 空域由来の連絡先はアンバーで示す(飛行場そのものの周波数と区別するため)
+    const aspTip=(F.asp&&F.asp.length)
+      ? F.asp.map(x=>`${x.kind} ${x.n}${x.rmk?' / '+x.rmk:''}`).join('\n') : '';
+    const fromAsp=!adIcaoOf(w)&&F.id1;
+    const nvCls=fromAsp?' class="cNav aspFrq"':' class="cNav"';
     a.innerHTML=`<td class="fixNo grip">≡ ${mark}(${i+1})</td>
-      <td class="cNav">${F.id1}</td><td class="cNav">${F.id2}</td>
+      <td${nvCls}${aspTip?` title="${aspTip.replace(/"/g,'&quot;')}"`:''}>${F.id1}</td>`+
+      `<td${nvCls}>${F.id2}</td>
       <td rowspan="2" class="cCrs">${mc}</td>
       <td class="cNum">${leg}</td>
       <td rowspan="2" class="cNum">${gs}</td>
@@ -1849,7 +1910,7 @@ function redraw(){
     const b=document.createElement('tr');
     b.className='fixB'+(isNext?' nextwp':'')+(isDct?' dctOnRow':'');
     b.innerHTML=`<td class="fixName"><input value="${w.name.replace(/"/g,'&quot;')}"></td>
-      <td class="cNav">${F.f1}</td><td class="cNav">${F.f2}</td>
+      <td${nvCls}>${F.f1}</td><td${nvCls}>${F.f2}</td>
       <td class="cNum rem">${rD}</td>
       <td class="cNum rem">${rH}</td><td class="cNum rem"></td><td class="cNum rem">${rF}</td>`;
     b.querySelector('input').oninput=e=>{w.name=e.target.value;syncWpIcons();saveState()};
@@ -2752,6 +2813,14 @@ document.getElementById('btnPrint').onclick=()=>{
       a.rwy?`RWY ${a.rwy}`:''].filter(Boolean).join(' ｜ ');
     ads.push(`<div class="adNote"><b>${icao}${a.n?' '+a.n:''}</b> ${info||'—'}</div>`);
   });
+  // 経路上で通過する空域と、そこで連絡すべき機関もNOTESに出す
+  const aseen=new Set();
+  wps.forEach(w=>airspaceAt(w).forEach(x=>{
+    const k=x.kind+x.n;
+    if(aseen.has(k))return;
+    aseen.add(k);
+    ads.push(`<div class="adNote"><b>${x.kind} ${x.n}</b> ${x.rmk||'—'}</div>`);
+  }));
   const notes=ads.length?ads.join(''):'';
   const head=`<table class="prHead">
     <tr><th style="width:14%">NOTES</th><td colspan="4" style="height:12mm;vertical-align:top">${notes}</td></tr>
