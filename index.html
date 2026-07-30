@@ -575,7 +575,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /*IMOC_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-78';
+const VER_TAG='v6-79';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1439,16 +1439,37 @@ function catCls(c){return c&&['VFR','MVFR','IFR','LIFR'].includes(c)?c:'NA'}
    →**IMOC(国際気象海洋)のページを開くリンク**を出す。
      先方のデータを取り込むのではなく誘導するだけなので規約上も問題がない。
    近傍局の値を代わりに出すのは誤解のもとなので**やらない** */
+const IMOC_RG=['北海道','東北','関東','伊豆諸島','中部','近畿','中国','四国','北九州','南九州','沖縄'];
 function imocUrl(icao){
   const a=IMOC_AREA[icao];
   return a===undefined?null:
     `https://www.imoc.co.jp/SmartPhone/d/metar.php?Lang=Jpn&Area=${a}&Port=${icao}`;
 }
+/* 地域の一覧ページ。1ページにその地域の全局が出るので、1局ずつ開かずに済む */
+function imocListUrl(area){
+  return `https://www.imoc.co.jp/SmartPhone/d/metar.php?Lang=Jpn&Area=${area}&List=1`;
+}
+/* sunny-spot.net は1局ずつだが**4日ぶんの履歴**が1ページに出る。areaは無視される */
+function ssUrl(icao){
+  return `https://www.sunny-spot.net/metartaf/index2.html?area=0&location_id=${icao}`;
+}
+function extLink(url,label){
+  return `<a class="imoc" href="${url}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`;
+}
 function imocLink(icao,label){
   const u=imocUrl(icao);
-  if(!u)return '';
-  return `<a class="imoc" href="${u}" target="_blank" rel="noopener noreferrer">`+
-         `${label||'IMOCで見る'} ↗</a>`;
+  return u?extLink(u,label||'IMOCで見る'):'';
+}
+/* 表示中の地図に一番近い、IMOCに載っている飛行場から地域番号を決める */
+function nearImocArea(){
+  const c=ownPos||map.getCenter();
+  let best=null;
+  ASP.forEach(a=>{
+    if(!a.icao||IMOC_AREA[a.icao]===undefined)return;
+    const d=distNM({lat:c.lat,lng:c.lng},{lat:a.lat,lng:a.lng});
+    if(!best||d<best.d)best={d,area:IMOC_AREA[a.icao]};
+  });
+  return best?best.area:2;
 }
 function metarBody(m){
   const w=(m.wdir!=null&&m.wspd!=null)?`${fmt3(m.wdir)}°/${m.wspd}kt`:'';
@@ -1496,8 +1517,13 @@ function renderMetarTab(){
         (s?`<div style="color:var(--dim);font-size:10px;margin-bottom:3px">`+
             `最新 ${obsHM(s.obs)}</div>`
           :`<div style="color:var(--dim);font-size:10px;margin-bottom:3px">`+
-            `NOAAは自衛隊飛行場等のMETARを配信していません。`+
-            `気象庁の国内配信は ${imocLink(a.icao,'IMOC(国際気象海洋)')} で見られます</div>`)+
+            `NOAAは自衛隊飛行場等のMETARを配信していません`+
+            `(気象庁の国内配信にはあります)</div>`+
+           `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">`+
+            (imocLink(a.icao,'IMOC 単局')||'')+
+            extLink(imocListUrl(IMOC_AREA[a.icao]!==undefined?IMOC_AREA[a.icao]:nearImocArea()),
+                    'IMOC 地域一覧')+
+            extLink(ssUrl(a.icao),'sunny-spot 履歴4日')+`</div>`)+
         (hist.length
           ? hist.map(z=>`<div style="margin:2px 0"><span class="cat ${catCls(z.cat)}">${z.cat||'—'}</span> `+
               `<span style="color:var(--dim)">${obsHM(z.obs)}</span> ${z.raw}</div>`).join('')
@@ -1508,7 +1534,13 @@ function renderMetarTab(){
     }
   });
   const st=document.getElementById('metStatus');
-  if(st)st.innerHTML=METAR?`${METAR.updated} 更新(UTC) / 近い順・タップで過去3時間`:'オフライン(データなし)';
+  if(st){
+    const ar=nearImocArea();
+    st.innerHTML=(METAR?`${METAR.updated} 更新(UTC) / 近い順・タップで過去3時間`:'オフライン(データなし)')+
+      ` <span style="color:var(--dim)">|</span> `+
+      extLink(imocListUrl(ar),`IMOC ${IMOC_RG[ar]}の一覧`)+
+      ` <span style="color:var(--dim);font-size:10px">自衛隊飛行場等はこちら(1ページに全局)</span>`;
+  }
 }
 document.getElementById('btnMetR').onclick=()=>loadMetar(true);
 
