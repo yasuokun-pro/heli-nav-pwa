@@ -578,7 +578,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /*IMOC_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-81';
+const VER_TAG='v6-83';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1547,7 +1547,35 @@ function renderMetarTab(){
 }
 document.getElementById('btnMetR').onclick=()=>loadMetar(true);
 
+/* AIPのAD2/AD3から起こした飛行場マスタ(tools/gen_ad.py)を ASP に合流させる。
+   従来のASPは「管制圏・情報圏を持つ飛行場」だけだったので、圏の無い飛行場
+   (佐渡・但馬・奥尻・大館能代・粟国・慶良間・小松島など)が丸ごと欠けていた。
+   標高・滑走路もAIP値で上書きする(従来はサンプル値だった)。
+   ⚠ 同期読込にはできないので、レイヤーは読み込み後に組み直す */
+let AD=null;
+async function loadAd(){
+  if(AD)return AD;
+  try{const r=await fetch('ad.json?v='+VER_TAG);AD=await r.json()}catch(e){AD={f:[]}}
+  const idx={};ASP.forEach(a=>{if(a.icao)idx[a.icao]=a});
+  AD.f.forEach(x=>{
+    const a=idx[x.icao];
+    if(a){                       // 既にあるものはAIPの実測値で補強する
+      a.lat=x.lat;a.lng=x.lng;
+      if(x.elev!==undefined)a.elev=x.elev;
+      if(x.rwy)a.rwy=x.rwy;
+      if(x.n&&/^[A-Za-z ]+$/.test(a.n||''))a.n=x.n;
+    }else{                       // 圏を持たない飛行場は新規に足す
+      ASP.push({n:x.n,icao:x.icao,t:'ap',lat:x.lat,lng:x.lng,
+                elev:x.elev,rwy:x.rwy,aip:1,src:x.src||''});
+    }
+  });
+  buildApLayer();
+  return AD;
+}
+
 const apLayer=L.layerGroup();
+function buildApLayer(){
+apLayer.clearLayers();
 ASP.forEach(a=>{
   if(!a.icao)return;
   const mk=L.marker([a.lat,a.lng],{
@@ -1565,7 +1593,10 @@ ASP.forEach(a=>{
         <dt>位置</dt><dd>${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}</dd>
       </dl>
       <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>
-      <div class="note">※空域・滑走路はサンプル。METARは実データ(参考)。必ずAIP/最新情報で確認</div>`;
+      <div class="note">${a.src?`位置は${a.src}。AIPにAD2/AD3のページが無い飛行場`
+        :(a.elev!==undefined||a.rwy)?'標高・滑走路はAIP AD 2.2/2.12'
+        :'※標高・滑走路はサンプル'}。`+
+      `METARは実データ(参考)。必ずAIP/最新情報で確認</div>`;
     el.querySelector('.apDct').onclick=()=>{setDct({name:a.icao,lat:a.lat,lng:a.lng,isWp:false});mk.closePopup()};
     el.querySelector('.add').onclick=()=>{addWp(a.lat,a.lng,a.icao);redraw();mk.closePopup()};
     loadMetar(); // 最新METARを取りに行き、取れたらスロットを差し替え
@@ -1573,11 +1604,13 @@ ASP.forEach(a=>{
   });
   mk.addTo(apLayer);
 });
+}
+buildApLayer();
 let apOn=false;
-document.getElementById('btnAp').onclick=function(){
+document.getElementById('btnAp').onclick=async function(){
   apOn=!apOn;
   this.classList.toggle('on',apOn);
-  if(apOn)apLayer.addTo(map);else map.removeLayer(apLayer);
+  if(apOn){await loadAd();apLayer.addTo(map)}else map.removeLayer(apLayer);
 };
 
 /* ───────── rain(気象庁ナウキャスト優先・RainViewerフォールバック) ───────── */
