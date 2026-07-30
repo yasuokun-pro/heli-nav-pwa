@@ -204,6 +204,10 @@
   .nav-ico{font-size:15px;line-height:1;color:#7ea8d8;text-shadow:0 1px 3px rgba(0,0,0,.9)}
   .nav-ico b{font-family:var(--mono);font-size:9px;color:#9fc0e6;margin-left:2px;text-shadow:0 1px 3px #000}
   /* 自衛隊施設のピン。外形ポリゴンだけだとパッと見て気づけないので必ず併記する */
+  .hp-ico{display:flex;align-items:center;gap:3px;white-space:nowrap;pointer-events:none}
+  .hp-ico b{display:inline-block;width:15px;height:15px;line-height:15px;text-align:center;
+    border-radius:3px;font-size:10px;font-weight:700;color:#04120a;box-shadow:0 1px 3px #000;pointer-events:auto}
+  .hp-ico span{font-size:10px;text-shadow:0 0 3px #000,0 1px 3px #000;font-family:var(--sans)}
   .js-pin{display:flex;align-items:center;gap:3px;white-space:nowrap;pointer-events:none}
   .js-pin b{display:inline-block;width:15px;height:15px;line-height:15px;text-align:center;
     border-radius:50%;font-size:10px;font-weight:700;color:#04120a;box-shadow:0 1px 3px #000;pointer-events:auto}
@@ -397,6 +401,7 @@
         <button id="btnAsp">空域</button>
         <button id="btnAp">飛行場</button>
         <button id="btnNav">NAV</button>
+        <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AD 1.4)と滑空場(ENR 5.5.1)">ヘリ場</button>
         <button id="btnObst">障害物</button>
         <button id="btnSup">臨時</button>
         <button id="btnJsdf">自衛隊</button>
@@ -582,7 +587,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /*IMOC_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-85';
+const VER_TAG='v6-87';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1230,6 +1235,53 @@ map.on('zoomend',()=>{if(civOn)civRelabel()});
 document.getElementById('btnCiv').onclick=async function(){
   civOn=!civOn;this.classList.toggle('on',civOn);
   if(civOn){await loadCiv();civLayer.addTo(map)}else map.removeLayer(civLayer);
+  restackOverlays();
+};
+
+/* ── 地点略号の無いヘリポート・飛行場・滑空場(tools/gen_hp.py) ──
+   ICAOコードを持たないので ad.json(AD2/AD3) には入らない。
+   ヘリの運航では場外の候補・目標として意味があるので別レイヤーにする。
+   ⚠ AD 1.4 の表は縦組みを寝かせた段組で、**名称の抽出は完全ではない**
+     (隣の欄が混ざることがある)。座標は信頼できるが名称は要確認 */
+let HP=null,hpOn=false;
+const hpLayer=L.layerGroup();
+const HP_T={H:{l:'ヘリポート',c:'#ff7ac8',i:'H'},A:{l:'飛行場(略号なし)',c:'#9fe870',i:'A'},
+            G:{l:'滑空場',c:'#ffd24d',i:'G'}};
+async function loadHp(){
+  if(HP)return HP;
+  try{const r=await fetch('hp.json?v='+VER_TAG);HP=await r.json()}catch(e){HP={f:[]}}
+  HP.f.forEach(x=>{
+    const s=HP_T[x.t]||HP_T.H;
+    L.marker([x.lat,x.lng],{icon:L.divIcon({className:'',iconSize:null,iconAnchor:[8,8],
+      html:`<div class="hp-ico"><b style="background:${s.c}">${s.i}</b>`+
+           `<span style="color:${s.c}">${x.n||''}</span></div>`})})
+      .bindPopup(()=>{
+        const el=document.createElement('div');el.className='apPop';
+        el.innerHTML=`<h5 style="color:${s.c}">${s.i} ${x.n||x.en||'(名称不明)'}</h5>`+
+          `<dl>${x.en?`<dt>英名</dt><dd style="white-space:normal">${x.en}</dd>`:''}`+
+          `<dt>種別</dt><dd>${s.l}</dd>`+
+          (x.dim?`<dt>寸法</dt><dd>${x.dim} m</dd>`:'')+
+          (x.elev!==undefined?`<dt>標高</dt><dd>${x.elev} ft</dd>`:'')+
+          (x.hr?`<dt>活動時間</dt><dd>${x.hr} <small style="color:var(--dim)">UTC</small></dd>`:'')+
+          (x.rmk?`<dt>備考</dt><dd style="white-space:normal;font-size:10px">${x.rmk}</dd>`:'')+
+          `<dt>位置</dt><dd>${x.lat.toFixed(4)}, ${x.lng.toFixed(4)}</dd></dl>`+
+          `<div class="row"><button class="apDct">D→ ここへ</button>`+
+          `<button class="add">ルートに追加</button></div>`+
+          `<div class="note">${x.t==='G'?'AIP ENR 5.3.1/5.5.1':'AIP AD 1.4'}。`+
+          `表の段組の都合で<b style="color:var(--amb)">名称は取り違えていることがある</b>`+
+          `(座標は信頼可)。要AIP確認</div>`;
+        el.querySelector('.apDct').onclick=()=>{
+          setDct({name:x.n||x.en||'HP',lat:x.lat,lng:x.lng,isWp:false});map.closePopup()};
+        el.querySelector('.add').onclick=()=>{
+          addWp(x.lat,x.lng,x.n||x.en||'HP');redraw();map.closePopup()};
+        return el;
+      }).addTo(hpLayer);
+  });
+  return HP;
+}
+document.getElementById('btnHp').onclick=async function(){
+  hpOn=!hpOn;this.classList.toggle('on',hpOn);
+  if(hpOn){await loadHp();hpLayer.addTo(map)}else map.removeLayer(hpLayer);
   restackOverlays();
 };
 
