@@ -498,7 +498,7 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     dst = os.path.join(here, '..', 'jsdf.json')
     json.dump({'src': 'OpenStreetMap (ODbL) / ウィキペディア日本語版 (CC BY-SA)'
-                      ' / 陸上自衛隊公式サイト 駐屯地一覧', 'f': out},
+                      ' / 防衛省・自衛隊公式サイト 施設一覧', 'f': out},
               open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
     import collections
     print(f'{len(out)} 件 → jsdf.json ({os.path.getsize(dst)/1024:.0f}KB)')
