@@ -36,6 +36,10 @@
   .cell.mag span{color:var(--mag)}
   .cell.fuel span,.cell.fuel input{color:var(--amb)}
   .cell.live span{color:var(--cyn)}
+  /* 「GS 実測」+「連動 OFF」で131px要る。既定の100pxだと見出しが2行に折れて
+     この段だけ背が高くなるので、この升だけ広めに取って1行に収める */
+  .cell.live{flex:1 1 140px;min-width:140px}
+  .cell.live b{white-space:nowrap}
   .cell input{width:76px;background:none;border:none;border-bottom:1px solid var(--line);color:var(--grn);font-family:var(--mono);font-size:23px;font-weight:600;outline:none}
   .cell.timer span{color:var(--amb)}
   .cell small{font-size:11px}
@@ -604,7 +608,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /*IMOC_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-93';
+const VER_TAG='v6-94';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
