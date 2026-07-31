@@ -3,12 +3,16 @@
 """
 自衛隊・在日米軍施設レイヤー 生成 (jsdf.json)
 =============================================
-出典: OpenStreetMap (ODbL) + ウィキペディア日本語版 (CC BY-SA)。
+出典: OpenStreetMap (ODbL) + ウィキペディア日本語版 (CC BY-SA)
+      + 陸上自衛隊公式サイトの駐屯地一覧(tools/gsdf_stations.json)。
 AIPには飛行場しか載らないため、駐屯地・分屯地・演習場といった
-「飛行場ではない施設」はこの2つから拾う。
+「飛行場ではない施設」はこの3つから拾う。
 
   OSM      … 敷地の外形ポリゴンが取れる。ただし2割ほど欠落がある
   ウィキペ … 座標(点)だけだが一覧としては網羅性が高い。OSMに無い分の穴埋めに使う
+  陸自公式 … **陸自の駐屯地・分屯地163件の正式名称と番地までの住所**。
+             OSM/ウィキペの取りこぼしを機械的に検出する突合表として使う
+             (座標は無いのでジオコーダにかける)
 
   ⚠ OSMは有志が作るデータなので網羅性・位置精度は保証されない。
     「そこに施設がある」目安として使い、進入可否等の判断には使わないこと。
@@ -250,6 +254,78 @@ def gsi_geocode(addr):
 
 ADDR = re.compile(r'((?:北海道|東京都|(?:京都|大阪)府|\S{2,3}県)[^、。]{3,40}?)(?:に所在|に位置|にある)')
 
+# --- 陸自公式サイトの駐屯地一覧との突合 -------------------------------------
+# https://www.mod.go.jp/gsdf/station/{na,nea,ea,ma,wa}/ の163件を
+# tools/gsdf_stations.json に落としてある(名称+郵便番号+番地までの住所)。
+#   ⚠ 同サイトは Cloudflare のbot判定が入るので curl / urllib では 403 になる。
+#     更新するときはブラウザで開いて document.body.innerText から拾うこと。
+# 突合は2段。
+#  1) 同名のものが既にあれば同一施設とみなす(距離は見ない)。礼文・別海・日高の
+#     ように敷地が広く住所が「字◯◯」だけの所は、ジオコーダの点が外形の中心から
+#     10km近く離れるので、距離で切ると二重登録になる
+#  2) 同名が無ければ「名前の芯が一致」かつ「6km以内」で探す。OSMでは
+#     霞目駐屯地→霞目飛行場、相馬原駐屯地→相馬原演習場、座間駐屯地→米軍キャンプ座間
+#     のように別名で入っている。距離を外すと静内駐屯地が10km離れた
+#     静内対空射撃場に誤って吸収されるので距離判定は必須
+# さらに、同名でも**外形の無い点データ**が公式住所から10km以上ずれている場合は
+# 公式住所側を採用して直す(玖珠駐屯地と湯布院駐屯地はウィキペディア由来の座標が
+# 入れ替わっていた)。
+GSDF_R_KM = 6.0
+GSDF_FIX_KM = 10.0
+# 「同じ場所の別名」とみなす名前(演習場・射撃場は含めない。別の場所なので)
+GSDF_SAME = re.compile(r'飛行場|基地|駐屯地|分屯地|地区|キャンプ|Camp ')
+
+
+def gsdf_roster():
+    here = os.path.dirname(os.path.abspath(__file__))
+    p = os.path.join(here, 'gsdf_stations.json')
+    if not os.path.exists(p): return []
+    return json.load(open(p))['f']
+
+
+def gsdf_check(out):
+    """公式一覧に載っていて jsdf.json に無い駐屯地を点データで足す"""
+    import math
+    roster = gsdf_roster()
+    if not roster: return 0
+    cache_p = '/tmp/jsdf_gsdf_geo.json'
+    geo = json.load(open(cache_p)) if os.path.exists(cache_p) else {}
+    def km(a, b):
+        return math.hypot((a[0]-b[0])*111, (a[1]-b[1])*91)
+
+    add = fix = 0
+    for r in roster:
+        n, ad = r['n'], r['ad']
+        if n not in geo:
+            geo[n] = gsi_geocode(ad)
+            time.sleep(1.0)
+            json.dump(geo, open(cache_p, 'w'), ensure_ascii=False)
+        c = geo[n]
+        if not c:
+            print(f'  住所を座標に出来ない: {n} ({ad})'); continue
+        same = next((m for m in out if m['n'] == n), None)
+        if same:
+            d = km((same['lat'], same['lng']), c)
+            if not same.get('p') and d > GSDF_FIX_KM:
+                print(f'  座標を公式住所で修正: {n} {d:.0f}km ずれ → {ad}')
+                same['lat'], same['lng'] = c
+                same['g'] = 1; same.pop('w', None); fix += 1
+            continue
+        base = re.sub(r'(駐屯地|分屯地)$', '', n)
+        near = [m for m in out
+                if base in m['n'] and km((m['lat'], m['lng']), c) < GSDF_R_KM]
+        # 演習場・射撃場は駐屯地とは別の場所。「習志野演習場」があっても
+        # 習志野駐屯地(2km南)は別に立てる。基地・飛行場側の名前で入っている
+        # ものだけを同一施設とみなす
+        if any(GSDF_SAME.search(m['n']) or km((m['lat'], m['lng']), c) < 1.5
+               for m in near):
+            continue
+        out.append({'n': n, 's': '陸', 't': '駐', 'lat': c[0], 'lng': c[1], 'g': 1})
+        print(f'  公式一覧から補完: {n} ({ad})')
+        add += 1
+    if fix: print(f'  {fix} 件の座標を修正')
+    return add
+
 
 def fetch_wp():
     """カテゴリを1階層だけ辿って記事名を集め、まとめて座標を引く"""
@@ -370,10 +446,14 @@ def main():
         if not any(r['n'] == n for r in out):
             out.append({'n': n, 's': sv, 't': ki, 'lat': la, 'lng': lo, 'g': 1})
 
+    print('陸自公式の駐屯地一覧と突合中…')
+    print(f'  {gsdf_check(out)} 件を補完')
+
     out.sort(key=lambda r: (r['s'], r['n']))
     here = os.path.dirname(os.path.abspath(__file__))
     dst = os.path.join(here, '..', 'jsdf.json')
-    json.dump({'src': 'OpenStreetMap (ODbL) / ウィキペディア日本語版 (CC BY-SA)', 'f': out},
+    json.dump({'src': 'OpenStreetMap (ODbL) / ウィキペディア日本語版 (CC BY-SA)'
+                      ' / 陸上自衛隊公式サイト 駐屯地一覧', 'f': out},
               open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
     import collections
     print(f'{len(out)} 件 → jsdf.json ({os.path.getsize(dst)/1024:.0f}KB)')
