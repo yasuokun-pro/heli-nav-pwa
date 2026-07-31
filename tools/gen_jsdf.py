@@ -179,7 +179,8 @@ def fetch_geom(ids):
     return d
 
 
-WP_CATS = ['自衛隊基地', '在日米軍基地', '海上自衛隊の陸上施設']
+WP_CATS = ['自衛隊基地', '在日米軍基地', '海上自衛隊の陸上施設',
+           '陸上自衛隊駐屯地', '航空自衛隊の基地']
 WP_KEEP = re.compile(r'駐屯地|分屯地|分屯基地|基地|演習場|飛行場|航空隊|訓練場|射場|試験場')
 
 
@@ -227,6 +228,27 @@ def fetch_extra():
         time.sleep(1.0)
     json.dump(out, open(path, 'w'), ensure_ascii=False)
     return out
+
+
+def gsi_geocode(addr):
+    """国土地理院のジオコーダで住所→座標。ウィキペディアに座標が無い記事用
+       (大宮駐屯地・用賀駐屯地など。記事冒頭に必ず住所が書いてある)"""
+    import urllib.parse
+    try:
+        u = ('https://msearch.gsi.go.jp/address-search/AddressSearch?q='
+             + urllib.parse.quote(addr))
+        d = json.loads(urllib.request.urlopen(
+            urllib.request.Request(u, headers={'User-Agent': 'heli-nav-pwa/1.0'}),
+            timeout=30).read())
+        if d:
+            c = d[0]['geometry']['coordinates']
+            return [round(c[1], 5), round(c[0], 5)]
+    except Exception:
+        pass
+    return None
+
+
+ADDR = re.compile(r'((?:北海道|東京都|(?:京都|大阪)府|\S{2,3}県)[^、。]{3,40}?)(?:に所在|に位置|にある)')
 
 
 def fetch_wp():
@@ -327,7 +349,9 @@ def main():
     # OSMに無い施設をウィキペディアの座標で補う(点データ・外形なし)
     print('ウィキペディアで欠落分を補完中…')
     add = 0
-    for title, (lat, lng) in fetch_wp().items():
+    for title, v in fetch_wp().items():
+        lat, lng = v[0], v[1]
+        geo = len(v) > 2                # 住所をジオコーダにかけたもの
         # カテゴリには学校・宿舎・弾薬庫等も入るので施設名で絞る(キャッシュ経由でも効かせる)
         if not WP_KEEP.search(title) or DROP.search(title): continue
         n = clean(title)
@@ -336,7 +360,8 @@ def main():
                (base and (base in m['n'] or m['n'].replace(' ', '') in n)) for m in out):
             continue
         out.append({'n': n, 's': service(title, {}), 't': kind(title, {}),
-                    'lat': round(lat, 5), 'lng': round(lng, 5), 'w': 1})
+                    'lat': round(lat, 5), 'lng': round(lng, 5),
+                    **({'g': 1} if geo else {'w': 1})})
         add += 1
     print(f'  {add} 件を補完')
     for x in fetch_extra():
