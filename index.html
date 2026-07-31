@@ -85,11 +85,23 @@
   body.main #ovl{display:block}
   #ovl .strip,#ovlHandle{pointer-events:auto}
   #ovl .strip{background:rgba(10,20,32,.93)}
-  #ovlBody{display:none;background:rgba(10,20,32,.93)}
-  body.ovl1 #ovlBody{display:block}
-  #ovlBody .ovl2{display:none}
-  body.ovl2 #ovlBody .ovl2{display:flex}
-  #ovlHandle{margin:0 auto;width:120px;text-align:center;background:rgba(10,20,32,.92);border:1px solid var(--line);border-top:none;border-radius:0 0 9px 9px;color:var(--dim);font-size:11px;padding:4px 0;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+  #ovlBody{background:rgba(10,20,32,.93)}
+  /* 段ごとの表示/非表示。body の hudT/hudN/hudD が付いている段だけ出す。
+     ハンドルの▴で全部たたむときは hudOff を付ける(段の選択は保持される) */
+  #ovlBody .strip{display:none}
+  body.hudT:not(.hudOff) #ovlBody .timestrip{display:flex}
+  body.hudD:not(.hudOff) #ovlBody .ovl2{display:flex}
+  /* NEXTはルートが1点も無ければ出しようがない(data-has は updateNext が付ける) */
+  body.hudN:not(.hudOff) #ovlBody #nextStrip[data-has="1"]{display:flex}
+  #ovlHandle{margin:0 auto;width:max-content;max-width:96%;display:flex;align-items:center;gap:6px;background:rgba(10,20,32,.92);border:1px solid var(--line);border-top:none;border-radius:0 0 9px 9px;color:var(--dim);font-size:11px;padding:4px 9px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+  .hchip{background:none;border:1px solid var(--line);color:var(--dim);border-radius:4px;font-size:10px;padding:2px 8px;font-family:var(--sans);cursor:pointer;letter-spacing:.04em}
+  .hchip.on{border-color:var(--cyn);color:var(--cyn)}
+  #ovlArrow{font-size:12px;padding-left:2px}
+  /* T/O・L/Dを諸元バー内に置くための小型版。押しやすさのため高さは詰めすぎない */
+  .cell.fltbtns{flex:0 0 auto;min-width:0;display:flex;align-items:center;gap:7px;padding:6px 10px}
+  .cell.fltbtns>b{display:none}
+  .cell.fltbtns .btn{padding:7px 12px;font-size:12px;white-space:nowrap}
+  .cell.fltbtns .btn:disabled{opacity:.38}
   .wp-pin{width:26px;height:26px;border-radius:50%;background:#fff;border:2.5px solid var(--mag);color:#8a0f7c;font-family:var(--mono);font-weight:700;font-size:13px;line-height:21px;text-align:center;box-shadow:0 1px 5px rgba(0,0,0,.55)}
   .wp-pin.dctOn{border-color:#0a7c8c;background:var(--cyn);color:#04222a}
   .wp-pin.nextOn{border-color:#0e7c3d;background:var(--grn);color:#03270f;box-shadow:0 0 10px rgba(56,224,123,.9)}
@@ -339,13 +351,17 @@
   <div id="map"></div>
   <div id="ovl">
     <div id="ovlBody">
-      <div class="strip">
+      <div class="strip timestrip">
         <div class="cell"><b>JST</b><span id="jst">--:--:--</span></div>
         <div class="cell"><b>UTC</b><span id="utc">--:--:--</span></div>
         <div class="cell live"><b>GS 実測<button class="livebtn" id="btnLive">連動 OFF</button></b><span id="dGsLive">—</span></div>
         <div class="cell timer"><b>FLIGHT TIME</b><span id="dTimer">00:00:00</span></div>
+        <div class="cell fltbtns"><b>&nbsp;</b>
+          <button class="btn go" id="btnTO">▲ T/O</button>
+          <button class="btn stop" id="btnLDG" disabled>▼ L/D</button>
+        </div>
       </div>
-      <div class="strip nextstrip" id="nextStrip" style="display:none">
+      <div class="strip nextstrip" id="nextStrip">
         <div class="cell"><b>NEXT<span class="livetag" id="tagNx">LIVE</span></b><span id="nxName" class="jp">—</span></div>
         <div class="cell"><b>方位 (磁)</b><span id="nxBrg">---°</span></div>
         <div class="cell"><b>距離</b><span id="nxDist">— <small>NM</small></span></div>
@@ -361,7 +377,12 @@
         <div class="cell"><b>偏差 (西偏)<button class="livebtn on" id="btnVarAuto" title="AIP実測値に基づく自動推定">AUTO</button></b><input id="varW" type="number" step="0.5" value="8"> <span><small>°W</small></span></div>
       </div>
     </div>
-    <div id="ovlHandle">▾ 諸元</div>
+    <div id="ovlHandle">
+      <button class="hchip" data-hud="t" title="時刻・飛行時間の段">時刻</button>
+      <button class="hchip" data-hud="n" title="NEXTポイントの段">NEXT</button>
+      <button class="hchip" data-hud="d" title="ROUTE/TAS/偏差の段">諸元</button>
+      <span id="ovlArrow">▴</span>
+    </div>
   </div>
   <button id="btnFollow" class="zbtn" title="追尾(GPS)">➤</button>
   <button id="btnMapOnly" class="zbtn" title="メイン(地図)画面">🗺</button>
@@ -446,10 +467,6 @@
   </div>
 
   <div class="tabbody" id="tab-wp">
-    <div class="btnrow">
-      <button class="btn go" id="btnTO">▲ T/O</button>
-      <button class="btn stop" id="btnLDG" disabled>▼ L/D</button>
-    </div>
     <div class="btnrow">
       <button class="btn sh" id="btnPrint">🖨 ログ印刷 (A4横 2面)</button>
       <span class="hint" style="align-self:center;margin:0">切り取るとA5×2枚(ニーボード用)</span>
@@ -587,7 +604,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /*IMOC_GEN_END*/
 
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-91';
+const VER_TAG='v6-92';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1350,8 +1367,10 @@ document.getElementById('btnUiHide').onclick=function(){
 };
 
 /* ── 諸元オーバーレイ(メイン画面・上から引き出し) ──
-   レベル0=地図のみ / 1=時計+GS+NEXT / 2=+距離・ETE・TAS・偏差 */
-let ovlLevel=1;
+   段ごとに出す/出さないを選べる。t=時刻+飛行時間 / n=NEXT / d=ROUTE・TAS・偏差。
+   ハンドルの▴▾は「選んだ段を全部たたむ/戻す」で、段の選択自体は保持する */
+const HUD_KEYS=['t','n','d'];
+let hud=Object.assign({t:1,n:1,d:1,off:0},store.get('hnav.hud')||{});
 function updateOvlOffset(){ // 諸元の高さぶんズーム/ボタン類を下げる
   requestAnimationFrame(()=>{
     const h=document.body.classList.contains('main')?
@@ -1359,25 +1378,42 @@ function updateOvlOffset(){ // 諸元の高さぶんズーム/ボタン類を下
     document.querySelector('.mapwrap').style.setProperty('--ovlH',Math.ceil(h)+'px');
   });
 }
-function setOvl(n){
-  ovlLevel=Math.max(0,Math.min(2,n));
-  document.body.classList.toggle('ovl1',ovlLevel>=1);
-  document.body.classList.toggle('ovl2',ovlLevel>=2);
-  document.getElementById('ovlHandle').textContent=
-    ovlLevel===0?'▾ 諸元':ovlLevel===1?'▾ 詳細':'▴ 閉じる';
+function applyHud(){
+  document.body.classList.toggle('hudT',!!hud.t);
+  document.body.classList.toggle('hudN',!!hud.n);
+  document.body.classList.toggle('hudD',!!hud.d);
+  document.body.classList.toggle('hudOff',!!hud.off);
+  document.querySelectorAll('.hchip').forEach(b=>
+    b.classList.toggle('on',!hud.off&&!!hud[b.dataset.hud]));
+  document.getElementById('ovlArrow').textContent=hud.off?'▾':'▴';
+  store.set('hnav.hud',hud);
   updateOvlOffset();
 }
 const ovlHandle=document.getElementById('ovlHandle');
+document.querySelectorAll('.hchip').forEach(b=>b.addEventListener('click',e=>{
+  e.stopPropagation();                 // ハンドル側のたたむ動作を巻き添えにしない
+  const k=b.dataset.hud;
+  if(hud.off){hud.off=0;HUD_KEYS.forEach(x=>hud[x]=0)} // たたんだ状態から個別に開く
+  hud[k]=hud[k]?0:1;
+  if(!HUD_KEYS.some(x=>hud[x]))hud.off=1;             // 全部消したらたたんだ扱い
+  applyHud();
+}));
 let ovlDragY=null,ovlDragged=false;
 ovlHandle.addEventListener('pointerdown',e=>{ovlDragY=e.clientY;ovlDragged=false;ovlHandle.setPointerCapture(e.pointerId)});
 ovlHandle.addEventListener('pointermove',e=>{
   if(ovlDragY===null)return;
   const dy=e.clientY-ovlDragY;
-  if(dy>28){setOvl(ovlLevel+1);ovlDragY=e.clientY;ovlDragged=true}
-  else if(dy<-28){setOvl(ovlLevel-1);ovlDragY=e.clientY;ovlDragged=true}
+  if(Math.abs(dy)<28)return;
+  setHudOff(dy<0);ovlDragY=e.clientY;ovlDragged=true;
 });
 ovlHandle.addEventListener('pointerup',()=>{ovlDragY=null});
-ovlHandle.addEventListener('click',()=>{if(ovlDragged){ovlDragged=false;return}setOvl(ovlLevel>=2?0:ovlLevel+1)});
+ovlHandle.addEventListener('click',()=>{if(ovlDragged){ovlDragged=false;return}setHudOff(!hud.off)});
+function setHudOff(v){
+  hud.off=v?1:0;
+  // 全部消した状態から開くときは、何も出ないと操作不能になるので既定に戻す
+  if(!hud.off&&!HUD_KEYS.some(x=>hud[x]))HUD_KEYS.forEach(x=>hud[x]=1);
+  applyHud();
+}
 
 /* ───────── 地名検索(国土地理院ジオコーダ・APIキー不要) ───────── */
 let searchMarker=null;
@@ -2567,7 +2603,7 @@ ${rte}
    iOSはホーム画面に追加したアプリとSafariで保存領域が別なので、ブラウザで
    作ったルート・登録地点・ログはアプリ側に出てこない。全部まとめて
    書き出し/読み込みできるようにして、1回で移せるようにする */
-const BK_KEYS=['hnav.route','hnav.routes','hnav.pts','hnav.logs','hnav.draws','hnav.base','hnav.varAuto'];
+const BK_KEYS=['hnav.route','hnav.routes','hnav.pts','hnav.logs','hnav.draws','hnav.base','hnav.varAuto','hnav.hud'];
 document.getElementById('btnBk').onclick=()=>{
   const d={};BK_KEYS.forEach(k=>{const v=store.get(k);if(v!==null&&v!==undefined)d[k]=v});
   const n=(d['hnav.routes']||[]).length, p=(d['hnav.pts']||[]).length, l=(d['hnav.logs']||[]).length;
@@ -2686,9 +2722,10 @@ map.on('move',()=>{if(!ownPos)updateDct()});
 /* ───────── NEXTポイント表示(ルート順・GPSで自動シーケンス) ───────── */
 let nextIdx=0;
 function updateNext(){
+  // 表示のON/OFFはCSS(body.hudN)側に任せ、ここは「出せる中身があるか」だけ持つ
   const el=document.getElementById('nextStrip');
-  if(!wps.length){el.style.display='none';nextIdx=0;updateOvlOffset();return}
-  el.style.display='flex';updateOvlOffset();
+  if(!wps.length){el.dataset.has='';nextIdx=0;updateOvlOffset();return}
+  el.dataset.has='1';updateOvlOffset();
   if(nextIdx>=wps.length)nextIdx=wps.length-1;
   const w=wps[nextIdx];
   // ポイント一覧の「今向かっている行」と地図マーカーをハイライト
@@ -3130,7 +3167,7 @@ document.querySelectorAll('.tabs button').forEach(btn=>{
 
 /* ───────── 起動時復元 ───────── */
 (function init(){
-  setScreen('main');setOvl(1); // 起動はメイン(地図)画面+諸元1段
+  setScreen('main');applyHud(); // 起動はメイン(地図)画面+前回選んだ段
   const va=store.get('hnav.varAuto');
   varAuto=(va===null||va===undefined)?true:!!va;
   document.getElementById('btnVarAuto').classList.toggle('on',varAuto);

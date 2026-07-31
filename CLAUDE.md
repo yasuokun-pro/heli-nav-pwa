@@ -74,6 +74,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 | 空域 | 関東=AIP正式ポリゴン(CTR青/情報圏アンバー/PCA赤、ツールチップに上下限・周波数)。他地域=概略円のまま | `ASP[]` `ASP_POLY[]` `aspLayer` |
 | 飛行場情報 | ✈トグル→ICAOマーカー→ポップアップ(種別/標高/滑走路/座標)+D→/ルート追加 | `apLayer` |
 | ログの周波数 | ポイントが飛行場ならその周波数、そうでなければ**その地点を含む空域**の連絡先を IDENT/FREQ に自動記入(空域由来はアンバー・ツールチップに空域名)。印刷のNOTESにも通過空域と連絡先を出す | `adFreqOf()` `airspaceAt()` `inArea()` |
+| 諸元オーバーレイ | 段ごとに表示/非表示を選べる(ハンドルのチップ)。▴▾は選択を保持したまま全部たたむ | `hud` `applyHud()` `setHudOff()` |
 | 永続化 | ルート・設定・ログ・ベース地図選択を自動保存/起動時復元 | `store` `saveState()` `init()` |
 
 ## 5. 計算仕様(変更時は要注意)
@@ -129,7 +130,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 
 // 端末データ書出 … localStorageのキーをまとめたもの(引っ越し・バックアップ用)
 {app:'HELI NAV', ver, at, data:{'hnav.route':…,'hnav.routes':…,'hnav.pts':…,
- 'hnav.logs':…,'hnav.draws':…,'hnav.base':…,'hnav.varAuto':…}}
+ 'hnav.logs':…,'hnav.draws':…,'hnav.base':…,'hnav.varAuto':…,'hnav.hud':…}}
 
 // 飛行ログ(logs[] / localStorage 'hnav.logs')
 {date:'2026/7/8', off:'09:12', on:'10:03', dur:'00:51', route:'WP1→WP2'}
@@ -146,6 +147,9 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 
 // localStorageキー
 'hnav.route' / 'hnav.logs' / 'hnav.base'(ベース地図index)
+'hnav.hud' … 諸元オーバーレイの段の表示状態 {t,n,d,off}
+             t=時刻+FLIGHT TIME+T/O・L/D / n=NEXT / d=ROUTE・TAS・偏差
+             off=1 は「選択は残したまま全部たたむ」
 ```
 
 ## 8. AIP空域データの取り扱い(2026-07確立・重要)
