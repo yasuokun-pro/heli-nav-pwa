@@ -4,15 +4,15 @@
 自衛隊・在日米軍施設レイヤー 生成 (jsdf.json)
 =============================================
 出典: OpenStreetMap (ODbL) + ウィキペディア日本語版 (CC BY-SA)
-      + 陸上自衛隊公式サイトの駐屯地一覧(tools/gsdf_stations.json)。
+      + 防衛省・自衛隊公式サイトの施設一覧(tools/mod_facilities.json)。
 AIPには飛行場しか載らないため、駐屯地・分屯地・演習場といった
 「飛行場ではない施設」はこの3つから拾う。
 
   OSM      … 敷地の外形ポリゴンが取れる。ただし2割ほど欠落がある
   ウィキペ … 座標(点)だけだが一覧としては網羅性が高い。OSMに無い分の穴埋めに使う
-  陸自公式 … **陸自の駐屯地・分屯地163件の正式名称と番地までの住所**。
-             OSM/ウィキペの取りこぼしを機械的に検出する突合表として使う
-             (座標は無いのでジオコーダにかける)
+  防衛省公式 … **陸163・空72・海28件の正式名称と番地までの住所**。
+               OSM/ウィキペの取りこぼしを機械的に検出する突合表として使う
+               (座標は無いのでジオコーダにかける)
 
   ⚠ OSMは有志が作るデータなので網羅性・位置精度は保証されない。
     「そこに施設がある」目安として使い、進入可否等の判断には使わないこと。
@@ -63,6 +63,8 @@ WP_GONE = re.compile(r'所在していた|にあった|駐屯していた|配置
 # (https://msearch.gsi.go.jp/address-search/AddressSearch) で住所から求めたもの
 EXTRA_PT = [
     ('用賀駐屯地', '陸', '駐', 35.63307, 139.63788),   # 世田谷区上用賀1-20-1
+    # 海自の公式一覧は部隊名しか載らないので、施設として名前を付けて足す
+    ('江田島(第1術科学校・幹部候補生学校)', '海', '基', 34.24378, 132.4742),
 ]
 
 # 軍事タグが付かないので上の抽出には入らないが、載せておきたい施設。
@@ -254,11 +256,20 @@ def gsi_geocode(addr):
 
 ADDR = re.compile(r'((?:北海道|東京都|(?:京都|大阪)府|\S{2,3}県)[^、。]{3,40}?)(?:に所在|に位置|にある)')
 
-# --- 陸自公式サイトの駐屯地一覧との突合 -------------------------------------
-# https://www.mod.go.jp/gsdf/station/{na,nea,ea,ma,wa}/ の163件を
-# tools/gsdf_stations.json に落としてある(名称+郵便番号+番地までの住所)。
-#   ⚠ 同サイトは Cloudflare のbot判定が入るので curl / urllib では 403 になる。
-#     更新するときはブラウザで開いて document.body.innerText から拾うこと。
+# --- 防衛省公式サイトの施設一覧との突合 -------------------------------------
+# tools/mod_facilities.json に3自衛隊の公式一覧を落としてある
+# (名称+番地までの住所。OSM・ウィキペディアより網羅性も精度も上)。
+#   陸 163件 https://www.mod.go.jp/gsdf/station/{na,nea,ea,ma,wa}/       m='add'
+#   空  72件 https://www.mod.go.jp/asdf/base/{north,center,centerkanto,west,south}/
+#   海  28件 https://www.mod.go.jp/msdf/about/org/                        m='chk'
+#   ⚠ mod.go.jp は Cloudflare のbot判定が入るので curl / urllib では 403 になる。
+#     更新するときはブラウザで開いて拾うこと(陸は innerText、空・海は table)。
+#   ⚠ 海自の一覧は「第2航空群司令部」のように**部隊名**で、施設名ではない。
+#     そのままピンにすると分かりにくいので m='chk'(穴の検出だけ・追加しない)。
+#   ⚠ 硫黄島分屯基地は公式サイトの住所が入間基地内の事務所になっている。
+#     ジオコーダにかけると狭山市に落ちるので住所を「小笠原村硫黄島」に直してある
+#   ⚠ 長沼分屯基地は公式サイトが「タ張郡」と誤記(正しくは夕張郡)。直してある
+#
 # 突合は2段。
 #  1) 同名のものが既にあれば同一施設とみなす(距離は見ない)。礼文・別海・日高の
 #     ように敷地が広く住所が「字◯◯」だけの所は、ジオコーダの点が外形の中心から
@@ -270,25 +281,35 @@ ADDR = re.compile(r'((?:北海道|東京都|(?:京都|大阪)府|\S{2,3}県)[^�
 # さらに、同名でも**外形の無い点データ**が公式住所から10km以上ずれている場合は
 # 公式住所側を採用して直す(玖珠駐屯地と湯布院駐屯地はウィキペディア由来の座標が
 # 入れ替わっていた)。
-GSDF_R_KM = 6.0
-GSDF_FIX_KM = 10.0
+MOD_R_KM = 6.0
+MOD_FIX_KM = 10.0
 # 「同じ場所の別名」とみなす名前(演習場・射撃場は含めない。別の場所なので)
-GSDF_SAME = re.compile(r'飛行場|基地|駐屯地|分屯地|地区|キャンプ|Camp ')
+MOD_SAME = re.compile(r'飛行場|基地|駐屯地|分屯地|地区|キャンプ|Camp ')
+# 名前の芯を取るために落とす接尾辞
+MOD_SUF = re.compile(r'(駐屯地|分屯地|分屯基地|基地|地方総監部)$')
 
 
-def gsdf_roster():
+def nz(s):
+    """名寄せ用の正規化。**「ヶ」と「ケ」の揺れが致命的**で、
+       これを揃えないと 経ケ岬分屯基地/経ヶ岬分屯基地、
+       霞ケ浦分屯基地/霞ヶ浦駐屯地 が別物として二重登録される"""
+    return s.replace('ヶ', 'ケ').replace('ガ', 'ケ').replace('が', 'ケ').replace(' ', '')
+
+
+def mod_roster():
     here = os.path.dirname(os.path.abspath(__file__))
-    p = os.path.join(here, 'gsdf_stations.json')
+    p = os.path.join(here, 'mod_facilities.json')
     if not os.path.exists(p): return []
     return json.load(open(p))['f']
 
 
-def gsdf_check(out):
-    """公式一覧に載っていて jsdf.json に無い駐屯地を点データで足す"""
+def mod_check(out):
+    """公式一覧に載っていて jsdf.json に無い施設を点データで足す。
+       m='chk' のものは穴を報告するだけで追加しない"""
     import math
-    roster = gsdf_roster()
+    roster = mod_roster()
     if not roster: return 0
-    cache_p = '/tmp/jsdf_gsdf_geo.json'
+    cache_p = '/tmp/jsdf_mod_geo.json'
     geo = json.load(open(cache_p)) if os.path.exists(cache_p) else {}
     def km(a, b):
         return math.hypot((a[0]-b[0])*111, (a[1]-b[1])*91)
@@ -303,25 +324,31 @@ def gsdf_check(out):
         c = geo[n]
         if not c:
             print(f'  住所を座標に出来ない: {n} ({ad})'); continue
-        same = next((m for m in out if m['n'] == n), None)
+        same = next((m for m in out if nz(m['n']) == nz(n)), None)
         if same:
             d = km((same['lat'], same['lng']), c)
-            if not same.get('p') and d > GSDF_FIX_KM:
+            if not same.get('p') and d > MOD_FIX_KM:
                 print(f'  座標を公式住所で修正: {n} {d:.0f}km ずれ → {ad}')
                 same['lat'], same['lng'] = c
                 same['g'] = 1; same.pop('w', None); fix += 1
             continue
-        base = re.sub(r'(駐屯地|分屯地)$', '', n)
+        base = nz(MOD_SUF.sub('', n))
         near = [m for m in out
-                if base in m['n'] and km((m['lat'], m['lng']), c) < GSDF_R_KM]
+                if base in nz(m['n']) and km((m['lat'], m['lng']), c) < MOD_R_KM]
         # 演習場・射撃場は駐屯地とは別の場所。「習志野演習場」があっても
         # 習志野駐屯地(2km南)は別に立てる。基地・飛行場側の名前で入っている
         # ものだけを同一施設とみなす
-        if any(GSDF_SAME.search(m['n']) or km((m['lat'], m['lng']), c) < 1.5
+        if any(MOD_SAME.search(m['n']) or km((m['lat'], m['lng']), c) < 1.5
                for m in near):
             continue
-        out.append({'n': n, 's': '陸', 't': '駐', 'lat': c[0], 'lng': c[1], 'g': 1})
-        print(f'  公式一覧から補完: {n} ({ad})')
+        if r.get('m') == 'chk':
+            # 部隊名しか無いので自動では足さない。近くに何も無ければ手当てする
+            if not any(km((m['lat'], m['lng']), c) < 3.0 for m in out):
+                print(f'  ★要確認({r["s"]}): {n} 付近3kmに施設が無い ({ad})')
+            continue
+        out.append({'n': n, 's': r['s'], 't': r['t'],
+                    'lat': c[0], 'lng': c[1], 'g': 1})
+        print(f'  公式一覧から補完({r["s"]}): {n} ({ad})')
         add += 1
     if fix: print(f'  {fix} 件の座標を修正')
     return add
@@ -446,8 +473,26 @@ def main():
         if not any(r['n'] == n for r in out):
             out.append({'n': n, 's': sv, 't': ki, 'lat': la, 'lng': lo, 'g': 1})
 
-    print('陸自公式の駐屯地一覧と突合中…')
-    print(f'  {gsdf_check(out)} 件を補完')
+    print('防衛省公式の施設一覧と突合中…')
+    print(f'  {mod_check(out)} 件を補完')
+
+    # 同じ名前で「外形あり」と「点だけ」が両方残ることがある。
+    # OSMの外形とウィキペディアの座標が数km離れているせいで前段のマージを
+    # すり抜けたもの(秋田・釧路・白老・えびの・当別・山田)。外形の方を残す。
+    #   ⚠ 布引山演習場のように**同名で本当に2区画ある**ものもあるので、
+    #     両方に外形がある場合は消さないこと
+    byname = {}
+    for r in out: byname.setdefault(nz(r['n']), []).append(r)
+    drop = set()
+    for v in byname.values():
+        if len(v) < 2: continue
+        withp = [x for x in v if x.get('p')]
+        if len(withp) == 1:
+            for x in v:
+                if x is not withp[0]:
+                    print(f'  重複を統合: {x["n"]} (点データ側を削除)')
+                    drop.add(id(x))
+    out = [r for r in out if id(r) not in drop]
 
     out.sort(key=lambda r: (r['s'], r['n']))
     here = os.path.dirname(os.path.abspath(__file__))
