@@ -38,8 +38,14 @@ heli-nav-pwa/            … 場所: ~/Claudeディレクトリ/heli-nav-pwa (gi
 - リポジトリ: https://github.com/yasuokun-pro/heli-nav-pwa (public)
 - 公開URL: **https://yasuokun-pro.github.io/heli-nav-pwa/** (iPhoneはこれをホーム画面に追加)
 - 更新手順: コミット → `git push` するだけ(1〜2分で反映)。
-  **index.html等を変更したら sw.js 先頭の `const VER` を必ずインクリメント**
-  (しないと既存端末に更新が届かない)。gh CLIで認証済み(アカウント yasuokun-pro)
+  **index.html等を変更したら次の3つを必ず一緒に上げる**
+  (しないと既存端末に更新が届かない / クレジットが古い版を表示したままになる):
+  | 場所 | 定数 | 役割 |
+  |---|---|---|
+  | `sw.js` 先頭 | `VER` | キャッシュ名。**これがサーバ側の版番号** |
+  | `index.html` | `VER_TAG` | データファイルのキャッシュバスター兼**動作中の版番号** |
+  | `index.html` | `BUILD` | フッターに出す更新日(YYYY-MM-DD) |
+  gh CLIで認証済み(アカウント yasuokun-pro)
 **ローカルプレビューでも同じ**: Service Workerが古いindex.htmlをキャッシュして
 配り続けるため、編集後の動作確認前に必ずVERを上げ、リロードを2回行うこと
 (1回目でSW更新、2回目で新キャッシュから表示)。
@@ -75,6 +81,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 | 飛行場情報 | ✈トグル→ICAOマーカー→ポップアップ(種別/標高/滑走路/座標)+D→/ルート追加 | `apLayer` |
 | ログの周波数 | ポイントが飛行場ならその周波数、そうでなければ**その地点を含む空域**の連絡先を IDENT/FREQ に自動記入(空域由来はアンバー・ツールチップに空域名)。印刷のNOTESにも通過空域と連絡先を出す | `adFreqOf()` `airspaceAt()` `inArea()` |
 | 諸元オーバーレイ | 段ごとに表示/非表示を選べる(ハンドルの 時刻/NEXT/ROUTE チップ)。▴▾は選択を保持したまま全部たたむ | `hud` `applyHud()` `setHudOff()` |
+| バージョン表示 | フッターのクレジットに動作中の版と更新日。「更新を確認」でサーバのsw.jsと突合 | `VER_TAG` `BUILD` `checkUpdate()` |
 | 永続化 | ルート・設定・ログ・ベース地図選択を自動保存/起動時復元 | `store` `saveState()` `init()` |
 
 ## 5. 計算仕様(変更時は要注意)

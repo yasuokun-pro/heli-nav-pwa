@@ -322,6 +322,12 @@
   .tag{font-size:10px;border:1px solid var(--amb);color:var(--amb);border-radius:4px;padding:1px 6px;margin-left:8px;vertical-align:2px}
   textarea#shareBox{width:100%;height:64px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--txt);font-family:var(--mono);font-size:11px;padding:8px;outline:none;display:none;margin-bottom:10px}
   footer{padding:8px 16px;font-size:11px;color:var(--dim);background:var(--panel2);border-top:1px solid var(--line)}
+  .credit{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:7px;padding-top:7px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px}
+  .credit b{color:var(--grn);font-weight:600}
+  .credit button{background:none;border:1px solid var(--line);color:var(--dim);border-radius:4px;font-size:11px;padding:3px 10px;cursor:pointer;font-family:var(--sans)}
+  .credit #crMsg.ok{color:var(--grn)}
+  .credit #crMsg.new{color:var(--amb)}
+  .credit #crMsg.ng{color:var(--red)}
   .own-ico{width:14px;height:14px;border-radius:50%;background:var(--grn);border:2.5px solid #fff;box-shadow:0 0 10px rgba(56,224,123,.8)}
   .ac-ico svg{filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))}
   .ap-ico{font-family:var(--mono);font-size:9px;font-weight:600;color:#0a1420;background:var(--grn);border-radius:3px;padding:1px 3px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.5);opacity:.92}
@@ -573,7 +579,13 @@
   </div>
 </div>
 
-<footer>※ 開発中プロトタイプ。参考値であり正式な航法情報源としては使用不可。空域表示: 関東=AIP 2026-07-09現在の形状(タップで上下限・周波数)、関東以外=<b>サンプルデータの概略円</b>。<b>必ず最新のAIP・エンルートチャートで確認してください。</b>風向は真方位(°T)で入力(タワー/ATISの風は磁方位)。</footer>
+<footer>※ 開発中プロトタイプ。参考値であり正式な航法情報源としては使用不可。空域表示: 関東=AIP 2026-07-09現在の形状(タップで上下限・周波数)、関東以外=<b>サンプルデータの概略円</b>。<b>必ず最新のAIP・エンルートチャートで確認してください。</b>風向は真方位(°T)で入力(タワー/ATISの風は磁方位)。
+  <div class="credit">
+    <span>yasuokun-pro 飛行支援 <b id="crVer">—</b> <span id="crDate"></span></span>
+    <button id="btnVerChk">更新を確認</button>
+    <span id="crMsg"></span>
+  </div>
+</footer>
 
 <div id="printArea"></div>
 
@@ -607,8 +619,11 @@ const AD_FREQ={"RJAA":{"APP":"124.4","DEP":"124.2","TCA":"119.45","TWR":"118.2",
 const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,"RJAO":3,"RJAT":4,"RJAW":3,"RJAZ":3,"RJBB":5,"RJBD":5,"RJBE":5,"RJBM":4,"RJBT":5,"RJCA":0,"RJCB":0,"RJCC":0,"RJCH":0,"RJCJ":0,"RJCK":0,"RJCM":0,"RJCN":0,"RJCO":0,"RJCT":0,"RJCW":0,"RJDA":9,"RJDB":8,"RJDC":6,"RJDM":8,"RJDT":8,"RJEB":0,"RJEC":0,"RJEO":0,"RJER":0,"RJFA":8,"RJFC":9,"RJFE":8,"RJFF":8,"RJFG":9,"RJFH":8,"RJFK":9,"RJFM":9,"RJFN":9,"RJFO":8,"RJFR":8,"RJFS":8,"RJFT":9,"RJFU":8,"RJFY":9,"RJFZ":8,"RJGG":4,"RJKA":9,"RJKB":9,"RJKI":9,"RJKN":9,"RJNA":4,"RJNF":4,"RJNG":4,"RJNH":4,"RJNK":4,"RJNO":6,"RJNS":4,"RJNT":4,"RJNW":4,"RJNY":4,"RJOA":6,"RJOB":6,"RJOC":6,"RJOE":5,"RJOF":6,"RJOH":6,"RJOK":7,"RJOM":7,"RJOO":5,"RJOP":7,"RJOR":6,"RJOS":7,"RJOT":7,"RJOW":6,"RJOY":5,"RJOZ":6,"RJSA":1,"RJSC":1,"RJSD":4,"RJSF":1,"RJSH":1,"RJSI":1,"RJSK":1,"RJSM":1,"RJSN":4,"RJSO":1,"RJSR":1,"RJSS":1,"RJST":1,"RJSU":1,"RJSY":1,"RJTA":2,"RJTC":2,"RJTE":2,"RJTF":2,"RJTH":3,"RJTI":2,"RJTJ":2,"RJTK":2,"RJTL":2,"RJTO":3,"RJTQ":3,"RJTS":2,"RJTT":2,"RJTU":2,"RJTX":2,"ROAH":10,"ROIG":10,"ROKJ":10,"ROMD":10,"ROMY":10,"RORK":10,"RORS":10,"RORT":10,"RORY":9,"ROYN":10};
 /*IMOC_GEN_END*/
 
-/* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること */
-const VER_TAG='v6-94';
+/* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
+   ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
+     BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
+const VER_TAG='v6-95';
+const BUILD='2026-07-31';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -658,6 +673,38 @@ if('serviceWorker' in navigator){
     if(no)no.onclick=()=>document.getElementById('updBar').classList.remove('on');
   });
 }
+
+/* ── フッターのクレジット(今動いている版と、サーバ側が新しいかの確認) ──
+   ホーム画面のアプリはアドレスバーが無く、いつの版が動いているのか分からない。
+   ここに焼き込んだ VER_TAG/BUILD が「今動いている版」で、
+   「更新を確認」は sw.js を no-store で取り直して**サーバ側の版**と突き合わせる。
+   ⚠ 表示する版番号は必ず定数から出すこと。sw.jsから読むと
+     「サーバにある版」になってしまい、更新できているかの確認にならない */
+function crMsg(cls,txt){
+  const e=document.getElementById('crMsg');if(!e)return;
+  e.className=cls;e.textContent=txt;
+}
+async function checkUpdate(){
+  crMsg('','確認中…');
+  try{
+    const t=await (await fetch('sw.js',{cache:'no-store'})).text();
+    const m=t.match(/VER\s*=\s*'hnav-(v[\d-]+)'/);
+    const now=new Date(),hm=pad(now.getHours())+':'+pad(now.getMinutes());
+    if(!m){crMsg('ng','版番号を読めません');return}
+    if(m[1]===VER_TAG){crMsg('ok',`最新です (${hm} 確認)`);return}
+    crMsg('new',`新しい版 ${m[1]} があります`);
+    if(swReg)swReg.update().catch(()=>{});   // SWに拾わせてバナーを出す
+    showUpdBar(m[1]);
+  }catch(_){
+    crMsg('ng','確認できません(オフライン)');
+  }
+}
+window.addEventListener('DOMContentLoaded',()=>{
+  const v=document.getElementById('crVer');if(!v)return;
+  v.textContent=VER_TAG;
+  document.getElementById('crDate').textContent='('+BUILD+' 更新)';
+  document.getElementById('btnVerChk').onclick=checkUpdate;
+});
 
 /* ───────── 端末保存(localStorage / 使えない環境では自動で無効) ───────── */
 const store={
