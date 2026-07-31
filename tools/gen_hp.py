@@ -46,9 +46,10 @@ def parse_ad14(t, start, end, kind):
     for i, ln in enumerate(lines):
         m = re.search(r'\b(\d{6}(?:\.\d+)?)N\b', ln)
         if not m: continue
-        # 経度は同じ行か数行後ろに出る
+        # 経度は同じ行か数行後ろに出る。ホンダエアポートは**7行後**なので
+        # 窓を狭くすると落ちる(項目の間隔は20行程度あるので広げても混ざらない)
         lo = None
-        for j in range(i, min(i + 6, len(lines))):
+        for j in range(i, min(i + 9, len(lines))):
             g = re.search(r'\b(\d{7}(?:\.\d+)?)E\b', lines[j])
             if g: lo = g.group(1); break
         if not lo: continue
@@ -121,6 +122,13 @@ def main():
         k = (r['t'], round(r['lat'], 4), round(r['lng'], 4))
         if k in seen: continue
         seen.add(k); uniq.append(r)
+    # 英名は隣の項目から流れ込むことがある。同じ英名が続いたら後ろを消す
+    used = set()
+    for r in uniq:
+        e = r.get('en')
+        if not e: continue
+        if e in used: r.pop('en')
+        else: used.add(e)
 
     here = os.path.dirname(os.path.abspath(__file__))
     dst = os.path.join(here, '..', 'hp.json')
