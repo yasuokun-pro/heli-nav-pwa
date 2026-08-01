@@ -622,8 +622,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-95';
-const BUILD='2026-07-31';
+const VER_TAG='v6-96';
+const BUILD='2026-08-01';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1548,6 +1548,9 @@ function ovlPad(){ // 諸元パネルにかからないようfitBoundsへ余白�
 document.getElementById('btnZmNext').onclick=()=>{
   if(!wps.length){alert('ポイントがありません');return}
   const nx=wps[Math.min(nextIdx,wps.length-1)];
+  // ⚠ 追尾を切らないと、次のGPS更新(数秒後)で自機中心に引き戻されて
+  //   せっかく合わせた画角が一瞬で消える。ALLと同じく追尾は解除する
+  setFollow(false);
   if(ownPos)map.fitBounds(L.latLngBounds([[ownPos.lat,ownPos.lng],[nx.lat,nx.lng]]),ovlPad());
   else map.setView([nx.lat,nx.lng],12); // GPSなし時は次ポイント中心
 };
