@@ -217,16 +217,20 @@ def build(ring, pts, ctr=None):
 # exc=True は「下限の高度自体は含まない(EXC)」の意。
 SPEC = {
  'RJTY/ACA': dict(
-   jp='横田進入管制区', n='YOKOTA ACA', eff_note='図に下限の記載なし',
+   # ⚠ **図の数値は下限**。上限は図に無い。
+   #   横田の4区画は東京ACAの区画と**座標が完全に一致**していて(重なり100%)、
+   #   東京の図では同じ数値が「FL240 / 12000 (EXC 12000)」の下段=下限だった。
+   #   4区画すべてで一致するので読み違いではない。
+   jp='横田進入管制区', n='YOKOTA ACA', eff_note='図に上限の記載なし',
    outer=[1,2,3,4,5,10,11,12,17,19,20,21,22,9,6],
    sub=[
-     dict(n='FL230', up=23000, ring=[1,2,3,4,5,6]),
-     dict(n='FL180', up=18000, ring=[5,6,9,8,7]),
-     dict(n='FL160', up=16000, ring=[5,7,13,14,12,11,10]),
-     dict(n='12000', up=12000, ring=[7,8,16,15,14,13]),
+     dict(n='FL230', lo=23000, ring=[1,2,3,4,5,6]),
+     dict(n='FL180', lo=18000, ring=[5,6,9,8,7]),
+     dict(n='FL160', lo=16000, ring=[5,7,13,14,12,11,10]),
+     dict(n='12000', lo=12000, ring=[7,8,16,15,14,13]),
      # ⚠ (19)→(17)→(18) と回る。(17)を飛ばすと三角形(17)(18)(19)が抜ける
-     dict(n='8000',  up=8000,  ring=[8,9,22,21,20,19,17,18,15,16]),
-     dict(n='FL140', up=14000, ring=[14,15,18,17,12]),
+     dict(n='8000',  lo=8000,  ring=[8,9,22,21,20,19,17,18,15,16]),
+     dict(n='FL140', lo=14000, ring=[14,15,18,17,12]),
    ]),
 }
 
@@ -268,6 +272,36 @@ SPEC['RJTT/ACA'] = dict(
    #   ここに含まれる。前者はラベルが見当たらず、後者は4.7km²しかない。
    #   どちらも「下限の記載なし」として出すのが安全側
    remainder=dict(n='FL240', up=24000),
+)
+
+
+# 百里ACA。⚠ **33/42点が東京ACAと同一座標**で、南西の区画は東京ACAと同じもの。
+# 重複は最後の突合で自動的に落ちる(上下限が揃っている東京側を残す)。
+# 図の数値は**下限**(東京の図で同じ区画が「FL240 / nnnn (EXC nnnn)」の下段)。
+NRE49 = (35.7834, 140.3599)   # 「NRE 49NM」弧の中心。(33)(34)から各49NMで、
+                              # 弧が北へ膨らむ側から選んだ(成田の北西2km付近)
+RJAK5 = (36.03472, 140.19278) # 霞ヶ浦ARP(5NM弧)
+
+SPEC['RJAH/ACA'] = dict(
+   jp='百里進入管制区', n='HYAKURI ACA', eff_note='図に上限の記載なし',
+   ctr=NRE49,
+   outer=[23,36,35,39,41,40,30,31,19,17,15,6,5,3,2,11,10],
+   sub=[
+     dict(n='13000', lo=13000, ring=[36,35,39,38,37,34,{'arcp':(34,33)},33]),
+     dict(n='10000', lo=10000, ring=[33,{'arcp':(33,34)},34,27,28,29,25,26]),
+     dict(n='FL230', lo=23000, ring=[34,37,38,39,41,40,30,20,27]),
+     dict(n='7000',  lo=7000,  ring=[23,22,33,26,25,29,24,13,14,10]),
+     dict(n='8000(北)', lo=8000, ring=[29,28,27,20,21,24]),
+     dict(n='8000(東)', lo=8000, ring=[20,30,31,19]),
+     dict(n='6000',  lo=6000,  ring=[16,21,20,19,17,18]),
+     dict(n='5000',  lo=5000,  ring=[9,16,6,4]),
+     dict(n='4000(南)', lo=4000, ring=[16,18,17,15,6]),
+     dict(n='2500',  lo=2500,  ring=[4,6,5,3]),
+     dict(n='1800',  lo=1800,  ring=[2,1,4,3]),
+     dict(n='3000',  lo=3000,  ring=[{'arcp':(11,8),'c':RJAK5},7,1,2]),
+     dict(n='4000(北西)', lo=4000, ring=[10,14,13,12,7,8,11]),
+   ],
+   remainder=dict(n='(下限の記載なし)'),
 )
 
 
@@ -328,13 +362,49 @@ def main():
             print(f"    残り(下限記載なし) {sum(q.area for q in parts)*111.32**2/K:.0f} km² {len(parts)}片")
             for q in parts:
                 out.append(dict(n=sp['n'] + ' ' + rem['n'], jp=sp['jp'], k=kind, icao=icao,
-                                up=rem['up'], lo=None, rmk=sp.get('eff_note', ''),
+                                up=rem.get('up'), lo=rem.get('lo'), rmk=sp.get('eff_note', ''),
                                 pts=[[round(y, 6), round(x/K, 6)] for x, y in q.exterior.coords]))
         for s2 in sp['sub']:
             out.append(dict(n=sp['n'] + ' ' + s2['n'], jp=sp['jp'], k=kind, icao=icao,
-                            up=s2['up'], lo=s2.get('lo'), rmk=sp.get('eff_note', ''),
+                            up=s2.get('up'), lo=s2.get('lo'), rmk=sp.get('eff_note', ''),
                             pts=ring(s2['ring'])))
     if ng: print(f'{ng} 件を検算落ちで除外', file=sys.stderr)
+
+    # ── 図をまたいだ重複を落とす ────────────────────────────────
+    # 隣り合う進入管制区は境界を共有していて、**同じ区画が複数の図に載る**
+    # (百里ACAは42点中33点が東京ACAと同一座標、横田ACAは4区画が重なり100%)。
+    # 二重に描かないよう、**上下限が揃っている図を優先**して先に置き、
+    # 後の図はその差分だけを残す。⚠ 単純に捨てると、百里の7000のように
+    # 東京より北へ広い版が丸ごと消える(東京の図はそこで切れているだけ)。
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    K0 = math.cos(math.radians(36.0))
+    S0 = 111.32**2 / K0
+    def _pg(f): return Polygon([(b*K0, a) for a, b in f['pts']]).buffer(0)
+    score = lambda f: (f['up'] is not None) + (f['lo'] is not None)
+    order = sorted(range(len(out)), key=lambda i: (-score(out[i]), -_pg(out[i]).area))
+    keep, acc, drop, clip = [], None, 0, 0
+    for i in order:
+        g = _pg(out[i])
+        if g.area <= 0: continue
+        if acc is not None:
+            left = g.difference(acc)
+            if left.area < 0.05 * g.area:
+                drop += 1; continue                    # ほぼ丸ごと重複
+            if left.area < 0.999 * g.area:
+                cut = (g.area - left.area) * S0
+                print(f"  {out[i]['n']}: 既出と重なる {cut:.0f}km² を切り取り")
+                g = left; clip += 1
+        f = dict(out[i])
+        parts = [g] if g.geom_type == 'Polygon' else list(g.geoms)
+        for q in parts:
+            if q.area * S0 < 1.0: continue
+            r = dict(f); r['pts'] = [[round(y, 6), round(x/K0, 6)] for x, y in q.exterior.coords]
+            keep.append(r)
+        acc = q if acc is None else unary_union([acc, g])
+        acc = unary_union([acc, g])
+    if drop or clip: print(f'  重複: {drop} 件を除外 / {clip} 件を切り取り')
+    out = keep
 
     dst = os.path.join(here, '..', 'aca.json')
     eff = os.path.basename(os.path.dirname(base))
