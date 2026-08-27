@@ -76,6 +76,54 @@ def harvest(base):
     return out
 
 
+
+# ── チャートのジオリファレンス(区画を読むための補助) ─────────────────
+# 図の (1)(2)… ラベルは **pdftotext -bbox-layout でページ上の座標が取れる**。
+# 座標表の緯度経度と突き合わせるとアフィン変換が求まり、**真の点位置を図に
+# 打ち直した画像**が作れる。ラベルは点から少しずれて置かれるので、
+# ラベル位置のまま読むと密集部(東京ACAの(21)〜(30)付近)で必ず取り違える。
+#   使い方:
+#     pdftotext -bbox-layout -f <page> -l <page> RJTT__*.pdf out.html
+#     python3 tools/gen_aca.py --annot RJTT 27   → /tmp/aca_annot.png
+# 残差は5〜6pt程度出る(ラベルのオフセット分)。これ以上大きいときは
+# 座標表とラベルの対応がずれている。
+def annotate(icao, page, base):
+    """チャート画像に真の点位置を打った画像を作る(区画の読み取り用)"""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    pdf = glob.glob(os.path.join(base, icao + '__*.pdf'))[0]
+    subprocess.run(['pdftotext', '-bbox-layout', '-f', str(page), '-l', str(page),
+                    pdf, '/tmp/aca_bbox.html'], check=True)
+    h = open('/tmp/aca_bbox.html').read()
+    W = re.findall(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" '
+                   r'yMax="([\d.]+)">([^<]*)</word>', h)
+    lab = {}
+    for x0, y0, x1, y1, t in W:
+        m = re.fullmatch(r'\((\d{1,3})\)', t.strip())
+        if not m: continue
+        y = (float(y0) + float(y1)) / 2
+        if y > 560: continue          # 下部の座標一覧は図ではない
+        lab.setdefault(int(m.group(1)), ((float(x0)+float(x1))/2, y))
+    P = {int(k): v for k, v in
+         json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     'aca_points.json')))[icao + '/ACA'].items()}
+    ks = [k for k in lab if k in P]
+    A = np.array([[P[k][1], P[k][0], 1] for k in ks])
+    cx = np.linalg.lstsq(A, np.array([lab[k][0] for k in ks]), rcond=None)[0]
+    cy = np.linalg.lstsq(A, np.array([lab[k][1] for k in ks]), rcond=None)[0]
+    r = np.hypot(A@cx - [lab[k][0] for k in ks], A@cy - [lab[k][1] for k in ks])
+    print(f'  ジオリファレンス: {len(ks)}点 残差 平均{r.mean():.1f} 最大{r.max():.1f} pt')
+    subprocess.run(['pdftoppm', '-png', '-r', '420', '-f', str(page), '-l', str(page),
+                    pdf, '/tmp/aca_pg'], check=True)
+    png = sorted(glob.glob('/tmp/aca_pg-*.png'))[-1]
+    im = Image.open(png).convert('RGB'); d = ImageDraw.Draw(im); S = 420/72.0
+    for n, (la, lo) in P.items():
+        v = np.array([lo, la, 1.0]); x, y = float(v@cx)*S, float(v@cy)*S
+        d.ellipse([x-7, y-7, x+7, y+7], fill=(220, 0, 0))
+        d.text((x+9, y-22), str(n), fill=(0, 90, 220))
+    im.save('/tmp/aca_annot.png')
+    print('  → /tmp/aca_annot.png')
+
 # ── 図を見て起こした区画構成 ───────────────────────────────────────
 # ring は座標表の番号を結ぶ順。up/lo は ft(FLxxx は 100倍して入れる)。
 # exc=True は「下限の高度自体は含まない(EXC)」の意。
@@ -98,6 +146,9 @@ SPEC = {
 def main():
     base = ad2_dir()
     if not base: print('AIPのAD2フォルダが見つかりません', file=sys.stderr); sys.exit(1)
+    if '--annot' in sys.argv:
+        i = sys.argv.index('--annot')
+        annotate(sys.argv[i+1], int(sys.argv[i+2]), base); return
     here = os.path.dirname(os.path.abspath(__file__))
     cache = os.path.join(here, 'aca_points.json')
     if '--cache' in sys.argv and os.path.exists(cache):
