@@ -439,6 +439,7 @@
         <button id="btnNuke">原子力</button>
         <button id="btnTra" title="自衛隊低高度訓練/試験空域(AIP ENR 5.2.1)。SFCから上限まで・2200-1200UTC">低訓</button>
         <button id="btnCiv" title="民間訓練試験空域(AIP ENR 5.3.1)。使用にはATMセンターへの訓練計画提出が必要">民訓</button>
+        <button id="btnAca" title="進入管制区・ターミナルコントロールエリア(AIP AD 2.17添付図)。Class E。図から起こせた分のみ">進入</button>
         <button id="btnRes" title="制限空域・警戒区域(AIP ENR 5.1)。射撃・爆撃が行われる区域。多くはNOTAMで運用">制限</button>
         <button id="btnDid" title="人口集中地区(2020年国勢調査)。最低安全高度=600m以内の最高障害物+300m">DID</button>
       </div>
@@ -623,7 +624,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-98';
+const VER_TAG='v6-100';
 const BUILD='2026-08-27';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -1245,6 +1246,37 @@ async function loadTra(){
   });
   return TRA;
 }
+/* ── 進入管制区・TCA(AIP AD 2.17 添付チャート) ──
+   Class E の管制区。**上限しか図に無いものがある**ので、下限は持っていれば出し、
+   無ければ「図に記載なし」と正直に書く(勝手にGNDと決めない)。
+   ⚠ 図から起こせた空域だけを載せている。**載っていない=無い ではない** */
+let ACA=null,acaOn=false;
+const acaLayer=L.layerGroup(),ACA_COL='#7d8cff';
+async function loadAca(){
+  if(ACA)return ACA;
+  try{const r=await fetch('aca.json?v='+VER_TAG);ACA=await r.json()}catch(e){ACA={f:[]}}
+  ACA.f.forEach(f=>{
+    L.polygon(f.pts,{renderer:ovRenderer,color:ACA_COL,weight:2,dashArray:'7 5',
+      fillColor:ACA_COL,fillOpacity:.07})
+      .bindPopup(()=>{
+        const el=document.createElement('div');el.className='apPop';
+        el.innerHTML=`<h5 style="color:${ACA_COL}">${f.jp} ${f.n.split(' ').pop()}</h5>`+
+          `<dl><dt>空域</dt><dd>${f.k==='TCA'?'ターミナルコントロールエリア':'進入管制区'} (Class E)</dd>`+
+          `<dt>上限</dt><dd>${altTxt(f.up)}</dd>`+
+          `<dt>下限</dt><dd>${f.lo!==null&&f.lo!==undefined?altTxt(f.lo):'<span style="color:var(--dim)">図に記載なし(AIPで確認)</span>'}</dd>`+
+          `</dl><div class="note">AIP ${f.icao} AD 2.17 添付図${ACA.eff?' (EFF '+ACA.eff+')':''}。`+
+          `<b>図から起こせた空域のみ表示している。載っていない=無い ではない。</b></div>`;
+        return el;
+      }).addTo(acaLayer);
+  });
+  return ACA;
+}
+document.getElementById('btnAca').onclick=async function(){
+  acaOn=!acaOn;this.classList.toggle('on',acaOn);
+  if(acaOn){await loadAca();acaLayer.addTo(map)}else map.removeLayer(acaLayer);
+  restackOverlays();
+};
+
 /* ── 制限空域・警戒区域(AIP ENR 5.1) ──
    航空法80条の飛行制限区域(RJR)と、射撃・爆撃が行われる R-nnn / W-nnn。
    ⚠ **多くが「by NOTAM」運用**で、AIPだけでは実施中かどうか分からない。
@@ -1401,6 +1433,9 @@ function restackOverlays(){
     traLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof civLayer!=='undefined'&&map.hasLayer(civLayer))
     civLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
+  // 進入管制区は面が大きいので一番後ろ(他のレイヤーのタップを邪魔しない)
+  if(typeof acaLayer!=='undefined'&&map.hasLayer(acaLayer))
+    acaLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   // 制限空域は訓練空域より手前(進入可否に直結するのでタップを取らせる)
   if(typeof resLayer!=='undefined'&&map.hasLayer(resLayer))
     resLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
