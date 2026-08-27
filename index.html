@@ -401,7 +401,7 @@
   <button id="btnUndo" class="zbtn" title="操作を一つ戻す">↩</button>
   <button id="btnUiHide" class="zbtn" title="ボタン表示切替">👁</button>
   <div id="searchBar">
-    <input id="searchInput" type="search" placeholder="地名・住所・駅名を検索してEnter" autocomplete="off">
+    <input id="searchInput" type="search" placeholder="地名・住所・座標・GoogleマップのURLを貼ってEnter" autocomplete="off">
     <div id="searchResults"></div>
   </div>
   <div id="alertBar" title="タップで消音/解除"></div>
@@ -529,6 +529,12 @@
       <button class="btn sh" id="btnGpx">GPX書出</button>
       <button class="btn sh" id="btnJsonIn">JSON/GPX読込</button>
     </div>
+    <div class="grpHead">地点の取り込み<small>Googleマップ等から</small></div>
+    <div class="hint"><b>🔍検索窓に貼り付ければピンが立ちます。</b>地名・住所のほか、<b>緯度経度</b>(35.6586, 139.7454 / 35°39'31"N 139°44'43"E)と<b>GoogleマップのURL</b>に対応します。
+    <br><b>Googleマップからの手順</b>: 地点を長押し → 画面下に出る<b>緯度経度をタップしてコピー</b> → このアプリの🔍に貼り付け。
+    <br>※ <b>共有メニューにこのアプリは出せません</b>。共有先として選べるようにする仕組み(Web Share Target)は<b>iOSのSafariが対応していない</b>ためです。AndroidとパソコンのChromeでは共有先に出ます。
+    <br>※ 共有で得られる <span style="color:var(--amb)">maps.app.goo.gl</span> の短縮URLには<b>座標が入っていません</b>(開かないと分からない形式)。貼っても位置は出せないので、上の「座標をコピー」を使ってください。
+    <br>※ iPhoneで共有メニューから入れたい場合は、<b>ショートカット</b>アプリで「共有シートに表示」をONにしたショートカットを作り、<i>URLの内容を取得</i>→<i>テキストと一致</i>で座標を取り出し→<code>https://yasuokun-pro.github.io/heli-nav-pwa/?pt=緯度,経度</code> を開く、という流れにすると実現できます。</div>
     <div class="grpHead">引っ越し・バックアップ<small>保存物ぜんぶ</small></div>
     <div class="btnrow">
       <button class="btn sh" id="btnBk">端末データ書出</button>
@@ -624,7 +630,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-103';
+const VER_TAG='v6-105';
 const BUILD='2026-08-27';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -1555,7 +1561,7 @@ function openSearch(insertLeg){
   const inp=document.getElementById('searchInput');
   inp.placeholder=(searchInsertLeg!==null)
     ? `${searchInsertLeg+1}→${searchInsertLeg+2} の間に挿入する地点を検索`
-    : '地名・住所・駅名を検索してEnter';
+    : '地名・住所・座標・GoogleマップのURLを貼ってEnter';
   searchBar.style.display='block';
   document.getElementById('btnSearch').classList.add('on');
   document.getElementById('searchResults').innerHTML='';
@@ -1568,7 +1574,7 @@ function closeSearch(){
   document.getElementById('btnSearch').classList.remove('on');
   document.getElementById('searchResults').innerHTML='';
   searchInsertLeg=null;
-  document.getElementById('searchInput').placeholder='地名・住所・駅名を検索してEnter';
+  document.getElementById('searchInput').placeholder='地名・住所・座標・GoogleマップのURLを貼ってEnter';
 }
 document.getElementById('btnSearch').onclick=function(){
   if(searchBar.style.display==='block')closeSearch();else openSearch();
@@ -1589,10 +1595,78 @@ function showSearchResult(lat,lng,title){
   map.setView([lat,lng],Math.max(map.getZoom(),12));
   searchMarker.openPopup();
 }
+/* ── 貼り付けたテキストから緯度経度を取り出す ──
+   Googleマップの「共有」で得られるURLは形がいくつもある。優先順位が大事:
+     !3d..!4d..  … 地点そのものの座標。**一番正確なのでこれを最優先**
+     q= / ll= / daddr= … 明示的に指定された座標
+     @lat,lng    … **地図の中心**であって地点とは限らない(ズームで動く)ので最後
+   ⚠ https://maps.app.goo.gl/... の短縮URLには座標が入っていない。
+     リダイレクトを追う必要があるが、CORSでブラウザからは追えない。
+     → 短縮URLだと分かったら、その旨を出して別の手段を案内する */
+const SHORT_URL=/(maps\.app\.goo\.gl|goo\.gl\/maps)/i;
+function parseLatLng(t){
+  if(!t)return null;
+  t=t.replace(/　/g,' ');
+  const ok=(a,b)=>(a>=-90&&a<=90&&b>=-180&&b<=180&&(a||b))?{lat:a,lng:b}:null;
+  let m;
+  if((m=t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/)))
+    return ok(+m[1],+m[2]);
+  if((m=t.match(/[?&](?:q|ll|daddr|destination|center)=(?:loc:)?(-?\d+\.\d+)[,%2C\s]+(-?\d+\.\d+)/i)))
+    return ok(+m[1],+m[2]);
+  // 度分秒(35°39'31.0"N 139°44'43.4"E)。Googleマップの「座標をコピー」でも出る
+  if((m=t.match(/(\d+)[°\s]+(\d+)['′\s]+([\d.]+)["″\s]*([NS])[,\s]+(\d+)[°\s]+(\d+)['′\s]+([\d.]+)["″\s]*([EW])/i))){
+    const a=(+m[1]+ +m[2]/60+ +m[3]/3600)*(m[4].toUpperCase()==='S'?-1:1);
+    const b=(+m[5]+ +m[6]/60+ +m[7]/3600)*(m[8].toUpperCase()==='W'?-1:1);
+    return ok(a,b);
+  }
+  if((m=t.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)))
+    return ok(+m[1],+m[2]);
+  // 素の「35.6586, 139.7454」。URLの一部を拾わないよう、前後が数字でないこと
+  if((m=t.match(/(?:^|[^\d.\/])(-?\d{1,2}\.\d{3,})\s*[,\s]\s*(-?\d{2,3}\.\d{3,})(?![\d.])/)))
+    return ok(+m[1],+m[2]);
+  return null;
+}
+function nameFromShare(t){
+  if(!t)return '';
+  // 共有テキストは「名称\nURL」の形が多い。URLでない最初の行を名前にする
+  const ln=t.split(/[\n\r]+/).map(x=>x.trim())
+            .filter(x=>x&&!/^https?:\/\//.test(x)&&!/^\d+\.\d+/.test(x));
+  return (ln[0]||'').slice(0,24);
+}
+/* 共有・URLパラメータから来た地点にピンを立てる。
+   ?pt=lat,lng / ?q=lat,lng / 共有ターゲットの ?text=..&url=.. に対応 */
+function pinFromParams(){
+  let q;
+  try{q=new URLSearchParams(location.search)}catch(e){return}
+  const raw=[q.get('pt'),q.get('q'),q.get('url'),q.get('text'),q.get('title')]
+            .filter(Boolean).join('\n');
+  if(!raw)return;
+  const c=parseLatLng(raw);
+  if(c){
+    const nm=q.get('n')||nameFromShare(q.get('text')||q.get('title')||'')||'共有地点';
+    showSearchResult(c.lat,c.lng,nm);
+  }else if(SHORT_URL.test(raw)){
+    alert('Googleマップの短縮URL(maps.app.goo.gl)には座標が入っていないため、'+
+          'この形式では地点を取り出せません。\n\n'+
+          'Googleマップで地点を長押し→表示された緯度経度をコピーして、'+
+          '🔍検索窓に貼り付けてください。');
+  }
+  // 履歴からパラメータを消す(再読込で同じピンが復活しないように)
+  try{history.replaceState(null,'',location.pathname)}catch(e){}
+}
+
 document.getElementById('searchInput').onkeydown=async e=>{
   if(e.key!=='Enter')return;
   const q=e.target.value.trim();if(!q)return;
   const box=document.getElementById('searchResults');
+  // 座標やGoogleマップのURLを貼られたらジオコーダに投げず直接ピンを立てる
+  const c=parseLatLng(q);
+  if(c){const nm=nameFromShare(q)||'共有地点';const leg=searchInsertLeg;closeSearch();
+    if(leg!==null){const w=insertWpAt(leg,c.lat,c.lng,nm);
+      map.setView([c.lat,c.lng],Math.max(map.getZoom(),11));w.marker.openPopup()}
+    else showSearchResult(c.lat,c.lng,nm);
+    return}
+  if(SHORT_URL.test(q)){box.innerHTML='<div class="srItem">短縮URL(maps.app.goo.gl)には座標が入っていません。Googleマップで地点を長押しして緯度経度をコピーし、それを貼り付けてください。</div>';return}
   box.innerHTML='<div class="srItem">検索中…</div>';
   try{
     const res=await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q='+encodeURIComponent(q));
@@ -3302,6 +3376,7 @@ document.querySelectorAll('.tabs button').forEach(btn=>{
 /* ───────── 起動時復元 ───────── */
 (function init(){
   setScreen('main');applyHud(); // 起動はメイン(地図)画面+前回選んだ段
+  pinFromParams();               // 共有・URLパラメータで渡された地点にピン
   const va=store.get('hnav.varAuto');
   varAuto=(va===null||va===undefined)?true:!!va;
   document.getElementById('btnVarAuto').classList.toggle('on',varAuto);
