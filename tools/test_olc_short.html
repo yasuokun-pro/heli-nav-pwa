@@ -1,0 +1,66 @@
+<!doctype html><meta charset="utf-8"><title>OLC short test</title><pre id="o"></pre><script>
+const OLC_A='23456789CFGHJMPQRVWX', OLC_ROWS=5, OLC_COLS=4;
+function decodeOLC(code){
+  code=code.replace(/\+/,'').replace(/0+$/,'').toUpperCase();
+  if(code.length<2)return null;
+  for(const ch of code)if(OLC_A.indexOf(ch)<0)return null;
+  let lat=-90,lng=-180,res=20;
+  let i=0;
+  for(;i+1<code.length&&i<10;i+=2){
+    lat+=OLC_A.indexOf(code[i])*res;
+    lng+=OLC_A.indexOf(code[i+1])*res;
+    res/=20;
+  }
+  let latH=res*20, lngH=res*20;      // 直前のペアが表す升目の大きさ
+  for(let j=10;j<code.length&&j<15;j++){
+    latH/=OLC_ROWS; lngH/=OLC_COLS;
+    const n=OLC_A.indexOf(code[j]);
+    lat+=Math.floor(n/OLC_COLS)*latH;
+    lng+=(n%OLC_COLS)*lngH;
+  }
+  return {lat:lat+latH/2, lng:lng+lngH/2, latH:latH, lngH:lngH};
+}
+/* 短縮Plus Code(「MPX2+7C 港区」のように先頭が削られたもの)を基準点から復元する。
+   ⚠ 桁を繋ぐだけでは駄目。**基準点に一番近い升目を選ぶ調整**が要る。
+     これを省くと隣の升目(数km〜数十kmずれ)になる。
+     公式の shortCodeTests.csv で18件中13件が外れていた。 */
+function recoverOLC(short,rLat,rLng){
+  const n=short.indexOf('+');
+  if(n<0)return null;
+  const pad=8-n;                       // 削られた桁数(2/4/6/8)
+  if(pad<=0||pad%2)return null;
+  const res=Math.pow(20,2-pad/2), half=res/2;
+  const d=decodeOLC(encodeOLCPrefix(rLat,rLng,pad)+short);
+  if(!d)return null;
+  let lat=d.lat, lng=d.lng;
+  if(rLat+half<lat && lat-res>=-90)      lat-=res;
+  else if(rLat-half>lat && lat+res<=90)  lat+=res;
+  if(rLng+half<lng && lng-res>=-180)     lng-=res;
+  else if(rLng-half>lng && lng+res<=180) lng+=res;
+  return {lat:lat,lng:lng};
+}
+function encodeOLCPrefix(lat,lng,n){
+  let out='',la=lat+90,lo=lng+180,res=20;
+  for(let i=0;i<n/2;i++){
+    out+=OLC_A[Math.floor(la/res)%20]+OLC_A[Math.floor(lo/res)%20];
+    la-=Math.floor(la/res)*res; lo-=Math.floor(lo/res)*res; res/=20;
+  }
+  return out;
+}
+
+// parseLatLng と同じ振り分け(完全形は decodeOLC、短縮形は recoverOLC)
+function route(code,rLat,rLng){
+  code=code.toUpperCase();
+  return code.indexOf('+')<8 ? recoverOLC(code,rLat,rLng) : decodeOLC(code);
+}
+const CASES=[["9C3W9QCJ+2VX", 51.3701125, -1.217765625, "+2VX"], ["9C3W9QCJ+2VX", 51.3708675, -1.217765625, "CJ+2VX"], ["9C3W9QCJ+2VX", 51.3693575, -1.217765625, "CJ+2VX"], ["9C3W9QCJ+2VX", 51.3701125, -1.218520625, "CJ+2VX"], ["9C3W9QCJ+2VX", 51.3701125, -1.217010625, "CJ+2VX"], ["9C3W9QCJ+2VX", 51.3852125, -1.217765625, "9QCJ+2VX"], ["9C3W9QCJ+2VX", 51.3550125, -1.217765625, "9QCJ+2VX"], ["9C3W9QCJ+2VX", 51.3701125, -1.232865625, "9QCJ+2VX"], ["9C3W9QCJ+2VX", 51.3701125, -1.202665625, "9QCJ+2VX"], ["8FJFW222+", 42.899, 9.012, "22+"], ["796RXG22+", 14.95125, -23.5001, "22+"], ["8FVC2GGG+GG", 46.976, 8.526, "2GGG+GG"], ["8FRCXGGG+GG", 47.026, 8.526, "XGGG+GG"], ["8FR9GXGG+GG", 46.526, 8.026, "GXGG+GG"], ["8FRCG2GG+GG", 46.526, 7.976, "G2GG+GG"], ["CFX22222+22", 89.6, 0.0, "2222+22"], ["2CXXXXXX+XX", -81.0, 0.0, "XXXXXX+XX"], ["8FRCG2GG+GG", 46.526, 7.976, "8FRCG2GG+GG"], ["8FRCG2GG+GG", 46.526, 7.976, "8frCG2GG+gG"]];
+let ng=0,skip=0,lines=[];
+for(const [full,lat,lng,short] of CASES){
+  if(short.indexOf('+')<0){skip++;continue}
+  const got=route(short,lat,lng), want=decodeOLC(full);
+  if(!got||Math.abs(got.lat-want.lat)>1e-9||Math.abs(got.lng-want.lng)>1e-9){
+    ng++; if(lines.length<8)lines.push('NG '+short+' @'+lat+','+lng+' → '+(got?got.lat+','+got.lng:'null')+' 期待 '+want.lat+','+want.lng);
+  }
+}
+document.getElementById('o').textContent=lines.join('\n')+`\n短縮Plus Code ${CASES.length-skip}件中 ${ng}件 失敗 (対象外 ${skip}件)`;
+</script>
