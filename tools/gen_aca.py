@@ -124,6 +124,55 @@ def annotate(icao, page, base):
     im.save('/tmp/aca_annot.png')
     print('  → /tmp/aca_annot.png')
 
+# ── 円弧の扱い ────────────────────────────────────────────────────
+# リングの要素は 点番号(int) か、円弧を表す dict:
+#   {'arc':(中心lat,中心lon), 'r':半径NM, 'from':点番号 or 方位, 'to':同}
+#   {'cut':(中心lat,中心lon), 'r':半径NM, 'seg':(点番号,点番号)}  … 線分と円の交点
+NM_M = 1852.0
+
+def _brg(cla, clo, la, lo):
+    return math.degrees(math.atan2((lo-clo)*math.cos(math.radians(cla)), la-cla)) % 360
+
+def _arc(cla, clo, r_m, a0, a1, n=48):
+    if a1 < a0: a1 += 360
+    out = []
+    for i in range(n+1):
+        a = math.radians(a0 + (a1-a0)*i/n); d = r_m/111320.0
+        out.append([round(cla + d*math.cos(a), 6),
+                    round(clo + d*math.sin(a)/math.cos(math.radians(cla)), 6)])
+    return out
+
+def _cut(cla, clo, r_m, p1, p2):
+    """線分 p1-p2 と半径r_mの円の交点(片方が内側・片方が外側の前提)"""
+    dist = lambda p: math.hypot((p[0]-cla)*111320.0,
+                                (p[1]-clo)*111320.0*math.cos(math.radians(cla)))
+    a, b = 0.0, 1.0
+    for _ in range(60):
+        m = (a+b)/2
+        pm = (p1[0]+(p2[0]-p1[0])*m, p1[1]+(p2[1]-p1[1])*m)
+        if (dist(p1) < r_m) == (dist(pm) < r_m): a = m
+        else: b = m
+    m = (a+b)/2
+    return [round(p1[0]+(p2[0]-p1[0])*m, 6), round(p1[1]+(p2[1]-p1[1])*m, 6)]
+
+def build(ring, pts):
+    """SPECのリング指定を座標列にする"""
+    out = []
+    for e in ring:
+        if isinstance(e, int): out.append(list(pts[e])); continue
+        c = e['arc'] if 'arc' in e else e['cut']
+        r = e['r'] * NM_M
+        if 'cut' in e:
+            out.append(_cut(c[0], c[1], r, pts[e['seg'][0]], pts[e['seg'][1]])); continue
+        def ang(v):
+            if isinstance(v, (int,)) and v in pts: return _brg(c[0], c[1], *pts[v])
+            if isinstance(v, dict): return _brg(c[0], c[1], *_cut(c[0], c[1], r,
+                                       pts[v['seg'][0]], pts[v['seg'][1]]))
+            return float(v)
+        out += _arc(c[0], c[1], r, ang(e['from']), ang(e['to']))
+    return out
+
+
 # ── 図を見て起こした区画構成 ───────────────────────────────────────
 # ring は座標表の番号を結ぶ順。up/lo は ft(FLxxx は 100倍して入れる)。
 # exc=True は「下限の高度自体は含まない(EXC)」の意。
@@ -141,6 +190,46 @@ SPEC = {
      dict(n='FL140', up=14000, ring=[14,15,18,17,12]),
    ]),
 }
+
+
+RJAK_ARP = (36.03472, 140.19278)      # 霞ヶ浦飛行場ARP(3000区画の5NM弧の中心)
+TK15 = (36.4897, 139.8633)            # 362923N/1395148E(左上の15NM弧の中心)
+
+SPEC['RJTT/ACA'] = dict(
+   jp='東京進入管制区', n='TOKYO ACA', eff_note='',
+   outer=[7,6,42,47,55,54,48,39,17,18,16,5,4,3,2,15,14,58,57,56,59,8],
+   sub=[
+     dict(n='FL230', up=23000, ring=[1,2,3,4,5]),
+     dict(n='FL180', up=24000, lo=18000, ring=[59,8,50,56]),
+     dict(n='12000', up=24000, lo=12000, ring=[56,50,51,52,58,57]),
+     dict(n='8000(西)', up=24000, lo=8000, ring=[50,8,9,10,11,12,13,53,52,51]),
+     dict(n='FL140', up=24000, lo=14000, ring=[58,52,53,13,14]),
+     # 左上は 15NM弧で切られた (7) の楔
+     dict(n='4000(北西)', up=24000, lo=4000, ring=[
+        7, {'cut':TK15,'r':15,'seg':(7,6)},
+        {'arc':TK15,'r':15,'from':{'seg':(7,6)},'to':{'seg':(7,8)}},
+        {'cut':TK15,'r':15,'seg':(7,8)}]),
+     dict(n='7000', up=24000, lo=7000, ring=[6,42,46,45,44,43,41,35,36,29]),
+     dict(n='10000', up=24000, lo=10000, ring=[46,47,55,54,48,49,43,44,45]),
+     # ⚠ 8000(EXC 8000)のラベルは引き出し線が2本あり、離れた2区画を指す
+     dict(n='8000(東A)', up=24000, lo=8000, ring=[43,49,48,39,40,41]),
+     dict(n='8000(東B)', up=24000, lo=8000, ring=[39,17,19,20]),
+     dict(n='6000', up=24000, lo=6000, ring=[37,40,39,20,21,38]),
+     dict(n='4000(東)', up=24000, lo=4000, ring=[37,38,21,22,23]),
+     dict(n='5000', up=24000, lo=5000, ring=[33,37,23,30]),
+     dict(n='2500', up=24000, lo=2500, ring=[30,23,24,25]),
+     dict(n='1800', up=24000, lo=1800, ring=[26,27,30,25]),
+     # 3000は霞ヶ浦ARPから5NMの弧。(28)と(32)は弧の上、(31)は弧の外
+     dict(n='3000', up=24000, lo=3000, ring=[
+        {'arc':RJAK_ARP,'r':5,'from':28,'to':32}, 31, 27, 26]),
+     dict(n='4000(中央)', up=24000, lo=4000, ring=[29,36,35,34,31,32,28]),
+   ],
+   # 残り(外形から上の区画を引いたもの)。下限の記載が無い「FL240」の区域。
+   # ⚠ (35)(41)(40)(37)(33)(34)で囲まれるセルと、(46)(47)(55)の小片(13000)も
+   #   ここに含まれる。前者はラベルが見当たらず、後者は4.7km²しかない。
+   #   どちらも「下限の記載なし」として出すのが安全側
+   remainder=dict(n='FL240', up=24000),
+)
 
 
 def main():
@@ -164,19 +253,47 @@ def main():
     for key, sp in SPEC.items():
         pts = {int(a): b for a, b in P.get(key, {}).items()}
         if not pts: print(f'  ⚠ {key} の座標表が無い', file=sys.stderr); ng += 1; continue
-        ring = lambda r: [list(pts[i]) for i in r]
+        ring = lambda r: build(r, pts)
         oa = sph_area(ring(sp['outer']))
         tot = sum(sph_area(ring(s['ring'])) for s in sp['sub'])
-        d = abs(tot - oa) / oa * 100
-        print(f"  {key}: 副区画{len(sp['sub'])} 合計{tot:.1f} / 外形{oa:.1f} km² 差{d:.4f}%")
-        if d > 0.01:
-            print(f'  ⚠ {key} は区画の読み違い(合計が外形と一致しない)', file=sys.stderr)
-            ng += 1; continue
+        rem = sp.get('remainder')
         icao, kind = key.split('/')
-        for s in sp['sub']:
-            out.append(dict(n=sp['n'] + ' ' + s['n'], jp=sp['jp'], k=kind, icao=icao,
-                            up=s['up'], lo=s.get('lo'), rmk=sp.get('eff_note', ''),
-                            pts=ring(s['ring'])))
+        if not rem:
+            d = abs(tot - oa) / oa * 100
+            print(f"  {key}: 副区画{len(sp['sub'])} 合計{tot:.1f} / 外形{oa:.1f} km² 差{d:.4f}%")
+            if d > 0.01:
+                print(f'  ⚠ {key} は区画の読み違い(合計が外形と一致しない)', file=sys.stderr)
+                ng += 1; continue
+        else:
+            # 残りは外形から引いて作る。**区画同士が重なっていないこと**を
+            # shapelyで確かめる(合計面積の一致だけでは、どこが違うか分からない)
+            from shapely.geometry import Polygon
+            from shapely.ops import unary_union
+            K = math.cos(math.radians(pts[list(pts)[0]][0]))
+            pl = lambda r: Polygon([(b*K, a) for a, b in ring(r)]).buffer(0)
+            gs = [pl(s['ring']) for s in sp['sub']]
+            ov = 0.0
+            for i in range(len(gs)):
+                for j in range(i+1, len(gs)):
+                    ov = max(ov, gs[i].intersection(gs[j]).area * 111.32**2 / K)
+            og = pl(sp['outer'])
+            outside = unary_union(gs).difference(og).area * 111.32**2 / K
+            print(f"  {key}: 副区画{len(sp['sub'])} 合計{tot:.1f}/外形{oa:.1f} km² "
+                  f"最大重なり{ov:.1f} 外形はみ出し{outside:.1f} km²")
+            if ov > 2.0 or outside > 2.0:
+                print(f'  ⚠ {key} は区画の読み違い', file=sys.stderr); ng += 1; continue
+            r = og.difference(unary_union(gs))
+            parts = [r] if r.geom_type == 'Polygon' else list(r.geoms)
+            parts = [q for q in parts if q.area * 111.32**2 / K > 1.0]
+            print(f"    残り(下限記載なし) {sum(q.area for q in parts)*111.32**2/K:.0f} km² {len(parts)}片")
+            for q in parts:
+                out.append(dict(n=sp['n'] + ' ' + rem['n'], jp=sp['jp'], k=kind, icao=icao,
+                                up=rem['up'], lo=None, rmk=sp.get('eff_note', ''),
+                                pts=[[round(y, 6), round(x/K, 6)] for x, y in q.exterior.coords]))
+        for s2 in sp['sub']:
+            out.append(dict(n=sp['n'] + ' ' + s2['n'], jp=sp['jp'], k=kind, icao=icao,
+                            up=s2['up'], lo=s2.get('lo'), rmk=sp.get('eff_note', ''),
+                            pts=ring(s2['ring'])))
     if ng: print(f'{ng} 件を検算落ちで除外', file=sys.stderr)
 
     dst = os.path.join(here, '..', 'aca.json')
