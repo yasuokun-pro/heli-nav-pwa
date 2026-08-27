@@ -439,6 +439,7 @@
         <button id="btnNuke">原子力</button>
         <button id="btnTra" title="自衛隊低高度訓練/試験空域(AIP ENR 5.2.1)。SFCから上限まで・2200-1200UTC">低訓</button>
         <button id="btnCiv" title="民間訓練試験空域(AIP ENR 5.3.1)。使用にはATMセンターへの訓練計画提出が必要">民訓</button>
+        <button id="btnRes" title="制限空域・警戒区域(AIP ENR 5.1)。射撃・爆撃が行われる区域。多くはNOTAMで運用">制限</button>
         <button id="btnDid" title="人口集中地区(2020年国勢調査)。最低安全高度=600m以内の最高障害物+300m">DID</button>
       </div>
     </div>
@@ -622,8 +623,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-96';
-const BUILD='2026-08-01';
+const VER_TAG='v6-98';
+const BUILD='2026-08-27';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1244,6 +1245,44 @@ async function loadTra(){
   });
   return TRA;
 }
+/* ── 制限空域・警戒区域(AIP ENR 5.1) ──
+   航空法80条の飛行制限区域(RJR)と、射撃・爆撃が行われる R-nnn / W-nnn。
+   ⚠ **多くが「by NOTAM」運用**で、AIPだけでは実施中かどうか分からない。
+     ポップアップでも必ずNOTAM確認を促すこと(消さないこと)。
+   RJRは進入そのものが制限される区域なので、他のレイヤーより強い赤で描く */
+let RES=null,resOn=false;
+const resLayer=L.layerGroup(),RES_COL='#ff4d4d',RES_COL2='#ff9f43';
+function altTxt(v){return v===null||v===undefined?'UNL':(v>=18000?'FL'+(v/100):v.toLocaleString()+'ft')}
+async function loadRes(){
+  if(RES)return RES;
+  try{const r=await fetch('res.json?v='+VER_TAG);RES=await r.json()}catch(e){RES={f:[]}}
+  RES.f.forEach(f=>{
+    const rjr=f.k==='RJR',col=rjr?RES_COL:RES_COL2;
+    L.polygon(f.pts,{renderer:ovRenderer,color:col,weight:2,
+      dashArray:rjr?null:'6 4',fillColor:col,fillOpacity:rjr?.18:.1})
+      .bindPopup(()=>{
+        const el=document.createElement('div');el.className='apPop';
+        el.innerHTML=`<h5 style="color:${col}">${rjr?'飛行制限区域':'制限空域'} ${f.n}</h5>`+
+          `<dl>`+(f.jp?`<dt>名称</dt><dd>${f.jp}</dd>`:'')+
+          `<dt>高度</dt><dd>${altTxt(f.lo)} — ${altTxt(f.up)}</dd>`+
+          (f.hr?`<dt>実施時間</dt><dd>${f.hr}${/\d{4}-\d{4}/.test(f.hr)?' (UTC)':''}</dd>`:'')+
+          (f.res?`<dt>種別</dt><dd>${f.res}</dd>`:'')+
+          (f.rmk?`<dt>備考</dt><dd>${f.rmk}</dd>`:'')+`</dl>`+
+          `<div class="note">AIP ENR 5.1${RES.eff?' (EFF '+RES.eff+')':''}。`+
+          (rjr?'<b>航空法80条により飛行が制限された区域</b>。'
+              :'射撃・爆撃等が行われる区域。')+
+          `${/NOTAM|AIP SUP/.test(f.hr)?'<b>実施はNOTAMで公示されるので必ず確認すること。</b>':''}</div>`;
+        return el;
+      }).addTo(resLayer);
+  });
+  return RES;
+}
+document.getElementById('btnRes').onclick=async function(){
+  resOn=!resOn;this.classList.toggle('on',resOn);
+  if(resOn){await loadRes();resLayer.addTo(map)}else map.removeLayer(resLayer);
+  restackOverlays();
+};
+
 document.getElementById('btnTra').onclick=async function(){
   traOn=!traOn;this.classList.toggle('on',traOn);
   if(traOn){await loadTra();traLayer.addTo(map)}else map.removeLayer(traLayer);
@@ -1362,6 +1401,9 @@ function restackOverlays(){
     traLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof civLayer!=='undefined'&&map.hasLayer(civLayer))
     civLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
+  // 制限空域は訓練空域より手前(進入可否に直結するのでタップを取らせる)
+  if(typeof resLayer!=='undefined'&&map.hasLayer(resLayer))
+    resLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof aspLayer!=='undefined'&&map.hasLayer(aspLayer))
     aspLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof jsdfLayer!=='undefined'&&map.hasLayer(jsdfLayer))
