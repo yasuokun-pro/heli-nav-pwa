@@ -87,7 +87,7 @@ def harvest(base):
 #     python3 tools/gen_aca.py --annot RJTT 27   → /tmp/aca_annot.png
 # 残差は5〜6pt程度出る(ラベルのオフセット分)。これ以上大きいときは
 # 座標表とラベルの対応がずれている。
-def annotate(icao, page, base):
+def annotate(icao, page, base, kind='ACA'):
     """チャート画像に真の点位置を打った画像を作る(区画の読み取り用)"""
     import numpy as np
     from PIL import Image, ImageDraw
@@ -106,13 +106,15 @@ def annotate(icao, page, base):
         lab.setdefault(int(m.group(1)), ((float(x0)+float(x1))/2, y))
     P = {int(k): v for k, v in
          json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                     'aca_points.json')))[icao + '/ACA'].items()}
+                                     'aca_points.json')))[icao + '/' + kind].items()}
     ks = [k for k in lab if k in P]
     A = np.array([[P[k][1], P[k][0], 1] for k in ks])
     cx = np.linalg.lstsq(A, np.array([lab[k][0] for k in ks]), rcond=None)[0]
     cy = np.linalg.lstsq(A, np.array([lab[k][1] for k in ks]), rcond=None)[0]
     r = np.hypot(A@cx - [lab[k][0] for k in ks], A@cy - [lab[k][1] for k in ks])
     print(f'  ジオリファレンス: {len(ks)}点 残差 平均{r.mean():.1f} 最大{r.max():.1f} pt')
+    # ⚠ 前回の画像が残っていると sorted()[-1] が別ページを拾う。毎回消すこと
+    for old in glob.glob('/tmp/aca_pg-*.png'): os.remove(old)
     subprocess.run(['pdftoppm', '-png', '-r', '420', '-f', str(page), '-l', str(page),
                     pdf, '/tmp/aca_pg'], check=True)
     png = sorted(glob.glob('/tmp/aca_pg-*.png'))[-1]
@@ -155,11 +157,48 @@ def _cut(cla, clo, r_m, p1, p2):
     m = (a+b)/2
     return [round(p1[0]+(p2[0]-p1[0])*m, 6), round(p1[1]+(p2[1]-p1[1])*m, 6)]
 
-def build(ring, pts):
+# ── 同心円弧の空域(百里TCA型) ──────────────────────────────────────
+# 百里TCAは **中心Cのまわりの同心円弧(5/6/9/12/14.8/19/24/30NM)と放射線**で
+# 組まれている。⚠ 中心はAD 2.17のARPではない。30NM弧上の4点
+# (28)(29)(18)(20) に円を当てはめると **残差0.00NMで (36.1900,140.4161)** に
+# なる(ARPより0.5NM北)。ARPを中心にすると点が±0.7NMずれて弧が合わない。
+# リング要素 {'arcp':(a,b)} は「点aから点bへ、Cを中心とする弧」。
+# ⚠ 半径は2点の実測値を線形補間する。公称値(例:12NM)に丸めると
+#   AIPの頂点座標から最大0.34NMずれるので、頂点は必ず実測値を通す。
+#   隣り合う区画は同じ弧を共有するので、これで面積の一致も保たれる。
+
+def _rb(c, p):
+    la1, lo1, la2, lo2 = map(math.radians, [c[0], c[1], p[0], p[1]])
+    d = 2*math.asin(math.sqrt(math.sin((la2-la1)/2)**2 +
+        math.cos(la1)*math.cos(la2)*math.sin((lo2-lo1)/2)**2)) * 6371008.8
+    y = math.sin(lo2-lo1)*math.cos(la2)
+    x = math.cos(la1)*math.sin(la2)-math.sin(la1)*math.cos(la2)*math.cos(lo2-lo1)
+    return d, math.degrees(math.atan2(y, x)) % 360
+
+def _pt(c, d_m, b):
+    la = math.radians(c[0]); dr = d_m/6371008.8; br = math.radians(b)
+    la2 = math.asin(math.sin(la)*math.cos(dr)+math.cos(la)*math.sin(dr)*math.cos(br))
+    lo2 = math.radians(c[1]) + math.atan2(math.sin(br)*math.sin(dr)*math.cos(la),
+                                          math.cos(dr)-math.sin(la)*math.sin(la2))
+    return [round(math.degrees(la2), 6), round(math.degrees(lo2), 6)]
+
+def _arcp(c, p1, p2, n=40):
+    r1, b1 = _rb(c, p1); r2, b2 = _rb(c, p2)
+    d = (b2-b1) % 360
+    if d > 180: d -= 360           # 短い方に回る
+    return [_pt(c, r1+(r2-r1)*i/n, b1+d*i/n) for i in range(n+1)]
+
+
+def build(ring, pts, ctr=None):
     """SPECのリング指定を座標列にする"""
     out = []
     for e in ring:
         if isinstance(e, int): out.append(list(pts[e])); continue
+        if 'arcp' in e:
+            a, b = e['arcp']
+            pa = pts[a] if isinstance(a, int) else a
+            pb = pts[b] if isinstance(b, int) else b
+            out += _arcp(e.get('c', ctr), pa, pb); continue
         c = e['arc'] if 'arc' in e else e['cut']
         r = e['r'] * NM_M
         if 'cut' in e:
@@ -237,7 +276,8 @@ def main():
     if not base: print('AIPのAD2フォルダが見つかりません', file=sys.stderr); sys.exit(1)
     if '--annot' in sys.argv:
         i = sys.argv.index('--annot')
-        annotate(sys.argv[i+1], int(sys.argv[i+2]), base); return
+        k = sys.argv[i+3] if len(sys.argv) > i+3 else 'ACA'
+        annotate(sys.argv[i+1], int(sys.argv[i+2]), base, k); return
     here = os.path.dirname(os.path.abspath(__file__))
     cache = os.path.join(here, 'aca_points.json')
     if '--cache' in sys.argv and os.path.exists(cache):
@@ -253,7 +293,7 @@ def main():
     for key, sp in SPEC.items():
         pts = {int(a): b for a, b in P.get(key, {}).items()}
         if not pts: print(f'  ⚠ {key} の座標表が無い', file=sys.stderr); ng += 1; continue
-        ring = lambda r: build(r, pts)
+        ring = lambda r: build(r, pts, sp.get('ctr'))
         oa = sph_area(ring(sp['outer']))
         tot = sum(sph_area(ring(s['ring'])) for s in sp['sub'])
         rem = sp.get('remainder')
