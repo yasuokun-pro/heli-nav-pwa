@@ -86,7 +86,18 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 | 諸元オーバーレイ | 段ごとに表示/非表示を選べる(ハンドルの 時刻/NEXT/ROUTE チップ)。▴▾は選択を保持したまま全部たたむ | `hud` `applyHud()` `setHudOff()` |
 | バージョン表示 | フッターのクレジットに動作中の版と更新日。「更新を確認」でサーバのsw.jsと突合 | `VER_TAG` `BUILD` `checkUpdate()` |
 | 地点の取り込み | 🔍検索窓に座標/GoogleマップURLを貼るとピン。`?pt=lat,lng&n=名前` や共有ターゲットの `?text=&url=` でも立つ | `parseLatLng()` `pinFromParams()` |
+| 元に戻す(↩) | ルートを変える操作の**直前**に `pushUndo()`。40件まで。同じ状態は積まない | `undoStack` `pushUndo()` `doUndo()` |
 | 永続化 | ルート・設定・ログ・ベース地図選択を自動保存/起動時復元 | `store` `saveState()` `init()` |
+
+### UI上の注意
+- **iOSはボタンのダブルタップで画面が拡大する**。viewportに
+  `maximum-scale=1.0, user-scalable=no` を入れ、UI側に `touch-action:manipulation` を当てて止めてある。
+  ⚠ 地図(`.leaflet-container`)はLeafletが自前で `touch-action:none` を持つので影響を受けない。
+    地図のピンチズーム・ダブルタップズームはLeafletのJSが処理していて生きている
+- ⚠ **ルートを変える操作には必ず `pushUndo()` を入れること**。
+  入れ忘れると「戻るボタンが効かない」という形で出る。実際に
+  マーカーのドラッグ・行からの削除・改名・各ポップアップの「ルート追加」で
+  抜けていた(7箇所)。`addWp(` `wps.splice` `w.name=` を触るときは必ず確認する
 
 ## 5. 計算仕様(変更時は要注意)
 

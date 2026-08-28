@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0a1420">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -20,6 +20,13 @@
     --sans:'Noto Sans JP',sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  /* ⚠ iOSはボタンをダブルタップすると画面を拡大してしまう。
+     地図以外のUIでは起きてほしくないので manipulation で殺す。
+     地図(.leaflet-container)はLeafletが自前で touch-action を持つので影響しない。
+     文字の自動拡大(-webkit-text-size-adjust)も切る。 */
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+  body,header,footer,.panel,.strip,#ovl,#ovlHandle,.zbtn,button,input,select,textarea,
+  .mtGrp,.mtSub,.tabs,.btnrow,.logwrap{touch-action:manipulation}
   html,body{height:100%}
   body{background:var(--bg);color:var(--txt);font-family:var(--sans);display:flex;flex-direction:column}
 
@@ -638,7 +645,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-107';
+const VER_TAG='v6-108';
 const BUILD='2026-08-27';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -973,7 +980,7 @@ NAVAIDS.forEach(a=>{
       <dt>位置</dt><dd>${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}</dd></dl>
     <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>`;
   el.querySelector('.apDct').onclick=()=>{setDct({name:a.id,lat:a.lat,lng:a.lng,isWp:false});mk.closePopup()};
-  el.querySelector('.add').onclick=()=>{addWp(a.lat,a.lng,a.id);redraw();mk.closePopup()};
+  el.querySelector('.add').onclick=()=>{pushUndo();addWp(a.lat,a.lng,a.id);redraw();mk.closePopup()};
   mk.bindPopup(el);mk.addTo(navLayer);
 });
 let navOn=false;
@@ -1093,7 +1100,7 @@ async function loadJsdf(){
       el.querySelector('.apDct').onclick=()=>{
         setDct({name:f.n,lat:f.lat,lng:f.lng,isWp:false});map.closePopup()};
       el.querySelector('.add').onclick=()=>{
-        addWp(f.lat,f.lng,f.n);redraw();map.closePopup()};
+        pushUndo();addWp(f.lat,f.lng,f.n);redraw();map.closePopup()};
       return el;
     };
     // 外形があれば描く。外形の有無にかかわらずピンは必ず立てる(一目で分かるように)
@@ -1159,7 +1166,7 @@ async function loadNuke(){
       el.querySelector('.apDct').onclick=()=>{
         setDct({name:nm,lat:c[0],lng:c[1],isWp:false});map.closePopup()};
       el.querySelector('.add').onclick=()=>{
-        addWp(c[0],c[1],nm);redraw();map.closePopup()};
+        pushUndo();addWp(c[0],c[1],nm);redraw();map.closePopup()};
       return el;
     };
     L.polygon(f.pts,{renderer:nukeRenderer,color:NK_COL,weight:2,dashArray:'6 3',
@@ -1429,7 +1436,7 @@ async function loadHp(){
         el.querySelector('.apDct').onclick=()=>{
           setDct({name:x.n||x.en||'HP',lat:x.lat,lng:x.lng,isWp:false});map.closePopup()};
         el.querySelector('.add').onclick=()=>{
-          addWp(x.lat,x.lng,x.n||x.en||'HP');redraw();map.closePopup()};
+          pushUndo();addWp(x.lat,x.lng,x.n||x.en||'HP');redraw();map.closePopup()};
         return el;
       }).addTo(hpLayer);
   });
@@ -1596,7 +1603,7 @@ function showSearchResult(lat,lng,title){
     <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>
     <div class="row"><button class="sv">★お気に入り保存</button><button class="cl">ピンを消す</button></div>`;
   el.querySelector('.apDct').onclick=()=>{setDct({name:title,lat,lng,isWp:false});searchMarker.closePopup()};
-  el.querySelector('.add').onclick=()=>{addWp(lat,lng,title);redraw();searchMarker.closePopup()};
+  el.querySelector('.add').onclick=()=>{pushUndo();addWp(lat,lng,title);redraw();searchMarker.closePopup()};
   el.querySelector('.sv').onclick=()=>{savePoint(title,lat,lng);searchMarker.closePopup()};
   el.querySelector('.cl').onclick=()=>{map.removeLayer(searchMarker);searchMarker=null};
   searchMarker.bindPopup(el).addTo(map);
@@ -2002,7 +2009,7 @@ ASP.forEach(a=>{
         :'※標高・滑走路はサンプル'}。`+
       `METARは実データ(参考)。必ずAIP/最新情報で確認</div>`;
     el.querySelector('.apDct').onclick=()=>{setDct({name:a.icao,lat:a.lat,lng:a.lng,isWp:false});mk.closePopup()};
-    el.querySelector('.add').onclick=()=>{addWp(a.lat,a.lng,a.icao);redraw();mk.closePopup()};
+    el.querySelector('.add').onclick=()=>{pushUndo();addWp(a.lat,a.lng,a.icao);redraw();mk.closePopup()};
     loadMetar(); // 最新METARを取りに行き、取れたらスロットを差し替え
     return el;
   });
@@ -2104,8 +2111,12 @@ function syncWpIcons(){wps.forEach((w,k)=>{
 
 /* ── 元に戻す(ルート操作の履歴) ── */
 const undoStack=[];
-function pushUndo(){ // 変更前のルートを退避(追加/削除/並べ替え/読込/クリアの直前に呼ぶ)
-  undoStack.push({wp:wps.map(w=>[w.lat,w.lng,w.name]),seq:wpSeq});
+function pushUndo(){ // 変更前のルートを退避(追加/削除/移動/改名/並べ替え/読込/クリアの直前に呼ぶ)
+  const snap={wp:wps.map(w=>[w.lat,w.lng,w.name]),seq:wpSeq};
+  const top=undoStack[undoStack.length-1];
+  // 変化が無いものは積まない(名称欄にフォーカスしただけ等で空振りが溜まる)
+  if(top&&top.seq===snap.seq&&JSON.stringify(top.wp)===JSON.stringify(snap.wp))return;
+  undoStack.push(snap);
   if(undoStack.length>40)undoStack.shift();
   const b=document.getElementById('btnUndo');if(b)b.disabled=false;
 }
@@ -2126,7 +2137,7 @@ function addWp(lat,lng,name,at){ // at を渡すとその位置へ挿入、省�
   else{wpSeq++;name='WP'+wpSeq;}
   const marker=L.marker([lat,lng],{icon:wpIcon(wps.length+1,false,false),draggable:true,bubblingMouseEvents:false}).addTo(map);
   const w={name,lat,lng,marker,isWp:true};
-  marker.on('dragstart',()=>{w.dragging=true});
+  marker.on('dragstart',()=>{pushUndo();w.dragging=true}); // 動かす前の位置を退避
   marker.on('drag',ev=>{w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw()});
   marker.on('dragend',()=>{w.dragging=false;redraw()});
   marker.bindPopup(()=>{ // タップで名称+操作(D→/★/削除)。長押しはドラッグ移動専用
@@ -2350,11 +2361,12 @@ function redraw(){
       <td${nvCls}>${F.f1}</td><td${nvCls}>${F.f2}</td>
       <td class="cNum rem">${rD}</td>
       <td class="cNum rem">${rH}</td><td class="cNum rem"></td><td class="cNum rem">${rF}</td>`;
+    b.querySelector('input').onfocus=()=>pushUndo(); // 改名の前を退避(同じ状態は積まれない)
     b.querySelector('input').oninput=e=>{w.name=e.target.value;syncWpIcons();saveState()};
     a.querySelector('.del').onclick=()=>{
       pushUndo();
       if(dctTarget===w)clearDct();
-      map.removeLayer(w.marker);wps.splice(i,1);redraw()};
+      pushUndo();map.removeLayer(w.marker);wps.splice(i,1);redraw()};
     a.querySelector('.dct').onclick=()=>{dctTarget===w?clearDct():setDct(w)}; // 2回目で解除
     const insBtn=a.querySelector('.ins');
     if(insBtn)insBtn.onclick=()=>openSearch(i); // 検索で選んだ地点をこの区間に挿入
@@ -2480,7 +2492,7 @@ function rebuildLibLayer(){
     el.innerHTML=`<h5 style="color:${p.color}">${p.icon} ${p.name}</h5>
       <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>`;
     el.querySelector('.apDct').onclick=()=>{setDct({name:p.name,lat:p.lat,lng:p.lng,isWp:false});mk.closePopup()};
-    el.querySelector('.add').onclick=()=>{addWp(p.lat,p.lng,p.name);redraw();mk.closePopup()};
+    el.querySelector('.add').onclick=()=>{pushUndo();addWp(p.lat,p.lng,p.name);redraw();mk.closePopup()};
     mk.bindPopup(el);mk.addTo(libLayer);
   });
   libRtsGet().forEach(r=>{
