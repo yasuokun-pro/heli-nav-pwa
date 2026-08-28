@@ -116,6 +116,12 @@
   .wp-pin{width:26px;height:26px;border-radius:50%;background:#fff;border:2.5px solid var(--mag);color:#8a0f7c;font-family:var(--mono);font-weight:700;font-size:13px;line-height:21px;text-align:center;box-shadow:0 1px 5px rgba(0,0,0,.55)}
   .wp-pin.dctOn{border-color:#0a7c8c;background:var(--cyn);color:#04222a}
   .wp-pin.nextOn{border-color:#0e7c3d;background:var(--grn);color:#03270f;box-shadow:0 0 10px rgba(56,224,123,.9)}
+  /* 移動できる状態(長押しで解錠)。触っただけでは動かないので、
+     解錠したことが一目で分かるよう色と大きさを変える */
+  .wp-pin.armed{border-color:#b06800;background:var(--amb);color:#3a2200;
+    transform:scale(1.35);box-shadow:0 0 0 4px rgba(255,176,46,.35),0 2px 8px rgba(0,0,0,.6)}
+  .wp-pin.moving{border-color:#b06800;background:var(--amb);color:#3a2200;
+    transform:scale(1.45);box-shadow:0 0 0 6px rgba(255,176,46,.45),0 3px 10px rgba(0,0,0,.7)}
   #cfgWind summary{color:var(--dim);font-size:12px;cursor:pointer;margin:12px 0 6px}
   #cfgWind .strip{border:1px solid var(--line);border-radius:6px}
   #drawBar{position:absolute;z-index:955;left:50%;transform:translateX(-50%);top:calc(var(--ovlH) + 12px);display:none;flex-direction:column;gap:6px;background:rgba(13,26,41,.95);border:1px solid var(--amb);border-radius:8px;padding:6px 8px}
@@ -558,7 +564,7 @@
       <input type="file" id="bkIn" accept=".json" style="display:none">
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
-    <div class="hint"><b>地図を長押しでポイント登録</b>(末尾に追加/作図モード中はレイヤーへ描画)。<b>経路線を長押しするとその区間に挿入</b>、表の<span style="color:var(--grn)">＋</span>は検索した地点をその区間に挿入します。ポイントは<b>タップで操作(D→/★/削除)、長押しドラッグで移動</b>。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。<b>ホーム画面に追加したアプリとSafariは保存領域が別</b>なので、移すときは<span style="color:var(--blu)">端末データ書出→読込</span>を使ってください。</div>
+    <div class="hint"><b>地図を長押しでポイント登録</b>(末尾に追加/作図モード中はレイヤーへ描画)。<b>経路線を長押しするとその区間に挿入</b>、表の<span style="color:var(--grn)">＋</span>は検索した地点をその区間に挿入します。ポイントは<b>タップで操作(D→/★/削除)</b>。<b>移動は指を置いたまま約0.4秒待つと<span style="color:var(--amb)">オレンジ色に変わって解錠</span>されるので、そのまま指を離さずドラッグ</b>します(触っただけでは動きません。解錠前に指を動かすと解錠は取り消されます)。名称はセルをタップで編集、<b>≡を長押しドラッグで並べ替え</b>。<span style="color:var(--cyn)">D→</span>でダイレクトコース表示(元ルート保持)。ルート・設定・ログは端末に自動保存されます。<b>ホーム画面に追加したアプリとSafariは保存領域が別</b>なので、移すときは<span style="color:var(--blu)">端末データ書出→読込</span>を使ってください。</div>
     <details id="cfgWind">
       <summary>風・燃料の設定(航法計算用)</summary>
       <div class="strip">
@@ -645,7 +651,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-108';
+const VER_TAG='v6-109';
 const BUILD='2026-08-27';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2103,10 +2109,50 @@ document.getElementById('btnGPS').onclick=function(){
 /* ───────── waypoints & route ───────── */
 const wps=[];
 const routeLine=L.polyline([],{color:'#ff3df5',weight:3,opacity:.9}).addTo(map);
+/* ── ポイントの誤操作対策 ──
+   1) 触っただけで動かないよう、**長押し(WP_HOLD)で解錠してから**動かす
+   2) 解錠したら色と大きさを変えて分かるようにする
+   3) ⚠ マーカーの上での長押しで**地図側に新しいポイントができてしまう**のを止める。
+      Leafletの長押し(contextmenu)は地図に対して出るので、マーカーを押している
+      間はフラグ(wpPressing)を立てて地図側で無視する
+   ⚠ setIcon すると要素が作り直されてリスナーが消える。
+      アイコンを差し替えたら必ず bindWpPress を呼び直すこと(syncWpIcons参照) */
+const WP_HOLD=420;          // 解錠までの長押し時間(ms)
+const WP_MOVE_CANCEL=14;    // これ以上動いたら長押し不成立(px)
+let wpPressing=false;
+function disarmWp(w){
+  w.armed=false;
+  const el=w.marker.getElement&&w.marker.getElement();
+  const p=el&&el.querySelector('.wp-pin');
+  if(p)p.classList.remove('armed','moving');
+}
+function bindWpPress(w){
+  const el=w.marker.getElement&&w.marker.getElement();
+  if(!el||el._wpBound)return;
+  el._wpBound=true;
+  let t=null,sx=0,sy=0;
+  const cancel=()=>{if(t){clearTimeout(t);t=null}};
+  el.addEventListener('pointerdown',e=>{
+    wpPressing=true;sx=e.clientX;sy=e.clientY;cancel();
+    t=setTimeout(()=>{
+      t=null;w.armed=true;
+      const p=el.querySelector('.wp-pin');if(p)p.classList.add('armed');
+      if(navigator.vibrate)navigator.vibrate(15);   // 解錠を触覚でも伝える
+    },WP_HOLD);
+  });
+  el.addEventListener('pointermove',e=>{
+    if(t&&Math.hypot(e.clientX-sx,e.clientY-sy)>WP_MOVE_CANCEL)cancel(); // 長押し不成立
+  });
+  const up=()=>{cancel();wpPressing=false;if(!w.dragging)disarmWp(w)};
+  el.addEventListener('pointerup',up);
+  el.addEventListener('pointercancel',up);
+}
 function wpIcon(num,on,next){return L.divIcon({className:'',html:`<div class="wp-pin${on?' dctOn':''}${next?' nextOn':''}">${num}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}
 function syncWpIcons(){wps.forEach((w,k)=>{
   if(w.dragging)return; // ドラッグ中にsetIconすると要素が差し替わりドラッグが切れる
   w.marker.setIcon(wpIcon(k+1,dctTarget===w,k===nextIdx));
+  w.armed=false;          // アイコンが作り直されるので解錠状態も戻す
+  bindWpPress(w);         // ⚠ setIconで要素が差し替わりリスナーが消えるため必須
 })}
 
 /* ── 元に戻す(ルート操作の履歴) ── */
@@ -2137,9 +2183,25 @@ function addWp(lat,lng,name,at){ // at を渡すとその位置へ挿入、省�
   else{wpSeq++;name='WP'+wpSeq;}
   const marker=L.marker([lat,lng],{icon:wpIcon(wps.length+1,false,false),draggable:true,bubblingMouseEvents:false}).addTo(map);
   const w={name,lat,lng,marker,isWp:true};
-  marker.on('dragstart',()=>{pushUndo();w.dragging=true}); // 動かす前の位置を退避
-  marker.on('drag',ev=>{w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw()});
-  marker.on('dragend',()=>{w.dragging=false;redraw()});
+  // 指のわずかな揺れでドラッグが始まらないよう、判定の遊びを広げる(既定3px)
+  if(marker.dragging&&marker.dragging._draggable)
+    marker.dragging._draggable.options.clickTolerance=14;
+  bindWpPress(w);
+  // ⚠ 武装(長押しで解錠)していない間は動かさない。ドラッグ自体はLeafletに
+  //   任せたまま、位置の反映だけを止めて元の座標に引き戻す。
+  //   draggable:false にして後から有効化する手もあるが、Leafletは
+  //   touchstart時点で拾っていないと同じ指の動きでは掴めないため使えない
+  marker.on('dragstart',()=>{
+    if(!w.armed)return;
+    pushUndo();w.dragging=true;
+    const el=marker.getElement()&&marker.getElement().querySelector('.wp-pin');
+    if(el){el.classList.remove('armed');el.classList.add('moving')}
+  });
+  marker.on('drag',ev=>{
+    if(!w.armed){marker.setLatLng([w.lat,w.lng]);return}   // 未解錠なら動かさない
+    w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw();
+  });
+  marker.on('dragend',()=>{w.dragging=false;disarmWp(w);redraw()});
   marker.bindPopup(()=>{ // タップで名称+操作(D→/★/削除)。長押しはドラッグ移動専用
     const el=document.createElement('div');el.className='apPop';
     const k=wps.indexOf(w);
@@ -2404,6 +2466,10 @@ function redraw(){
   saveState();
 }
 map.on('contextmenu',e=>{ // 長押し: 作図中=描画 / 飛行中=D→ピン(ルートに追加しない) / 通常=ポイント登録
+  // ⚠ ポイントを掴もうと長押ししたときに新しいポイントを作らない
+  if(wpPressing)return;
+  const tg=e.originalEvent&&e.originalEvent.target;
+  if(tg&&tg.closest&&tg.closest('.wp-pin'))return;
   if(typeof drawMode!=='undefined'&&drawMode){drawAdd(e.latlng.lat,e.latlng.lng);return}
   if(flt&&flt.legOff){setDctPin(e.latlng.lat,e.latlng.lng);return}
   pushUndo();addWp(e.latlng.lat,e.latlng.lng);redraw();

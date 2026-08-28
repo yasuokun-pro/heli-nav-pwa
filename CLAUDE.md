@@ -68,7 +68,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 
 | 機能 | 実装 | 主な関数/変数 |
 |---|---|---|
-| ポイント登録 | 地図タップ→マゼンタ経路線。ドラッグ・改名・削除可 | `addWp()` `wps[]` `redraw()` |
+| ポイント登録 | 地図長押し→マゼンタ経路線。**移動は0.4秒保持して解錠(オレンジ)してからドラッグ** | `addWp()` `bindWpPress()` `WP_HOLD` |
 | 航法計算 | 区間ごとMC/MH(WCA)/GS/ETE/燃料+合計行 | `trueBrg()` `magOf()` `windTri()` |
 | 風三角 | TAS+風向(°T)+風速→WCA・TH・GS | `windTri()` §5参照 |
 | 燃料計算 | FF/FOB→必要燃料・着陸時残(30分切りで赤)・Endurance | `redraw()`内 |
@@ -94,6 +94,16 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
   `maximum-scale=1.0, user-scalable=no` を入れ、UI側に `touch-action:manipulation` を当てて止めてある。
   ⚠ 地図(`.leaflet-container`)はLeafletが自前で `touch-action:none` を持つので影響を受けない。
     地図のピンチズーム・ダブルタップズームはLeafletのJSが処理していて生きている
+- **ポイントの移動は「保持して解錠→ドラッグ」**(`WP_HOLD`=420ms)。
+  触っただけで動く・掴もうとして新しいポイントができる、という誤操作対策。
+  ⚠ `draggable:false` にして解錠時に有効化する手は使えない。Leafletは
+    touchstart時点で拾っていないと**同じ指の動きでは掴めない**ため、
+    常にdraggableのままにして「未解錠なら drag で元の座標に引き戻す」で止めている
+  ⚠ **マーカー上の長押しで地図側に新しいポイントができてしまう**。
+    Leafletの長押し(contextmenu)は地図に対して出るので、`wpPressing` フラグと
+    `target.closest('.wp-pin')` の二重で地図側の処理を飛ばしている
+  ⚠ **`setIcon` すると要素が作り直されてリスナーが消える**。
+    アイコンを差し替えたら必ず `bindWpPress()` を呼び直すこと(`syncWpIcons`)
 - ⚠ **ルートを変える操作には必ず `pushUndo()` を入れること**。
   入れ忘れると「戻るボタンが効かない」という形で出る。実際に
   マーカーのドラッグ・行からの削除・改名・各ポップアップの「ルート追加」で
