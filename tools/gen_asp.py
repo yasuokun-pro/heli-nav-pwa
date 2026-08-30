@@ -122,6 +122,38 @@ def poly_latlon(p, geom, nd=5):
 #   (下の is_circle 参照)、残りをこの細かさで持つ。
 #   0.02 → 0.002 で頂点は6101→3193に増えるが、真円88個を外に出した分で
 #   全体は 137KB → 71KB に減る
+def keep_side(p, through_xy, brg_deg, toward_xy):
+    """through_xy を通る方位brg_degの直線のうち、toward_xy がある側の半平面。
+       ⚠ left/right を手で決めると符号を間違える。**残したい点を渡して選ばせる**"""
+    for k in ('left', 'right'):
+        h = halfplane(p, through_xy, brg_deg, k)
+        if h.contains(Point(*toward_xy)): return h
+    raise ValueError('keep_side: toward がどちらの側にも入らない')
+
+
+def bisector_side(p, a, b):
+    """等半径の2円の交点を結ぶ線 = 2中心の垂直二等分線。a側を残す半平面を返す。
+       AIPの「◯◯ARPと△△ARPから半径5nmの弧の交点を結ぶ線の南側を除く」型"""
+    ax, ay = p.xy(*a); bx, by = p.xy(*b)
+    brg = math.degrees(math.atan2(bx-ax, by-ay)) % 360
+    return keep_side(p, ((ax+bx)/2, (ay+by)/2), brg+90, (ax, ay))
+
+
+def geo_circle(p, c, r_nm, n=240):
+    """**測地線の円**を作ってから投影する。
+       ⚠ circle() は局所平面のバッファなので、原点から遠い中心の大きな円
+       (与論の NHC 60NM など)では歪む。遠い円はこちらを使う"""
+    la1 = math.radians(c[0]); lo1 = math.radians(c[1]); dr = r_nm*1852.0/6371008.8
+    out = []
+    for i in range(n):
+        b = math.radians(360.0*i/n)
+        la2 = math.asin(math.sin(la1)*math.cos(dr) + math.cos(la1)*math.sin(dr)*math.cos(b))
+        lo2 = lo1 + math.atan2(math.sin(b)*math.sin(dr)*math.cos(la1),
+                               math.cos(dr) - math.sin(la1)*math.sin(la2))
+        out.append(p.xy(math.degrees(la2), math.degrees(lo2)))
+    return Polygon(out)
+
+
 def simplify(geom, tol=0.002):
     return geom.simplify(tol, preserve_topology=True)
 
@@ -153,6 +185,14 @@ ARP = {
 OUT = []  # {n,icao,t,up,lo,rmk,pts}
 
 def emit(n, icao, t, up, lo, rmk, p, geom_or_pts):
+    # ⚠ **差分を取ると図形が2つ以上に割れることがある**(鹿屋の≤5000が2片)。
+    #   poly_latlon は最大の1片しか返さないので、ここで割ってから渡す。
+    #   黙って消えると「面積を足しても円にならない」形で出る
+    if not isinstance(geom_or_pts, list) and geom_or_pts.geom_type == 'MultiPolygon':
+        for g in sorted(geom_or_pts.geoms, key=lambda q: -q.area):
+            if g.area > 0.05:            # NM² 未満の破片は捨てる
+                emit(n, icao, t, up, lo, rmk, p, g)
+        return
     rec = dict(n=n, icao=icao, t=t, up=up, lo=lo, rmk=rmk)
     if not isinstance(geom_or_pts, list):
         c = is_circle(geom_or_pts)
@@ -396,11 +436,58 @@ def gen_natl():
                  & halfplane(p, o, 270, 'right')     # 270°T線の北側
                  & circle(p, c, r).difference(circle(p, c, 3)))  # 3NM円の外側
         return circle(p, c, r).difference(notch)
+    # ── 「2つのARPから5nmの弧の交点を結ぶ線」で切るもの ──────────────
+    # ⚠ 半径が等しいので、その線は **2つのARPの垂直二等分線**そのもの。
+    #   AIPが挙げる相手のARPは分単位に丸めた値だが、AD 2.2の実測ARPを使う
+    #   (旭川で0.2NM程度しか動かない。丸め値より実測の方が意図に近い)
+    RJEC_ARP = (43.67083, 142.44722)   # 旭川空港(AIP表記 43°40'N142°27'E)
+    def ov_RJCA(p, c, r):   # 旭川(陸): 旭川空港との二等分線の南側を除外
+        return circle(p, c, r) & bisector_side(p, c, RJEC_ARP)
+    def ov_ROMD(p, c, r):   # 南大東: 北大東との二等分線の北側を除外
+        return circle(p, c, r) & bisector_side(p, c, (25.94472, 131.32694))
+    def ov_RORK(p, c, r):   # 北大東: 南大東との二等分線の南側を除外
+        return circle(p, c, r) & bisector_side(p, c, (25.84667, 131.26361))
+    # ── 直線・大円で切るもの ────────────────────────────────────
+    def ov_ROKJ(p, c, r):   # 久米島: 262714N/1264754E と 261214N/1264754E を結ぶ線の西側
+        #   ⚠ 2点は**経度が同じ**(126°47'54"E)。つまり子午線で切っている
+        return circle(p, c, r) & keep_side(p, p.xy(dms('262714N'), dms('1264754E')),
+                                           0, p.xy(*c))
+    def ov_RORY(p, c, r):   # 与論: NHC VORTAC(那覇)から60nmの円の中を除外
+        #   ⚠ 中心が64nm離れた60nm円。局所平面のcircle()では歪むので測地線で作る
+        return circle(p, c, r).difference(geo_circle(p, (26.2082, 127.64262), 60))
+    # ── 上限が2段になっているもの(区画ごとにupを持たせる) ──────────
+    def ov_RJOY(p, c, r):   # 八尾
+        #   (1) 5nm円 … 1300以下
+        #   (2) 5nm円 − 344112N1353304E から4.5nm円 … 2000以下
+        #   ⚠ 原文の「(exclude area(1))」を**横の除外**と読むと(2)が空になる。
+        #     (1)は5nm円そのものなので、これは**高度の除外**(=(2)は1300〜2000)と
+        #     読むしかない。塗り分けは「外側の方が上限が高い」で描く
+        #   ⚠ 重ねずに**排他に分ける**。どちらの読みでも「その場所の上限」は
+        #     同じ(内側1300 / 外側2000)なので、重ねない方が判定も表示も素直
+        inner = circle(p, (dms('344112N'), dms('1353304E')), 4.5)
+        return [(' (北西部 ≤1300)', 1300, circle(p, c, r) & inner),
+                ('', 2000, circle(p, c, r).difference(inner))]
+    def ov_RJFY(p, c, r):   # 鹿屋
+        #   5nm円 … 5000以下 / そのうち南東寄りの一部 … 6000以下
+        #   「312121N/1305056E を通る077°/257°Tの線の5nm北の平行線の南側」かつ
+        #   「HKC VOR–TGE VOR を結ぶ線の4nm東の平行線の東側」
+        o = p.xy(dms('312121N'), dms('1305056E'))
+        south = keep_side(p, offset_pt(o, 77-90, 5), 77, p.xy(*c))
+        HKC, TGE = (31.69722, 130.58294), (30.60216, 130.99153)
+        ax, ay = p.xy(*HKC); bx, by = p.xy(*TGE)
+        brg = math.degrees(math.atan2(bx-ax, by-ay)) % 360
+        east = keep_side(p, offset_pt((ax, ay), brg-90, 4), brg, p.xy(*c))
+        hi = circle(p, c, r) & south & east
+        return [('', 5000, circle(p, c, r).difference(hi)),
+                (' (南東部 ≤6000)', 6000, hi)]
     OVERRIDE = {'RJNY':ov_RJNY,'RJNS':ov_RJNS,'RJNG':ov_RJNG,'RJFR':ov_RJFR,
                 'RODN':ov_RODN,'RJSU':ov_RJSU,'ROAH':ov_ROAH,'RJFA':ov_RJFA,'RJFZ':ov_RJFZ,
-                'RJTS':ov_RJTS}
-    # 円のままだと実形状より広い(追加区域や除外がある)ものは注記を出す
-    APPROX_NOTE = {'RJBB','RJBE','RJGG','RJOO','RJNA','RJCA','RJOY','RJFY','ROKJ','ROMD','RORK','RORY'}
+                'RJTS':ov_RJTS,'RJCA':ov_RJCA,'ROMD':ov_ROMD,'RORK':ov_RORK,'ROKJ':ov_ROKJ,
+                'RORY':ov_RORY,'RJOY':ov_RJOY,'RJFY':ov_RJFY}
+    # 円のままだと実形状より広い(追加区域や除外がある)ものは注記を出す。
+    # ⚠ 残っているのは **関西・神戸・中部・大阪・名古屋**。この5つは AD 2.17 に
+    #   番号付き座標の追加空域(特別管制区相当)が並んでいて、東京PCAと同じ手間が要る
+    APPROX_NOTE = {'RJBB','RJBE','RJGG','RJOO','RJNA'}
 
     for x in data:
         p = Proj(x['lat'], x['lng'])
@@ -414,7 +501,10 @@ def gen_natl():
             geom = circle(p, c, r)
             rmk = ('AIP概略円(半径%.0fnm) ※実際は追加区域/除外あり・要AIP確認' % r
                    if x['icao'] in APPROX_NOTE else 'AIP概略円(半径%.0fnm)' % r)
-        emit(nm, x['icao'], x['t'], x.get('up', 0) or 0, 0, rmk, p, geom)
+        # OVERRIDEは**上限違いの複数区画**を返すことがある(八尾・鹿屋)
+        for sfx, up, g in (geom if isinstance(geom, list)
+                           else [('', x.get('up', 0) or 0, geom)]):
+            emit(nm + sfx, x['icao'], x['t'], up, 0, rmk, p, g)
 
 # ══════════════════════════════════════════════════════════
 def main():
