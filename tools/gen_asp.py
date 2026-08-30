@@ -117,8 +117,26 @@ def poly_latlon(p, geom, nd=5):
         out.append([round(lat, nd), round(lon, nd)])
     return out
 
-def simplify(geom, tol=0.02):
+# ⚠ 0.02NM(=37m)まで間引くと **地図を拡大したとき円がカクカクに見える**。
+#   ズーム16では37mが15pxになるので目に付く。真円は点列で持たないことにして
+#   (下の is_circle 参照)、残りをこの細かさで持つ。
+#   0.02 → 0.002 で頂点は6101→3193に増えるが、真円88個を外に出した分で
+#   全体は 137KB → 71KB に減る
+def simplify(geom, tol=0.002):
     return geom.simplify(tol, preserve_topology=True)
+
+
+def is_circle(geom):
+    """真円(shapelyのbufferが作った正180角形)なら (中心x, 中心y, 半径NM) を返す。
+       ⚠ **点列に落とす前に判定すること**。simplifyを通すと崩れる"""
+    if geom.is_empty or geom.geom_type != 'Polygon' or len(geom.interiors): return None
+    r = list(geom.exterior.coords)[:-1]
+    n = len(r)
+    if n < 60: return None
+    cx = sum(x for x, y in r)/n; cy = sum(y for x, y in r)/n
+    d = [math.hypot(x-cx, y-cy) for x, y in r]
+    if max(d) - min(d) > 1e-7*max(d): return None
+    return cx, cy, sum(d)/n
 
 # ══════════════════════════════════════════════════════════
 # ARP (AD 2.2)
@@ -135,6 +153,14 @@ ARP = {
 OUT = []  # {n,icao,t,up,lo,rmk,pts}
 
 def emit(n, icao, t, up, lo, rmk, p, geom_or_pts):
+    rec = dict(n=n, icao=icao, t=t, up=up, lo=lo, rmk=rmk)
+    if not isinstance(geom_or_pts, list):
+        c = is_circle(geom_or_pts)
+        if c:   # 真円は中心と半径だけ持つ。描画は L.circle(canvasのctx.arc)で滑らか
+            la, lo_ = p.latlon(c[0], c[1])
+            rec['c'] = [round(la, 6), round(lo_, 6)]
+            rec['r'] = round(c[2]*1852.0, 1)
+            OUT.append(rec); return
     if isinstance(geom_or_pts, list):
         pts = [[round(a,5), round(b,5)] for a,b in
                (p.latlon(x,y) for x,y in geom_or_pts)]
@@ -142,7 +168,8 @@ def emit(n, icao, t, up, lo, rmk, p, geom_or_pts):
         pts = poly_latlon(p, simplify(geom_or_pts))
     if len(pts) < 4:
         print(f'!! skip {n}: empty', file=sys.stderr); return
-    OUT.append(dict(n=n, icao=icao, t=t, up=up, lo=lo, rmk=rmk, pts=pts))
+    rec['pts'] = pts
+    OUT.append(rec)
 
 # ══════════════════════════════════════════════════════════
 # 管制圏 (CTR) / 情報圏 — AD 2.17 文言定義より
