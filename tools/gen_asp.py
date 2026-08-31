@@ -88,6 +88,21 @@ def arc_pts(p, c, r, lat_a, lon_a, lat_b, lon_b, n=48):
     return [(cx + r*math.sin(ta + d*i/n), cy + r*math.cos(ta + d*i/n))
             for i in range(n+1)]
 
+def arc_between(p, c, a, b, n=None):
+    """中心cのまわりで **点aから点bへ、半径を線形補間しながら**短弧を刻む(xy列)。
+       ⚠ arc_pts() は公称半径で描くので、AIPの頂点が秒丸めで±0.05NMずれていると
+         隣の区画との境界に隙間ができる。**頂点を必ず通す**こちらを使う
+         (中部のCBE 5NM弧が公称と0.05NM食い違っていた)"""
+    cx, cy = p.xy(*c); ax, ay = p.xy(*a); bx, by = p.xy(*b)
+    ra = math.hypot(ax-cx, ay-cy); rb = math.hypot(bx-cx, by-cy)
+    ta = math.atan2(ax-cx, ay-cy); tb = math.atan2(bx-cx, by-cy)
+    d = (tb - ta) % (2*math.pi)
+    if d > math.pi: d -= 2*math.pi          # 短弧
+    if n is None: n = max(24, int(abs(math.degrees(d))/0.6))
+    return [(cx + (ra+(rb-ra)*i/n)*math.sin(ta+d*i/n),
+             cy + (ra+(rb-ra)*i/n)*math.cos(ta+d*i/n)) for i in range(n+1)]
+
+
 def arc_by_endpoints(p, a, b, r, center_side, n=48):
     """端点a,b・半径r・中心が弦のどちら側(center_side='NW'等の方位)かで弧を決めサンプル。"""
     ax, ay = p.xy(*a); bx, by = p.xy(*b)
@@ -487,9 +502,12 @@ def gen_natl():
     # 円のままだと実形状より広い(追加区域や除外がある)ものは注記を出す。
     # ⚠ 残っているのは **関西・神戸・中部・大阪・名古屋**。この5つは AD 2.17 に
     #   番号付き座標の追加空域(特別管制区相当)が並んでいて、東京PCAと同じ手間が要る
-    APPROX_NOTE = {'RJBB','RJBE','RJGG','RJOO','RJNA'}
+    APPROX_NOTE = set()
+    # 神戸CTRは真円ではない(弦で2分)。gen_kobe_ctr() が出すのでここでは飛ばす
+    SKIP = {'RJBE'}
 
     for x in data:
+        if x['icao'] in SKIP: continue
         p = Proj(x['lat'], x['lng'])
         nm = x['n'] + (' 情報圏' if x['t'] == 'inf' else ' CTR')
         c, r = (x['lat'], x['lng']), x['r_nm']
@@ -507,8 +525,130 @@ def gen_natl():
             emit(nm + sfx, x['icao'], x['t'], up, 0, rmk, p, g)
 
 # ══════════════════════════════════════════════════════════
+# 関西・大阪・神戸・中部・名古屋 の特別管制区(PCA)と神戸CTR
+# ══════════════════════════════════════════════════════════
+# **AD 2.17 の本文に頂点座標が全部書いてある**(東京PCAと同じ形式)。
+# チャートのジオリファレンスは要らない。書いてあるのは
+#   「◯項 The airspace bounded by the lines connecting the following points」
+#   ＋「The line connecting point(a) to point(b) is the (minor) arc with a
+#     radius of R from △△」。弧は**全部 minor arc**だった(検算済み)。
+# ⚠ 頂点は秒丸めなので、公称半径で弧を描くと隣の区画と隙間ができる。
+#   arc_between()(半径を線形補間)を使って**頂点を必ず通す**こと。
+#   中部のCBE 5NM弧は公称と0.05NM(93m)食い違っていた
+# ⚠ **神戸だけはCTR自体が真円ではない**。5NM円を(1)-(2)の弦で二分し、
+#   小弧側(北の帽子)が2000以下・大弧側が2500以下。
+#   「minor arc / major arc」の書き分けがそのまま区画の分け方になっている
+PCA_ARC_CTR = {
+  'KIX':  (34.43417, 135.23278),      # 関西ARP
+  'KOBE': (34.63278, 135.22389),      # 神戸ARP
+  'ITM':  (34.78444, 135.43917),      # 大阪(伊丹)ARP
+  'IKOMA':(34.686667, 135.551111),    # 344112N/1353304E … 大阪PCAの4.5/9NM弧の中心
+                                      #   ⚠ 八尾CTRの4.5NM円と**同じ点**
+  'KCE':  (34.630994, 135.228458),    # 神戸VOR/DME(RJBE AD 2.19)
+                                      #   ⚠ ENR 4.1に無い(飛行場のnavaid)ので navaids.gen.js にも無い
+  'CBE':  (34.858006, 136.803169),    # 中部VOR/DME(RJGG AD 2.19)
+  'KCC':  (35.26527, 136.91493),      # 名古屋VORTAC
+}
+
+def _pp(s):
+    """'343824N1351215E' → (lat, lon)"""
+    m = re.match(r'(\d{6}(?:\.\d+)?)N/?(\d{7}(?:\.\d+)?)E', s)
+    return (dms(m.group(1)+'N'), dms(m.group(2)+'E'))
+
+PCA_SPEC = {
+ 'RJBB': dict(nm='関西PCA', t='pca',
+   rmk='Kansai APP/Radar 125.5-120.25 副:Kansai Tower 118.2-126.2',
+   pts={1:'343824N1351215E',2:'343815N1351930E',3:'343809N1352433E',4:'343520N1352558E',
+        5:'343408N1352524E',6:'343147N1352417E',7:'342829N1352245E',8:'342637N1351959E',
+        9:'342119N1351202E',10:'341943N1350938E',11:'341827N1350745E',12:'341653N1350524E',
+        13:'341449N1350219E',14:'341853N1345820E',15:'342057N1350125E',16:'342231N1350345E',
+        17:'342347N1350538E',18:'342520N1350758E',19:'343044N1351603E',20:'343313N1351945E',
+        21:'343415N1352014E',22:'343047N1351201E',23:'343306N1351206E'},
+   sub=[dict(up=5000, lo=2500, exc=True, ring=[1, {'a':'KOBE','f':2,'t':23}]),
+        dict(up=5000, lo=1500, ring=[2,3,4,5,21,20,19,{'a':'KIX','f':19,'t':22},22,
+                                     {'a':'KOBE','f':23,'t':2}]),
+        dict(up=4000, lo=1000, ring=[5,6,20,21]),
+        dict(up=3000, lo=700,  ring=[6,7,8,{'a':'KIX','f':8,'t':19},20]),
+        dict(up=4000, lo=700,  ring=[9,10,17,{'a':'KIX','f':18,'t':9}]),
+        dict(up=5000, lo=1000, ring=[10,11,16,17]),
+        dict(up=7000, lo=1500, ring=[11,12,15,16]),
+        dict(up=7000, lo=2000, ring=[12,13,14,15])]),
+ 'RJOO': dict(nm='大阪PCA', t='pca',
+   rmk='Kansai APP/Radar 124.7-120.45 副:Osaka Tower 118.1-126.2',
+   pts={1:'344519N1353203E',2:'344223N1352828E',3:'344038N1353034E',4:'344335N1353409E',
+        5:'343953N1353128E',6:'344250N1353504E',7:'343930N1353157E',8:'343714N1353028E',
+        9:'344005N1353822E',10:'343317N1352752E',11:'343639N1354230E'},
+   sub=[dict(up=3000, lo=700,  ring=[{'a':'ITM','f':1,'t':2},3,4]),
+        dict(up=4000, lo=1100, ring=[4,3,5,6]),
+        dict(up=5000, lo=1300, exc=True, ring=[6,5,7,{'a':'IKOMA','f':8,'t':9}]),
+        dict(up=5000, lo=3000, ring=[{'a':'IKOMA','f':9,'t':8},10,{'a':'IKOMA','f':10,'t':11}])]),
+ 'RJBE': dict(nm='神戸PCA', t='pca',
+   rmk='Kansai APP/Radar 121.15-120.85-125.5 副:Kobe Tower 118.5-126.2',
+   pts={1:'343931N1350740E',2:'343918N1350445E',3:'343508N1350515E',4:'343523N1350814E',
+        5:'343901N1350107E',6:'343449N1350137E',7:'343850N1345842E',8:'343437N1345912E',
+        9:'343835N1345531E',10:'343420N1345600E'},
+   sub=[dict(up=4000, lo=800,  ring=[1,2,3,{'a':'KOBE','f':4,'t':1}]),
+        dict(up=5000, lo=1200, ring=[2,5,6,3]),
+        dict(up=5000, lo=1800, ring=[5,7,8,6]),
+        dict(up=5000, lo=2500, ring=[7,{'a':'KCE','f':9,'t':10},8])]),
+ 'RJGG': dict(nm='中部PCA', t='pca',
+   rmk='Centrair APP 121.05 / Radar 125.55 副:Centrair Tower 118.85',
+   pts={1:'350926N1364634E',2:'350628N1364716E',3:'350436N1364742E',4:'350238N1364810E',
+        5:'345942N1364852E',6:'345624N1364939E',7:'344724N1365147E',8:'344406N1365234E',
+        9:'344109N1365315E',10:'343911N1365343E',11:'343718N1365410E',12:'343420N1365452E',
+        13:'343329N1364801E',14:'343629N1364739E',15:'343811N1364726E',16:'344011N1364710E',
+        17:'344310N1364648E',18:'344647N1364620E',19:'345514N1364415E',20:'345845N1364256E',
+        21:'350138N1364152E',22:'350333N1364109E',23:'350507N1364034E',24:'350801N1363929E'},
+   # ⚠ 各項に a) と b) があり、**北と南で対になった同じ上下限の2区画**になっている
+   sub=[dict(up=7000, lo=3000, ring=[{'a':'CBE','f':1,'t':24},23,{'a':'CBE','f':23,'t':2}]),
+        dict(up=7000, lo=3000, ring=[11,{'a':'CBE','f':12,'t':13},14,{'a':'CBE','f':14,'t':11}]),
+        dict(up=7000, lo=2500, ring=[2,3,22,{'a':'CBE','f':23,'t':2}]),
+        dict(up=7000, lo=2500, ring=[10,{'a':'CBE','f':11,'t':14},15]),
+        dict(up=7000, lo=1800, ring=[3,4,21,22]),
+        dict(up=7000, lo=1800, ring=[9,10,15,16]),
+        dict(up=5500, lo=1300, ring=[4,5,20,21]),
+        dict(up=5500, lo=1300, ring=[8,9,16,17]),
+        dict(up=4000, lo=800,  ring=[5,{'a':'CBE','f':6,'t':19},20]),
+        dict(up=4000, lo=800,  ring=[{'a':'CBE','f':18,'t':7},8,17])]),
+ 'RJNA': dict(nm='名古屋PCA', t='pca',
+   rmk='Centrair APP 121.05/119.175 Radar 125.55 副:Nagoya Tower 118.7',
+   pts={1:'351103N1370057E',2:'350913N1365637E',3:'350633N1365818E',4:'350824N1370238E',
+        5:'350338N1370008E',6:'350531N1370426E'},
+   sub=[dict(up=4000, lo=800,  ring=[1,2,3,4]),
+        dict(up=5000, lo=1300, ring=[4,3,{'a':'KCC','f':5,'t':6}])]),
+}
+
+
+def gen_pca_natl():
+    for icao, sp in PCA_SPEC.items():
+        pts = {k: _pp(v) for k, v in sp['pts'].items()}
+        p = Proj(*pts[1])
+        for s2 in sp['sub']:
+            xy = []
+            for e in s2['ring']:
+                if isinstance(e, int): xy.append(p.xy(*pts[e])); continue
+                xy += arc_between(p, PCA_ARC_CTR[e['a']], pts[e['f']], pts[e['t']])
+            rmk = sp['rmk'] + (' / 下限%dexc' % s2['lo'] if s2.get('exc') else '')
+            emit(sp['nm'], icao, sp['t'], s2['up'], s2['lo'], rmk, p, xy)
+
+
+def gen_kobe_ctr():
+    """神戸CTR。5NM円を(1)-(2)の弦で二分し、小弧側2000 / 大弧側2500"""
+    KOBE = PCA_ARC_CTR['KOBE']
+    a, b = _pp('344120N1351756E'), _pp('344035N1350815E')
+    p = Proj(*KOBE)
+    cir = circle(p, KOBE, 5)
+    cap = Polygon(arc_between(p, KOBE, a, b))          # 短弧+弦 = 北の帽子
+    emit('神戸 CTR (北の帽子 ≤2000)', 'RJBE', 'ctr', 2000, 0,
+         'Kobe Tower 118.5/126.2 / 小弧側', p, cir & cap)
+    emit('神戸 CTR', 'RJBE', 'ctr', 2500, 0,
+         'Kobe Tower 118.5/126.2 / 大弧側', p, cir.difference(cap))
+
+
+# ══════════════════════════════════════════════════════════
 def main():
     gen_ctrs(); gen_tokyo_pca(); gen_narita_pca(); gen_natl()
+    gen_pca_natl(); gen_kobe_ctr()
     js = ('/* 自動生成: tools/gen_asp.py — AIP Japan AIRAC 2026-07-09\n'
           '   出典: AD2各飛行場 AD 2.17 / RJTT・RJAA 特別管制区チャート */\n'
           'const ASP_POLY=' + json.dumps(OUT, ensure_ascii=False, separators=(',', ':')) + ';')
