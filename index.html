@@ -657,7 +657,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-116';
+const VER_TAG='v6-118';
 const BUILD='2026-08-31';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -1397,12 +1397,14 @@ async function loadCiv(){
         el.innerHTML=`<h5 style="color:${CIV_COL}">民間訓練試験空域 ${f.rg} ${f.n||''}</h5>`+
           `<dl><dt>高度</dt><dd>${ftLbl(f.lo)} — ${ftLbl(f.up)}</dd>`+
           `<dt>連絡先</dt><dd>${f.fac||'—'}</dd>`+
-          (f.rmk?`<dt>${f.osm?'形状':'AIP原文'}</dt><dd style="font-size:10px">${f.rmk}</dd>`:'')+`</dl>`+
+          (f.rmk?`<dt>形状</dt><dd style="font-size:10px">${f.rmk}</dd>`:'')+`</dl>`+
+          // ⚠ 警告は**近似が残っている区画にだけ**出す。ENR 5.3.1の円弧と除外円は
+          //    反映済みなので、全区画に「概略形」と出すと本当に近似な区画が埋もれる
           (f.osm?`<div class="note" style="color:var(--amb)">⚠ 境界は新幹線・河川・高速道路等の`+
                  `中心線。形状はOpenStreetMap(ODbL)の線形から再現した目安で、`+
                  `境界付近では地形図で確認すること</div>`
-               :(f.rmk?`<div class="note" style="color:var(--amb)">⚠ この区画は円弧・除外の指定がある。`+
-                 `表示は点を直線で結んだ概略形なのでAIP原文で確認すること</div>`:''))+
+               :(/近似|未反映/.test(f.rmk||'')?`<div class="note" style="color:var(--amb)">`+
+                 `⚠ この区画は一部の境界を近似している。境界付近ではAIP原文で確認すること</div>`:''))+
           `<div class="note">AIP ENR 5.3.1。使用にはATMセンターへの訓練計画提出が必要。`+
           `通過時も連絡先へ連絡</div>`;
         return el;

@@ -24,7 +24,7 @@
 使い方: python3 tools/gen_civ.py
 AIRAC更新のたびに再実行し、区画数と上限高度の差分を確認すること。
 """
-import re, os, sys, glob, subprocess, json
+import re, os, sys, glob, subprocess, json, math
 
 # 地域コードは表の見出し(Kanto/Koshinetsu Area (KK) 等)そのまま。
 # KK=関東/甲信越、CK=中部/近畿、CS=中国/四国。字面から推測すると間違える
@@ -37,6 +37,144 @@ def dms(s):
     m = re.match(r'(\d{2})(\d{2})(\d{2})N/?(\d{3})(\d{2})(\d{2})E', s)
     return [round(int(m.group(1)) + int(m.group(2))/60 + int(m.group(3))/3600, 5),
             round(int(m.group(4)) + int(m.group(5))/60 + int(m.group(6))/3600, 5)]
+
+
+
+# ══════════════════════════════════════════════════════════
+# 形状指定(円弧・除外円)の反映
+# ══════════════════════════════════════════════════════════
+# ENR 5.3.1 は座標表のあとに文章で形を補足している。
+#   「The line connecting point (3) and (4) is minor arc with a radius of
+#     45NM from Hakodate VOR/DME (HWE).」
+#   「Excluding the airspace within 13NM radius of Sapporo Aerodrome/RJCO
+#     (430703N/1412253E).」
+# ⚠ **折り返された行を繋いで全文にしないと中心が落ちる**(「radius of 45NM」で
+#   切れて次行が「from Hakodate VOR/DME (HWE).」)。blocks の 'desc' がその全文。
+# ⚠ **公称半径で描いてはいけない**。AIPの頂点は公称半径から最大1NMずれる
+#   (KK1-1の(3)は20NM弧のはずが19.0NM)。原因は中心のずれで、
+#   GTC/HWEの弧上の点を当てはめると **公表のVOR位置から0.2NM離れた点**で
+#   RMS 0.02NM に収まる(公表位置のままだと0.12〜0.16NM)。
+#   → **半径を両端で線形補間して、AIPの頂点を必ず通す**(gen_asp.arc_between と同じ)
+CIV_ARC = re.compile(
+    r'The lines? connecting ((?:point\s*)?\(\d+\)(?:\s*(?:and|to)\s*(?:point\s*)?\(\d+\),?\s*)+)'
+    r'(?:is|are)\s+(?:the\s+)?(minor|major)?\s*arcs?\s+(?:with a radius of|within)\s*'
+    r'([\d.]+)\s*NM\s*(?:radius\s*)?(?:from|of)?\s*([^.]*)\.', re.I)
+CIV_EXC = re.compile(
+    r'Excluding the airspaces? within\s*([\d.]+)\s*NM\s*(?:radius\s*)?(?:of)?\s*([^.]*?)\.', re.I)
+COORD = re.compile(r'(\d{6})N\s*/?\s*(\d{7})E')
+
+# KGE(加治木VOR/DME)は ENR 4.1 にも各AD 2.19 にも無い。
+# 九州4-5-30/4-6-25/4-7 の 13NM・25NM 弧の4点から中心を当てはめて決めた
+# (RMS 0.015NM)。**ENR 4.4のFIX 3つ(HIGOH 027°/25.4NM・ISKID 226°/15.5NM・
+# JINGU 076°/17.6NM、いずれも磁方位)を方位0.1°・距離0.0NMで再現する**ので確か
+CIV_EXTRA_NAV = {'KGE': (31.79809, 130.72563)}
+
+
+def load_navaids(here):
+    nav = dict(CIV_EXTRA_NAV)
+    f = os.path.join(here, 'navaids.gen.js')
+    if os.path.exists(f):
+        for m in re.finditer(r'"id":"([A-Z]{2,4})"[^}]*?"lat":([\d.]+),"lng":([\d.]+)', open(f).read()):
+            nav.setdefault(m.group(1), (float(m.group(2)), float(m.group(3))))
+    return nav
+
+
+def resolve_ctr(txt, nav):
+    """『Hakodate VOR/DME (HWE)』『RJCO (430703N/1412253E)』→ (lat,lon)"""
+    m = COORD.search(txt.replace(' ', ''))
+    if m:
+        return (round(int(m.group(1)[0:2]) + int(m.group(1)[2:4])/60 + int(m.group(1)[4:6])/3600, 6),
+                round(int(m.group(2)[0:3]) + int(m.group(2)[3:5])/60 + int(m.group(2)[5:7])/3600, 6))
+    m = re.search(r'\(([A-Z]{3})\)', txt) or re.search(r'\b([A-Z]{3})\b', txt)
+    if m and m.group(1) in nav: return nav[m.group(1)]
+    return None
+
+
+def _nm(a, b):
+    la1, lo1, la2, lo2 = map(math.radians, [a[0], a[1], b[0], b[1]])
+    return 2*3440.065*math.asin(math.sqrt(math.sin((la2-la1)/2)**2 +
+                                math.cos(la1)*math.cos(la2)*math.sin((lo2-lo1)/2)**2))
+
+
+def civ_arc(c, a, b, major=False):
+    """中心cのまわりで a→b。**半径は両端で線形補間**して頂点を必ず通す"""
+    K = math.cos(math.radians(c[0]))
+    ax, ay = (a[1]-c[1])*K, a[0]-c[0]
+    bx, by = (b[1]-c[1])*K, b[0]-c[0]
+    ra, rb = math.hypot(ax, ay), math.hypot(bx, by)
+    ta, tb = math.atan2(ax, ay), math.atan2(bx, by)
+    d = (tb - ta) % (2*math.pi)
+    if (d > math.pi) != bool(major): d -= 2*math.pi        # 短弧/長弧
+    n = max(16, int(abs(math.degrees(d))/1.5))
+    return [[round(c[0] + (ra+(rb-ra)*i/n)*math.cos(ta+d*i/n), 5),
+             round(c[1] + (ra+(rb-ra)*i/n)*math.sin(ta+d*i/n)/K, 5)] for i in range(1, n)]
+
+
+def apply_shape(f, nav, log):
+    """円弧と除外円を反映して f['pts'] を差し替える。効いたら注記を書き換える"""
+    desc, pts = f.get('desc', ''), f['pts']
+    n = len(pts)
+    arcs, bad = {}, []
+    for m in CIV_ARC.finditer(desc):
+        c = resolve_ctr(m.group(4), nav)
+        r = float(m.group(3)); major = (m.group(2) or '').lower() == 'major'
+        if not c:
+            log.append(f"  ? {f['rg']} {f['n']}: 弧の中心が引けない「{m.group(4)[:40]}」"); continue
+        for a, b in re.findall(r'\((\d+)\)\s*(?:and|to)\s*(?:point\s*)?\((\d+)\)', m.group(1)):
+            i, j = int(a), int(b)
+            if not (1 <= i <= n and 1 <= j <= n) or (j - i) % n != 1:
+                bad.append(f'({a})-({b}) が隣り合っていない'); continue
+            da, db = _nm(c, pts[i-1]), _nm(c, pts[j-1])
+            # ⚠ AIPの頂点は公称半径からずれる(KK1-1の(3)は20NM弧のはずが19.0NM)。
+            #   半径を補間して頂点を通すので描画は破綻しない。1.5NMまでは通し、
+            #   0.3NM超は警告に出す。それ以上は点番号の読み違いを疑う
+            if abs(da-r) > 1.5 or abs(db-r) > 1.5:
+                bad.append(f'({a})-({b}) 公称{r}NMに対し {da:.2f}/{db:.2f}NM(見送り)'); continue
+            if abs(da-r) > 0.3 or abs(db-r) > 0.3:
+                log.append(f"  ! {f['rg']} {f['n']} ({a})-({b}): "
+                           f'公称{r}NMに対し {da:.2f}/{db:.2f}NM。AIPの頂点が公称からずれている')
+            arcs[i-1] = (c, major)
+    if bad: log.append(f"  ✗ {f['rg']} {f['n']}: " + ' / '.join(bad))
+    ring = []
+    for i in range(n):
+        ring.append(pts[i])
+        if i in arcs:
+            c, major = arcs[i]
+            ring += civ_arc(c, pts[i], pts[(i+1) % n], major)
+    exc = []
+    for m in CIV_EXC.finditer(desc):
+        r = float(m.group(1)); tail = m.group(2)
+        cs = [(round(int(a[0:2])+int(a[2:4])/60+int(a[4:6])/3600, 6),
+               round(int(a2[0:3])+int(a2[3:5])/60+int(a2[5:7])/3600, 6))
+              for a, a2 in COORD.findall(tail.replace(' ', ''))]
+        if not cs:
+            c = resolve_ctr(tail, nav)
+            if c: cs = [c]
+        if not cs:
+            log.append(f"  ? {f['rg']} {f['n']}: 除外円の中心が引けない「{tail[:40]}」"); continue
+        exc += [(c, r) for c in cs]
+    if not arcs and not exc: return 0, 0
+    try:
+        from shapely.geometry import Polygon, Point
+        K = math.cos(math.radians(ring[0][0]))
+        g = Polygon([(b*K, a) for a, b in ring]).buffer(0)
+        ne = 0
+        for c, r in exc:
+            # ⚠ **区画をほぼ丸ごと消す除外は、隣の区画の文が紛れ込んだもの**。
+            #   ENR 5.3.1は「Within …」で始まる区画があり、行の切り出しで
+            #   直前の区画にくっつく(東北12-3に13-1の「50NM of SDE」が入った)。
+            #   AIPが区画全体を除外する書き方をするはずがないので弾く
+            g2 = g.difference(Point(c[1]*K, c[0]).buffer(r/60.0, quad_segs=32))
+            if g2.area < g.area * 0.1:
+                log.append(f"  ✗ {f['rg']} {f['n']}: {r}NM除外で9割以上消えるので見送り"
+                           f'(隣の区画の文が紛れ込んだ可能性)'); continue
+            g = g2; ne += 1
+        if g.is_empty: return 0, 0
+        if g.geom_type != 'Polygon': g = max(g.geoms, key=lambda q: q.area)
+        f['pts'] = [[round(y, 5), round(x/K, 5)] for x, y in g.exterior.coords]
+    except ImportError:
+        log.append('  shapely が無いので除外円を反映できない'); return len(arcs), 0
+    return len(arcs), ne
 
 
 def main():
@@ -89,7 +227,11 @@ def main():
             if rc and rc.group(1) in REGION: region = REGION[rc.group(1)]
         pts, ids, rmk = [], [], []
         for ln in span:
-            pts += [dms(g) for g in re.findall(r'\d{6}N/\d{7}E', ln)]
+            # ⚠ **弧の中心の座標を頂点に混ぜてはいけない**。
+            #   「minor arc with a radius of 5NM of 343548N/1353602E」の座標まで
+            #   拾っていて、中部/近畿11-4が8点のはずが26点になっていた。
+            #   頂点は必ず「(n) 座標」の形なので、番号が前に付くものだけを採る
+            pts += [dms(g) for _, g in re.findall(r'\((\d{1,2})\)\s*(\d{6}N/\d{7}E)', ln)]
             # 番号は名前列に単独で置かれることが多く、行末で終わる場合もある。
             # 「1」のような枝番なしも使われるので、座標を含まない短い行に限り拾う
             m = re.search(r'^[\s\(\)A-Z]{0,24}?\b(\d{1,2}(?:-\d+)+)(?=\s|$)', ln[:42])
@@ -100,8 +242,13 @@ def main():
             # 文言をそのまま持って表示する(ポップアップで注意喚起する)
             t = ln[:x_alt].strip()
             if re.match(r'(Excluding|The line connecting|Within )', t): rmk.append(t)
+        # ⚠ 形状指定(円弧・除外)は**折り返された行を繋いで全文にしないと
+        #   中心が落ちる**。「…radius of 45NM」で切れて次行が「from Hakodate
+        #   VOR/DME (HWE).」になっている。説明列だけを繋いで文に割る
+        desc = ' '.join(ln[:x_alt].strip() for ln in span if ln[:x_alt].strip())
+        desc = re.sub(r'\s+', ' ', desc)
         blocks.append({'rg': region, 'n': ids[0] if ids else '', 'ids': ids, 'pts': pts,
-                       'rmk': re.sub(r'\s+', ' ', ' '.join(rmk))[:220],
+                       'rmk': re.sub(r'\s+', ' ', ' '.join(rmk))[:220], 'desc': desc,
                        's0': s0, 'l0': s0, 'l1': s1})
 
     # 3) 高度セルを組み立てる。「上限 / ----- / 下限」の2〜3行がひとかたまりで、
@@ -131,6 +278,7 @@ def main():
         txt = re.sub(r'\s+', ' ', txt).strip(' -')
         if txt: FCELL.append({'c': sum(c) / len(c), 't': txt})
 
+    here0 = os.path.dirname(os.path.abspath(__file__))
     out, nogeom = [], 0
     for b in blocks:
         if len(b['pts']) < 3:
@@ -166,7 +314,39 @@ def main():
         n = f'{b["ids"][0]}〜{b["ids"][-1]}' if (len(b['ids']) > 1 and ncell > 1) else b['n']
         out.append({'rg': b['rg'], 'n': n, 'nl': len(b['ids']), 'up': up, 'lo': lo,
                     'fac': fac[:70], 'rmk': b.get('rmk', ''), 'pts': b['pts'],
-                    'inh': inh})
+                    'desc': b.get('desc', ''), 'inh': inh})
+
+    # ── 円弧と除外円を反映する ──────────────────────────────
+    nav = load_navaids(here0)
+    log, na, ne = [], 0, 0
+    for f in out:
+        a, e = apply_shape(f, nav, log)
+        na += a; ne += e
+        f['_ar'], f['_ex'] = a, e
+    print(f'  円弧 {na}本 / 除外円 {ne}個 を反映')
+    for l in log: print(l, file=sys.stderr)
+
+    # 注記を作り直す。⚠ 元は英文をそのまま220字で切っていて**中心も結論も
+    #   読めない**断片だった。何を反映して何を近似したかを日本語で出す。
+    #   desc(全文)は54KB増えるうえ表示に使わないので出力からは落とす
+    APPROX = [('海岸線', r'coastline'), ('河川の中心線', r'center line of'),
+              ('支庁界', r'shicho boundary'), ('方位線', r'\d{3}°T from')]
+    nap = 0
+    for f in out:
+        if f.get('osm'): f.pop('desc', None); continue
+        desc = f.pop('desc', '')
+        pa = [nm for nm, pat in APPROX if re.search(pat, desc, re.I)]
+        pt = []
+        if f.get('_ar'): pt.append(f"円弧{f['_ar']}本を反映")
+        if f.get('_ex'): pt.append(f"除外円{f['_ex']}個を反映")
+        if pa: pt.append('／'.join(pa) + 'の区間は直線で近似'); nap += 1
+        m = re.search(r'Excluding (?:the airspace )?(?:the |of )?((?:Area |AREA )?[A-Z]{1,2}\d[\w-]*|'
+                      r'area of [A-Za-z ]+)', desc)
+        if m: pt.append(f'{m.group(1)} の除外は未反映')
+        if re.search(r'Maizuru ARP', desc): pt.append('舞鶴ARPの4NM除外は位置不明で未反映')
+        f.pop('_ar', None); f.pop('_ex', None)
+        f['rmk'] = '。'.join(pt)
+    print(f'  海岸線・河川・支庁界で直線近似のまま: {nap}件')
 
     # KK4は座標ではなく新幹線・河川・道路の中心線で8区分されている。
     # tools/gen_kk4.py が作った形を差し込む(無ければ4-1だけのまま)
