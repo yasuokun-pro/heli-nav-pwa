@@ -182,10 +182,12 @@ def _pt(c, d_m, b):
                                           math.cos(dr)-math.sin(la)*math.sin(la2))
     return [round(math.degrees(la2), 6), round(math.degrees(lo2), 6)]
 
-def _arcp(c, p1, p2, n=None):
+def _arcp(c, p1, p2, n=None, major=False):
     r1, b1 = _rb(c, p1); r2, b2 = _rb(c, p2)
     d = (b2-b1) % 360
-    if d > 180: d -= 360           # 短い方に回る
+    # ⚠ AIPは「minor arc / major arc」を書き分ける。中部ACAの(1)-(2)は
+    #   **KCC 40NMの長弧**(中心角198.8°)で、短弧に回ると北の大きなローブが消える
+    if (d > 180) != major: d -= 360
     # ⚠ 分割が粗いと、**同じ弧を別の区間に分けて使ったときに面積が合わない**
     #   (外周は20→5、区画は5→3で切るので折れ線がずれる)。
     #   0.6°ごとに割ってこの誤差を無視できる大きさにする(浜松で0.011%→0.000%)
@@ -202,7 +204,7 @@ def build(ring, pts, ctr=None):
             a, b = e['arcp']
             pa = pts[a] if isinstance(a, int) else a
             pb = pts[b] if isinstance(b, int) else b
-            out += _arcp(e.get('c', ctr), pa, pb); continue
+            out += _arcp(e.get('c', ctr), pa, pb, major=e.get('major', False)); continue
         c = e['arc'] if 'arc' in e else e['cut']
         r = e['r'] * NM_M
         if 'cut' in e:
@@ -236,6 +238,21 @@ EXTRA_POINTS = {
    20:(34.566410,137.369940), # LHT20 ∩ CBE33(南)   4000の南西端
    21:(34.774250,137.464750), # KCC40 ∩ CBE33       4000/6000の境界の折れ点
    22:(34.648690,138.097090), # 線(3)-(4)の東延長 ∩ LHT20
+ },
+ 'RJGG/ACA': {   # 中部。⚠ **AD 2.17の本文に座標が全部書いてある**ので図は要らない。
+                 #   (11)は弧の中心専用でチャートにしか出てこない(本文は「48NM from
+                 #   point(11)」とだけ書く)。PCAの図の(11)とは**別の点**なので注意
+   1:(35.498611,136.148889),   # 352955N/1360856E
+   2:(34.839444,137.541667),   # 345022N/1373230E
+   3:(34.805833,136.976944),   # 344821N/1365837E
+   4:(35.119722,135.837500),   # 350711N/1355015E
+   5:(34.775556,137.467222),   # 344632N/1372802E
+   6:(34.392500,137.158333),   # 342333N/1370930E
+   7:(34.030556,136.683056),   # 340150N/1364059E
+   8:(34.249167,136.113056),   # 341457N/1360647E
+   9:(34.516667,136.318056),   # 343100N/1361905E
+   10:(34.942500,135.792917),  # 345633N/1354735E
+   11:(34.805556,135.403611),  # 344820N/1352413E … 48NM弧の中心
  },
  'RJTU/ACA': {   # 中心は(9) 362923N/1395148E。1,2,4は30nm弧上、5,6は15nm弧上
    1:(36.956944,139.650000),  # 365725N/1393900E 北西(30nm)
@@ -419,6 +436,37 @@ SPEC['RJCC/ACA'] = dict(
    ])
 
 
+# 中部ACA。⚠ **AD 2.17の本文に座標も弧も全部書いてある**(チャートを読む必要が無い)。
+#   数値1つのラベルは**上限**(東京・千歳と同じ型)。根拠:
+#   チャートの2段ラベルが「FL150/6000(EXC 6000)」「12000/2500(EXC 2500)」で
+#   上段に単独ラベルと同じ値が来ていること、および**中部空港自身が
+#   単独ラベルFL150の区画(area 1)の中にある**こと(下限FL150では進入管制にならない)。
+#   ⚠ AD 2.17の表の縦欄は「------ / FL150」と**罫線が上、数値が下**に出るが、
+#     これは枠の上罫線で、PCA欄の「7000 / ----- / 3000」とは意味が違う。表だけ見て
+#     下限と読むと逆になる。チャートで確かめること
+# ⚠ 本文は「Excluding Hamamatsu ACA and Akeno ACA」と言う。浜松は実装済みなので
+#   最後の突合で自動的に切り取られるが、**明野ACAは未実装なので抜けていない**
+KCC_G = (35.26527, 136.91493)      # 名古屋VORTAC
+CBE_G = (34.858006, 136.803169)    # 中部VOR/DME(RJGG AD 2.19)
+P11_G = (34.805556, 135.403611)    # 48NM弧の中心(チャートの(11))
+SPEC['RJGG/ACA'] = dict(
+   jp='中部進入管制区', n='CHUBU ACA', eff_note='図に下限の記載なし(区画ごとの下限はAIPのチャート参照)',
+   late=1,   # 本文が「Excluding Hamamatsu ACA and Akeno ACA」なので後回しにして差分を残す
+   outer=[{'arcp':(1,2),'c':KCC_G,'major':True}, {'arcp':(2,5),'c':KCC_G},
+          {'arcp':(5,6),'c':CBE_G}, {'arcp':(7,8),'c':CBE_G},
+          {'arcp':(8,9),'c':P11_G}, {'arcp':(10,4),'c':CBE_G},
+          {'arcp':(4,1),'c':CBE_G}],
+   sub=[
+     # 1. 北の大ローブ。(1)-(2)は**KCC 40NMの長弧**
+     dict(n='FL150', up=15000, ring=[{'arcp':(1,2),'c':KCC_G,'major':True}, 3,
+                                     {'arcp':(4,1),'c':CBE_G}]),
+     # 2. 南西へ回り込む区画
+     dict(n='12000', up=12000, ring=[{'arcp':(2,5),'c':KCC_G}, {'arcp':(5,6),'c':CBE_G},
+                                     {'arcp':(7,8),'c':CBE_G}, {'arcp':(8,9),'c':P11_G},
+                                     {'arcp':(10,4),'c':CBE_G}, 3]),
+   ])
+
+
 def main():
     base = ad2_dir()
     if not base: print('AIPのAD2フォルダが見つかりません', file=sys.stderr); sys.exit(1)
@@ -480,11 +528,12 @@ def main():
             for q in parts:
                 out.append(dict(n=sp['n'] + ' ' + rem['n'], jp=sp['jp'], k=kind, icao=icao,
                                 up=rem.get('up'), lo=rem.get('lo'), rmk=sp.get('eff_note', ''),
+                                _late=sp.get('late', 0),
                                 pts=[[round(y, 6), round(x/K, 6)] for x, y in q.exterior.coords]))
         for s2 in sp['sub']:
             out.append(dict(n=sp['n'] + ' ' + s2['n'], jp=sp['jp'], k=kind, icao=icao,
                             up=s2.get('up'), lo=s2.get('lo'), rmk=sp.get('eff_note', ''),
-                            pts=ring(s2['ring'])))
+                            _late=sp.get('late', 0), pts=ring(s2['ring'])))
     if ng: print(f'{ng} 件を検算落ちで除外', file=sys.stderr)
 
     # ── 図をまたいだ重複を落とす ────────────────────────────────
@@ -498,8 +547,12 @@ def main():
     K0 = math.cos(math.radians(36.0))
     S0 = 111.32**2 / K0
     def _pg(f): return Polygon([(b*K0, a) for a, b in f['pts']]).buffer(0)
+    # ⚠ **AIPが「◯◯ACAを除く」と言っている図は最後に置く**。
+    #   面積順だと中部ACA(広い)が先に置かれて浜松ACAを75km²削ってしまい、
+    #   AIPと逆の切り方になる。late=True の図は後回しにして差分だけ残す
     score = lambda f: (f['up'] is not None) + (f['lo'] is not None)
-    order = sorted(range(len(out)), key=lambda i: (-score(out[i]), -_pg(out[i]).area))
+    order = sorted(range(len(out)),
+                   key=lambda i: (out[i].get('_late', 0), -score(out[i]), -_pg(out[i]).area))
     keep, acc, drop, clip = [], None, 0, 0
     for i in order:
         g = _pg(out[i])
@@ -523,6 +576,7 @@ def main():
     if drop or clip: print(f'  重複: {drop} 件を除外 / {clip} 件を切り取り')
     out = keep
 
+    for f in out: f.pop('_late', None)
     dst = os.path.join(here, '..', 'aca.json')
     eff = os.path.basename(os.path.dirname(base))
     json.dump({'eff': eff, 'src': 'AIP Japan AD 2.17 添付チャート', 'f': out},
