@@ -28,7 +28,7 @@
   pts… [[lat,lng],..] または リングの配列(円環のW-183Aは外周+穴)
 使い方: python3 tools/gen_res.py
 """
-import re, os, sys, glob, json, math, subprocess
+import re, os, sys, math, glob, json, subprocess
 
 CO = re.compile(r'(\d{6}(?:\.\d+)?)N\s*/?\s*(\d{7}(?:\.\d+)?)E')
 JPC = re.compile(r'[ぁ-んァ-ヶ一-龥]')
@@ -300,6 +300,54 @@ def parse_restrictions(t):
         out.append(rec)
     return out
 
+
+# ── 「◯◯を除く」と注記された区域に実際に穴を開ける ──────────────
+# ENR 5.1 は除外を注記(rmk)で書くだけで、座標としては外形しか出さない。
+# 除外される相手も同じ表に載っているので、shapelyで差分を取れば穴にできる。
+# ⚠ **注記は消さないこと**。穴を開けても「何を除いたか」は読めた方がいい
+EXCLUDE = {
+  # 区域名 → 除外する区域名のリスト(rmk の "Excluding ..." と対応)
+  'CENTRAL TRAINING AREA': ['CAMP SCHWAB', 'R-177 CAMP HANSEN/EASILY'],
+}
+
+
+def punch_holes(feats):
+    try:
+        from shapely.geometry import Polygon
+        from shapely.ops import unary_union
+    except ImportError:
+        print('  shapely が無いので除外を穴にできない', file=sys.stderr); return feats
+    by = {x['n']: x for x in feats}
+    for nm, others in EXCLUDE.items():
+        tgt = by.get(nm)
+        if not tgt or not isinstance(tgt['pts'][0][0], (int, float)):
+            print(f'  ⚠ {nm} が見つからない/既に入れ子', file=sys.stderr); continue
+        k = math.cos(math.radians(tgt['pts'][0][0]))
+        pl = lambda p: Polygon([(b*k, a) for a, b in p]).buffer(0)
+        cut = [by[o] for o in others if o in by]
+        if len(cut) != len(others):
+            print(f'  ⚠ {nm}: 除外する相手が揃わない '
+                  f'{[o for o in others if o not in by]}', file=sys.stderr); continue
+        g = pl(tgt['pts']).difference(unary_union([pl(c['pts']) for c in cut]))
+        S = 111.32**2 / k
+        # ⚠ **差分は複数の島に割れることがある**。大きい1片だけ残すと面積が減る
+        #   (中部訓練場は45.35km²減ったが、除外の重なりは37.09km²しかなかった)。
+        #   割れた片は**同名の別レコードとして全部出す**
+        parts = [g] if g.geom_type == 'Polygon' else list(g.geoms)
+        parts = [q for q in sorted(parts, key=lambda z: -z.area) if q.area*S > 0.01]
+        recs = []
+        for q in parts:
+            rings = [[[round(y, 6), round(x/k, 6)] for x, y in q.exterior.coords]]
+            rings += [[[round(y, 6), round(x/k, 6)] for x, y in r.coords] for r in q.interiors]
+            r = dict(tgt); r['pts'] = rings if len(rings) > 1 else rings[0]
+            recs.append(r)
+        print(f'  {nm}: {", ".join(others)} を除外 → {len(parts)}片 '
+              f'(計 {sum(q.area for q in parts)*S:.2f}km² / 穴 '
+              f'{sum(len(q.interiors) for q in parts)}個)')
+        i = feats.index(tgt); feats[i:i+1] = recs
+    return feats
+
+
 def main():
     pdf = latest()
     if not pdf: print('AIPのENR PDFが見つかりません', file=sys.stderr); sys.exit(1)
@@ -308,6 +356,7 @@ def main():
     # 目次にも同じ見出しが出るので、**本文にしか無い英文見出し**で切る
     t = cut(t, 'PROHIBITED, RESTRICTED AND', 'ENR 5.2 EXERCISE AND TRAINING AREAS')
     f = parse_rjr(t) + parse_restrictions(t)
+    f = punch_holes(f)
     eff = os.path.basename(os.path.dirname(pdf))
     here = os.path.dirname(os.path.abspath(__file__))
     dst = os.path.join(here, '..', 'res.json')

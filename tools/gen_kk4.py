@@ -273,8 +273,22 @@ def main():
                 print(f'  隙間 {h.area*111*111:.1f}km² を {n} に取り込み')
 
     out.sort(key=lambda x: x[0])
-    res = [{'n': n, 'pts': [[round(y, 5), round(x, 5)] for x, y in f.exterior.coords]}
-           for n, f in out]
+    # ⚠ **面をそのまま exterior で出すと自己交差したまま出る**(4-2で発生していた)。
+    #   隙間の取り込み(buffer(1e-6)→buffer(-1e-6))でピンチ点ができ、外環が
+    #   自分と交差する。buffer(0)で正規化し、**割れた片は捨てずに別の面として出す**
+    #   (4-2は119.5km²と0.8km²に割れる。捨てると面積が減る)
+    res, ng = [], 0
+    for n, f in out:
+        g = f.buffer(0)
+        parts = [g] if g.geom_type == 'Polygon' else list(g.geoms)
+        parts = [q for q in sorted(parts, key=lambda z: -z.area) if q.area*111*111 > 0.05]
+        if len(parts) > 1:
+            print(f'  {n}: 自己交差を正規化 → {len(parts)}片 '
+                  f'({", ".join("%.1f"%(q.area*111*111) for q in parts)} km²)')
+            ng += 1
+        for q in parts:
+            res.append({'n': n, 'pts': [[round(y, 5), round(x, 5)] for x, y in q.exterior.coords]})
+    if ng: print(f'  {ng} 区分を正規化した')
     for n, f in out:
         print(f'  {n}: {f.area*111*111:6.0f}km²  中心 {f.centroid.y:.3f}N {f.centroid.x:.3f}E')
     here = os.path.dirname(os.path.abspath(__file__))
