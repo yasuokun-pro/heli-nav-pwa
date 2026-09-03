@@ -1313,7 +1313,13 @@ async function loadAca(){
           //   上限だけ載せた図・下限だけ載せた図の両方があるので別扱いにする
           `<dt>上限</dt><dd>${f.up!==null&&f.up!==undefined?altTxt(f.up):NOALT}</dd>`+
           `<dt>下限</dt><dd>${f.lo!==null&&f.lo!==undefined?altTxt(f.lo):NOALT}</dd>`+
-          `</dl><div class="note">AIP ${f.icao} AD 2.17 添付図${ACA.eff?' (EFF '+ACA.eff+')':''}。`+
+          `</dl>`+
+          // ⚠ 東京TCAだけは**図に座標表が無く**、画像から起こした近似形状。
+          //    他は全部AIPの座標そのままなので、混ざっていることを明示する
+          (/近似/.test(f.rmk||'')?`<div class="note" style="color:var(--amb)">`+
+            `⚠ ${f.rmk}。他の空域はAIPの座標そのままだが、ここだけ性格が違う。`+
+            `境界付近ではAIPのチャートで確認すること</div>`:'')+
+          `<div class="note">AIP ${f.icao} AD 2.17 添付図${ACA.eff?' (EFF '+ACA.eff+')':''}。`+
           `<b>図から起こせた空域のみ表示している。載っていない=無い ではない。</b></div>`;
         return el;
       }).addTo(acaLayer);

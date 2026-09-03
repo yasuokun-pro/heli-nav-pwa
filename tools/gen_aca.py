@@ -564,6 +564,19 @@ def main():
                             _late=sp.get('late', 0), pts=ring(s2['ring'])))
     if ng: print(f'{ng} 件を検算落ちで除外', file=sys.stderr)
 
+    # ── 東京TCA(図の読み取り) ───────────────────────────────────
+    # ⚠ **この図だけ番号付きの座標表が無い**ので tools/gen_tca.py が図から起こす。
+    #   出力は近似。rmk にその旨を入れてUIで警告を出す
+    tcaf = os.path.join(here, 'tca_tokyo.gen.json')
+    if os.path.exists(tcaf):
+        t = json.load(open(tcaf))
+        for f in t['f']:
+            out.append(dict(n='TOKYO TCA ' + f['n'], jp='東京ターミナルコントロールエリア',
+                            k='TCA', icao='RJTT', up=f['up'], lo=f['lo'],
+                            rmk='図から起こした近似形状(この図だけ座標表が無い)',
+                            _late=0, pts=f['pts']))
+        print(f"  東京TCA {len(t['f'])} 区画を読み込み(図の読み取り・近似)")
+
     # ── 図をまたいだ重複を落とす ────────────────────────────────
     # 隣り合う進入管制区は境界を共有していて、**同じ区画が複数の図に載る**
     # (百里ACAは42点中33点が東京ACAと同一座標、横田ACAは4区画が重なり100%)。
@@ -575,6 +588,10 @@ def main():
     K0 = math.cos(math.radians(36.0))
     S0 = 111.32**2 / K0
     def _pg(f): return Polygon([(b*K0, a) for a, b in f['pts']]).buffer(0)
+    # ⚠ **TCAとACAは別の空域**(TCAはレーダー進入管制業務の助言空域)。
+    #   同じ場所に重なって当たり前なので、突合は**種別ごとに分ける**
+    tcas = [f for f in out if f['k'] == 'TCA']
+    out = [f for f in out if f['k'] != 'TCA']
     # ⚠ **AIPが「◯◯ACAを除く」と言っている図は最後に置く**。
     #   面積順だと中部ACA(広い)が先に置かれて浜松ACAを75km²削ってしまい、
     #   AIPと逆の切り方になる。late=True の図は後回しにして差分だけ残す
@@ -602,7 +619,7 @@ def main():
         acc = q if acc is None else unary_union([acc, g])
         acc = unary_union([acc, g])
     if drop or clip: print(f'  重複: {drop} 件を除外 / {clip} 件を切り取り')
-    out = keep
+    out = keep + tcas
 
     for f in out: f.pop('_late', None)
     dst = os.path.join(here, '..', 'aca.json')
