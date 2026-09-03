@@ -567,15 +567,19 @@ def main():
     # ── 東京TCA(図の読み取り) ───────────────────────────────────
     # ⚠ **この図だけ番号付きの座標表が無い**ので tools/gen_tca.py が図から起こす。
     #   出力は近似。rmk にその旨を入れてUIで警告を出す
-    tcaf = os.path.join(here, 'tca_tokyo.gen.json')
-    if os.path.exists(tcaf):
+    for fn, nm, jp, ic, why in (
+            ('tca_tokyo.gen.json', 'TOKYO TCA', '東京ターミナルコントロールエリア', 'RJTT',
+             'この図だけ座標表が無い'),
+            ('tca_hyakuri.gen.json', 'HYAKURI TCA', '百里ターミナルコントロールエリア', 'RJAH',
+             '同心円弧と放射線で組まれていて、どの中心も公称半径に合わず区画の角も座標表に無い')):
+        tcaf = os.path.join(here, fn)
+        if not os.path.exists(tcaf): continue
         t = json.load(open(tcaf))
         for f in t['f']:
-            out.append(dict(n='TOKYO TCA ' + f['n'], jp='東京ターミナルコントロールエリア',
-                            k='TCA', icao='RJTT', up=f['up'], lo=f['lo'],
-                            rmk='図から起こした近似形状(この図だけ座標表が無い)',
-                            _late=0, pts=f['pts']))
-        print(f"  東京TCA {len(t['f'])} 区画を読み込み(図の読み取り・近似)")
+            out.append(dict(n=nm + ' ' + f['n'], jp=jp, k='TCA', icao=ic,
+                            up=f['up'], lo=f['lo'],
+                            rmk=f'図から起こした近似形状({why})', _late=0, pts=f['pts']))
+        print(f"  {jp} {len(t['f'])} 区画を読み込み(図の読み取り・近似)")
 
     # ── 図をまたいだ重複を落とす ────────────────────────────────
     # 隣り合う進入管制区は境界を共有していて、**同じ区画が複数の図に載る**

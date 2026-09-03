@@ -232,5 +232,153 @@ def main():
     print(f'  下限の種類: {lo}')
 
 
+# ══════════════════════════════════════════════════════════
+# 百里ターミナルコントロールエリア (RJAH AD 2.17 添付図)
+# ══════════════════════════════════════════════════════════
+# ⚠ **公表座標だけでは組めない**。同心円弧(5/6/9/12/14.8/19/24/30NM)と
+#   放射線(003/033/043/253/293/323°T)で組まれているが、**どの中心を使っても
+#   公称半径に合わない**(ARP/HUC VOR/当てはめのいずれもRMS 0.24〜0.38NM、
+#   最大0.5〜0.6NM)。さらに27区画の角の多くが座標表(30点)に無い。
+#   よって東京TCAと同じく**図の読み取り**で起こす。出力は近似。
+# 図の作りは東京TCAより素直:
+#   * **各区画に丸数字①〜㉗が振ってあり、凡例に上下限の表がある**(引き出し線なし)
+#   * 地図の下敷きが無い純粋な模式図なので、**生インクをそのまま塗り分けられる**
+# ⚠ 丸数字は「033°T」等の回転文字の断片(03/3/4/5)と紛らわしい。
+#   **数字のまわりに丸があるか**(半径10〜19pxのリング上のインク率>0.85)で判別する
+# ⚠ ①②⑩⑭⑰ は**丸数字が区画の外**に置かれていて短い引き出し線で指している。
+#   半径を広げながら探し、**候補を順位付けして全部が別区画になるように割り当てる**
+HY_PAGE = 10
+HY_SHIFT = (2, -6)     # 図の灰色CTZ円(RJAH ARPから5NM)を画像から探して実測した補正
+
+
+def _circled(bbox_html, ink, S):
+    """丸数字(1〜27)の位置を返す。回転文字の断片を丸の有無で弾く"""
+    H, W = ink.shape
+    out = []
+    for x0, y0, x1, y1, t in re.findall(
+            r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)</word>',
+            bbox_html):
+        t = t.strip()
+        if not re.fullmatch(r'\d{1,2}', t): continue
+        v = int(t)
+        if not (1 <= v <= 27): continue
+        if float(x0) > 415 and float(y0) < 460: continue        # 凡例の列
+        cx, cy = (float(x0)+float(x1))/2*S, (float(y0)+float(y1))/2*S
+        best = 0
+        for r in range(10, 20):
+            n = hit = 0
+            for i in range(72):
+                a = i*5*math.pi/180
+                x, y = int(cx+r*math.cos(a)), int(cy+r*math.sin(a))
+                if 0 <= x < W and 0 <= y < H:
+                    n += 1; hit += ink[y-1:y+2, x-1:x+2].any()
+            best = max(best, hit/max(n, 1))
+        if best > 0.85: out.append((v, cx, cy))
+    return out
+
+
+def _legend(bbox_html):
+    """凡例の「丸数字 上限/下限」を読む"""
+    W = [(float(a), float(b), float(c), float(d), t.strip()) for a, b, c, d, t in
+         re.findall(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)</word>',
+                    bbox_html)]
+    leg = [w for w in W if w[0] > 415 and w[1] < 460]
+    nums = [w for w in leg if re.fullmatch(r'\d{1,2}', w[4])]
+    vals = [w for w in leg if re.fullmatch(r'\d{4,5}', w[4])]
+    out = {}
+    for x0, y0, x1, y1, t in nums:
+        yc = (y0+y1)/2
+        col = [v for v in vals if x1 < v[0] < x1+30]
+        up = sorted([v for v in col if (v[1]+v[3])/2 < yc], key=lambda v: abs((v[1]+v[3])/2-yc))
+        lo = sorted([v for v in col if (v[1]+v[3])/2 > yc], key=lambda v: abs((v[1]+v[3])/2-yc))
+        if up and lo: out[int(t)] = (int(up[0][4]), int(lo[0][4]))
+    return out
+
+
+def hyakuri():
+    import json as _json
+    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/RJAH__*.pdf',
+                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/RJAH__*.pdf'):
+        f = sorted(glob.glob(os.path.expanduser(pat)))
+        if f: pdf = f[-1]; break
+    else:
+        print('RJAHのPDFが無い', file=sys.stderr); return None
+    subprocess.run(['pdftoppm', '-png', '-r', str(DPI), '-f', str(HY_PAGE), '-l', str(HY_PAGE),
+                    pdf, '/tmp/tca_ah'], check=True)
+    subprocess.run(['pdftotext', '-bbox-layout', '-f', str(HY_PAGE), '-l', str(HY_PAGE),
+                    pdf, '/tmp/tca_ah.html'], check=True)
+    img = Image.open(sorted(glob.glob('/tmp/tca_ah-*.png'))[-1]).convert('L')
+    ink = np.array(img) < 150
+    H, W = ink.shape; S = DPI/72.0
+    bb = open('/tmp/tca_ah.html').read()
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    P = {int(k): v for k, v in
+         _json.load(open(os.path.join(here, 'aca_points.json')))['RJAH/TCA'].items()}
+    lab = {}
+    for x0, y0, x1, y1, t in re.findall(
+            r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)</word>', bb):
+        m = re.fullmatch(r'\((\d{1,2})\)', t.strip())
+        if not m: continue
+        y = (float(y0)+float(y1))/2
+        if y > 560: continue                     # 下の座標一覧は図ではない
+        lab.setdefault(int(m.group(1)), ((float(x0)+float(x1))/2, y))
+    ks = [k for k in lab if k in P]
+    A = np.array([[P[k][1], P[k][0], 1] for k in ks])
+    cx = np.linalg.lstsq(A, np.array([lab[k][0]*S for k in ks]), rcond=None)[0]
+    cy = np.linalg.lstsq(A, np.array([lab[k][1]*S for k in ks]), rcond=None)[0]
+    cx[2] += HY_SHIFT[0]; cy[2] += HY_SHIFT[1]
+    M = np.linalg.inv(np.array([[cx[0], cx[1]], [cy[0], cy[1]]]))
+    def px2ll(x, y):
+        lon, lat = M @ np.array([x-cx[2], y-cy[2]])
+        return round(float(lat), 5), round(float(lon), 5)
+
+    lb, cells = segment(ink)
+    sz = {int(i): int((lb == i).sum()) for i in np.unique(lb) if i > 0}
+    OUTSIDE = max(sz, key=lambda k: sz[k])       # 枠内・TCA外の広い領域
+    nums = _circled(bb, ink, S)
+    rank = {}
+    for v, ux, uy in nums:
+        order = []
+        for r in range(22, 200, 3):
+            c = {}
+            for i in range(144):
+                a = i*2.5*math.pi/180
+                x, y = int(ux+r*math.cos(a)), int(uy+r*math.sin(a))
+                if 0 <= x < W and 0 <= y < H:
+                    u = int(lb[y, x])
+                    if u > 0 and u != OUTSIDE and sz[u] >= 600: c[u] = c.get(u, 0)+1
+            for u in sorted(c, key=lambda z: -c[z]):
+                if u not in order: order.append(u)
+            if len(order) >= 4: break
+        rank[v] = order
+    used, cellof = set(), {}
+    for v in sorted(rank, key=lambda k: len(rank[k])):
+        for u in rank[v]:
+            if u not in used: cellof[v] = u; used.add(u); break
+    leg = _legend(bb)
+    miss = [v for v in range(1, 28) if v not in cellof or v not in leg]
+    if miss: print(f'  ⚠ 百里TCA: 対応が取れない丸数字 {miss}', file=sys.stderr)
+    out = []
+    for v in sorted(cellof):
+        if v not in leg: continue
+        up, lo = leg[v]
+        m = dilate(lb == cellof[v], 9)
+        pts = trace(m)
+        if len(pts) < 20: print(f'  ⚠ ㉔{v}: 外周が取れない', file=sys.stderr); continue
+        g = Polygon(pts).buffer(0).simplify(4.0)
+        if g.is_empty: continue
+        if g.geom_type != 'Polygon': g = max(g.geoms, key=lambda q: q.area)
+        out.append(dict(n=f'{up}/{lo}', up=up, lo=lo,
+                        pts=[[a, b] for a, b in (px2ll(x, y) for x, y in g.exterior.coords)]))
+    dst = os.path.join(here, 'tca_hyakuri.gen.json')
+    eff = os.path.basename(os.path.dirname(os.path.dirname(pdf)))
+    _json.dump({'eff': eff, 'src': 'AIP Japan RJAH AD 2.17 添付図(図の読み取り・近似)',
+                'f': out}, open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
+    print(f'{len(out)} 区画 → tca_hyakuri.gen.json ({os.path.getsize(dst)/1024:.0f}KB)')
+    return out
+
+
 if __name__ == '__main__':
     main()
+    hyakuri()
