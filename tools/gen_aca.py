@@ -435,6 +435,54 @@ SPEC['RJOE/ACA'] = dict(
                                    {'arcp':(7,12),'c':AK_C}]),
    ])
 
+# 築城ACA。座標表(36点)は自動抽出できる。弧は3本:
+#   ・SWE 12NM((3)-(13))  周防VOR/DME 33.85662,131.0294
+#   ・AHT 15NM((13)-(1))  芦屋TACAN 33.88743,130.64987
+#   ・(14) 25NM/15NM      **(14)は頂点ではなく弧の中心**。座標表に入っているのは
+#     そのためで、図でも黒丸+破線で「25NM」「15NM」の寸法が付いている。
+#     25NM上に(15)(16)(29)(36)、15NM上に(17)(18)が乗る(実測 24.98〜25.01 / 15.00)
+# ⚠ (13)は **SWE12NM と AHT15NM の交点**。ここで弧が切り替わる
+# ⚠ 単独ラベルは**上限**。根拠は2つ:
+#   1. 「6000・FL160/12000」のラベルが1区画に付いている。6000が下限だと
+#      12000-FL160と重なって意味を成さない。上限なら「〜6000」と「12000〜FL160」の
+#      **2枚重ね**になる(この区画だけ dup=1 でもう1枚出している)
+#   2. 築城飛行場(334106N/1310225E)自身が単独ラベル FL160 の区画の中にある
+# ⚠ 「(EXC10000)」等は**上限側**が含まれないという意味(東京ACAは下限側だった)
+SWE_Z = (33.85662, 131.0294)     # 周防VOR/DME
+AHT_Z = (33.88743, 130.64987)    # 芦屋TACAN
+P14_Z = (34.140833, 132.2325)    # 340827N1321357E 25/15NM弧の中心
+SPEC['RJFZ/ACA'] = dict(
+   jp='築城進入管制区', n='TSUIKI ACA', eff_note='下限の記載がない区画は図に下限が書かれていない',
+   outer=[12, 11, 19, 24, 15, 18, {'arcp': (18, 17), 'c': P14_Z}, 16,
+          {'arcp': (16, 29), 'c': P14_Z}, {'arcp': (29, 36), 'c': P14_Z},
+          35, 34, 27, 23, 22, 10, 9, 8, 26, 31, 30, 5, 3,
+          {'arcp': (3, 13), 'c': SWE_Z}],
+   sub=[
+     dict(n='10000(北・EXC)', up=10000, rmk='上限10000ftは含まない',
+          ring=[12, 11, {'arcp': (1, 13), 'c': AHT_Z}]),
+     dict(n='8000(西・EXC)', up=8000, rmk='上限8000ftは含まない',
+          ring=[{'arcp': (13, 1), 'c': AHT_Z}, 2, 4, 6, 5, 3,
+                {'arcp': (3, 13), 'c': SWE_Z}]),
+     dict(n='12000(中央・EXC)', up=12000, rmk='上限12000ftは含まない',
+          ring=[19, 20, 25, 6, 4, 2, 1, 11]),
+     # 西の帯は「〜6000」と「12000〜FL160」の2枚
+     dict(n='6000(西)', up=6000, ring=[25, 32, 31, 30, 5, 6]),
+     dict(n='FL160/12000(西)', up=16000, lo=12000, dup=1,
+          ring=[25, 32, 31, 30, 5, 6]),
+     dict(n='FL160/12000(南西)', up=16000, lo=12000, ring=[31, 32, 26]),
+     dict(n='9000', up=9000, ring=[7, 10, 9, 8]),
+     dict(n='13000', up=13000, ring=[21, 23, 22, 10, 7]),
+     dict(n='FL160/10000', up=16000, lo=10000, ring=[33, 28, 29]),
+     dict(n='FL160/FL150', up=16000, lo=15000,
+          ring=[{'arcp': (29, 36), 'c': P14_Z}, 35, 34, 33]),
+     dict(n='10000(東)', up=10000,
+          ring=[15, 18, {'arcp': (18, 17), 'c': P14_Z}, 16,
+                {'arcp': (16, 15), 'c': P14_Z}]),
+     dict(n='FL160', up=16000,
+          ring=[{'arcp': (15, 16), 'c': P14_Z}, {'arcp': (16, 29), 'c': P14_Z},
+                28, 33, 34, 27, 23, 21, 7, 8, 26, 32, 25, 20, 19, 24]),
+   ])
+
 SPEC['RJAH/ACA'] = dict(
    jp='百里進入管制区', n='HYAKURI ACA', eff_note='図に上限の記載なし',
    ctr=NRE49,
@@ -585,7 +633,9 @@ def main():
         if not pts: print(f'  ⚠ {key} の座標表が無い', file=sys.stderr); ng += 1; continue
         ring = lambda r: build(r, pts, sp.get('ctr'))
         oa = sph_area(ring(sp['outer']))
-        tot = sum(sph_area(ring(s['ring'])) for s in sp['sub'])
+        # ⚠ dup=1 は「同じ外形にもう1枚の高度帯を重ねる」区画(築城の 6000 と
+        #   FL160/12000)。面積を二重に数えないよう検算からは外す
+        tot = sum(sph_area(ring(s['ring'])) for s in sp['sub'] if not s.get('dup'))
         rem = sp.get('remainder')
         icao, kind = key.split('/')
         if not rem:
@@ -619,12 +669,15 @@ def main():
             for q in parts:
                 out.append(dict(n=sp['n'] + ' ' + rem['n'], jp=sp['jp'], k=kind, icao=icao,
                                 up=rem.get('up'), lo=rem.get('lo'), rmk=sp.get('eff_note', ''),
-                                _late=sp.get('late', 0),
+                                _late=sp.get('late', 0), _dup=0,
                                 pts=[[round(y, 6), round(x/K, 6)] for x, y in q.exterior.coords]))
         for s2 in sp['sub']:
             out.append(dict(n=sp['n'] + ' ' + s2['n'], jp=sp['jp'], k=kind, icao=icao,
-                            up=s2.get('up'), lo=s2.get('lo'), rmk=sp.get('eff_note', ''),
-                            _late=sp.get('late', 0), pts=ring(s2['ring'])))
+                            up=s2.get('up'), lo=s2.get('lo'),
+                            rmk=' '.join(x for x in (sp.get('eff_note', ''),
+                                                     s2.get('rmk', '')) if x),
+                            _late=sp.get('late', 0), _dup=s2.get('dup', 0),
+                            pts=ring(s2['ring'])))
     if ng: print(f'{ng} 件を検算落ちで除外', file=sys.stderr)
 
     # ── 東京TCA(図の読み取り) ───────────────────────────────────
@@ -659,6 +712,11 @@ def main():
     #   同じ場所に重なって当たり前なので、突合は**種別ごとに分ける**
     tcas = [f for f in out if f['k'] == 'TCA']
     out = [f for f in out if f['k'] != 'TCA']
+    # ⚠ **同じ外形に高度帯を2枚重ねる区画**(築城の「6000・FL160/12000」)は
+    #   突合が平面でしか見ていないので、そのまま入れると片方が丸ごと消える。
+    #   dup=1 の分は突合から外して素通しする
+    dups = [f for f in out if f.get('_dup')]
+    out = [f for f in out if not f.get('_dup')]
     # ⚠ **AIPが「◯◯ACAを除く」と言っている図は最後に置く**。
     #   面積順だと中部ACA(広い)が先に置かれて浜松ACAを75km²削ってしまい、
     #   AIPと逆の切り方になる。late=True の図は後回しにして差分だけ残す
@@ -686,9 +744,9 @@ def main():
         acc = q if acc is None else unary_union([acc, g])
         acc = unary_union([acc, g])
     if drop or clip: print(f'  重複: {drop} 件を除外 / {clip} 件を切り取り')
-    out = keep + tcas
+    out = keep + dups + tcas
 
-    for f in out: f.pop('_late', None)
+    for f in out: f.pop('_late', None); f.pop('_dup', None)
     dst = os.path.join(here, '..', 'aca.json')
     eff = os.path.basename(os.path.dirname(base))
     json.dump({'eff': eff, 'src': 'AIP Japan AD 2.17 添付チャート', 'f': out},
