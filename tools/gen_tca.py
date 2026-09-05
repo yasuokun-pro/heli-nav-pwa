@@ -379,6 +379,149 @@ def hyakuri():
     return out
 
 
+# ── 築城TCA(RJFZ AD 2.17 の2枚目) ─────────────────────────────
+# ⚠ この図も**座標表が無い**。ただし東京・百里と違って構造が完全に規則的で、
+#   **TQT(築城TACAN)を中心とする同心円弧12本と放射線**だけで組まれている。
+#   弧の半径は 5/9/13/14/16/18/20/22/23/25/27/30NM で、画像から実測すると
+#   9.00 13.01 14.09 15.98 18.02 20.06 21.98 23.02 25.04 27.07 30.00 と出る。
+# ⚠ **方位は磁針方位**(図の上=磁北)。根拠は2つ:
+#   ・図中の破線「DGC155°T」(真方位155°)が画面方位162.5°に描かれている(+7.5°)
+#   ・DGCの記号が画面方位276.25°/32.35NM。真方位は268.70°/32.29NMなので
+#     距離はぴったり、方位だけ+7.55°ずれる
+#   AIPのMAG VAR実測値から作った推定式でも築城は7.63°W。VAR=7.6 を使う。
+# ⚠ 小月CTR・北九州CTR・山口宇部情報圏の**真上の区画**(下限5001/3001)は
+#   TQT中心ではなく各CTRの円で切られている。公称半径への寄せは
+#   **接線方向のときだけ**にしないと、これらの円が壊れる。
+# ⚠ SWEの記号でR-360の線が途切れていて、そのままだと塗り分けが漏れる。
+#   放射線に沿って短い切れ目を探して橋渡ししてから塗り分ける。
+TSU_PAGE = 7
+TQT = (33.688228, 131.035825)     # RJFZ AD 2.19 334117.62N/1310208.97E
+TSU_VAR = 7.6                     # 西偏(磁針方位→真方位)
+TSU_RAD = [5, 9, 13, 14, 16, 18, 20, 22, 23, 25, 27, 30]
+TSU_THE = [0, 10, 40, 50, 55, 95, 110, 135, 165, 181, 225, 250, 265, 280]
+# (代表点の半径NM, 代表点の磁針方位, 上限, 下限)。
+# ⚠ 区画idは塗り分け順で決まって当てにならないので、**区画の中の1点**で引く。
+#   代表点は各区画の「一番奥」(距離変換の最大点)なので多少図が変わっても当たる。
+TSU_CELL = [
+ (27.62,  23.2, 10000, 5000), (22.33,   9.8, 10000, 5001),   # 小月CTRの上
+ (21.49, 355.2,  9000, 6000), (21.20,  32.9, 10000, 4000),
+ (19.63, 345.2,  7000, 5000), (12.81, 349.2, 10000, 4500),   # 凡例(1)
+ (15.95,   4.4, 10000, 2000), (12.81, 315.0,  7000, 4500),
+ (26.31,  84.3, 10000, 3000), (13.60,  76.4, 10000, 1500),
+ (16.26,  46.5, 10000, 3001),                                # 山口宇部情報圏の上
+ ( 9.91,  13.5, 10000, 3001),                                # 北九州CTRの上
+ ( 6.63, 302.7, 10000, 3500),                                # 凡例(2)
+ ( 0.32,  45.3, 10000, 6001),                                # 築城CTRの上
+ ( 9.77, 283.1,  6000, 4500), (14.59, 271.2,  6000, 4500),   # 後者が凡例(3)
+ (10.79, 265.4,  6000, 3000),                                # 凡例(4)
+ ( 5.27, 254.9,  6000, 3500), (19.57, 121.2, 10000, 4000),
+ ( 7.29, 236.9, 10000, 3500),                                # 凡例(5)
+ (10.45, 245.9, 10000, 3000), ( 9.57, 193.2, 10000, 5000),
+ (15.57, 229.9, 10000, 6000), (16.65, 216.3, 10000, 8000),
+ (17.49, 173.6, 10000, 8000), (17.34, 188.4,  9000, 8000),
+ (26.00, 156.1, 10000, 7000), (23.89, 173.5, 10000, 9000),
+]
+
+
+def _tsu_dest(r_nm, brg_mag):
+    """TQTから 磁針方位brg・r_nmNM の点"""
+    la = math.radians(TQT[0]); dr = r_nm*1852/6371008.8
+    br = math.radians(brg_mag - TSU_VAR)
+    la2 = math.asin(math.sin(la)*math.cos(dr)+math.cos(la)*math.sin(dr)*math.cos(br))
+    lo2 = math.radians(TQT[1]) + math.atan2(math.sin(br)*math.sin(dr)*math.cos(la),
+                                            math.cos(dr)-math.sin(la)*math.sin(la2))
+    return [round(math.degrees(la2), 6), round(math.degrees(lo2), 6)]
+
+
+def tsuiki():
+    import json as _json
+    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/RJFZ__*.pdf',
+                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/RJFZ__*.pdf'):
+        f = sorted(glob.glob(os.path.expanduser(pat)))
+        if f: pdf = f[-1]; break
+    else:
+        print('RJFZのPDFが無い', file=sys.stderr); return None
+    subprocess.run(['pdftoppm', '-png', '-r', str(DPI), '-f', str(TSU_PAGE), '-l', str(TSU_PAGE),
+                    pdf, '/tmp/tca_fz'], check=True)
+    img = Image.open(sorted(glob.glob('/tmp/tca_fz-*.png'))[-1]).convert('L')
+    th = np.array(img.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.MinFilter(5))) < 150
+    th[:250, :] = False; th[2600:, :] = False; th[:, :340] = False; th[:, 2200:] = False
+    ys, xs = np.nonzero(th)
+
+    def score(cx, cy):
+        d = np.hypot(xs-cx, ys-cy)
+        h, _ = np.histogram(d, bins=np.arange(0, 1200, 2))
+        return float((h.astype(float)**2).sum())
+    best = max(((score(x, y), x, y) for x in range(950, 1250, 10)
+                for y in range(1000, 1350, 10)))
+    _, cx, cy = best
+    for st in (4, 2, 1):
+        _, cx, cy = max((score(x, y), x, y) for x in range(cx-6*st, cx+6*st+1, st)
+                        for y in range(cy-6*st, cy+6*st+1, st))
+    d = np.hypot(xs-cx, ys-cy); m = (d > 615) & (d < 640)
+    X, Y = xs[m].astype(float), ys[m].astype(float)
+    c = np.linalg.lstsq(np.stack([X, Y, np.ones(len(X))], 1), X*X+Y*Y, rcond=None)[0]
+    CX, CY = c[0]/2, c[1]/2
+    S = math.sqrt(c[2]+CX*CX+CY*CY)/30.0
+    print(f'  築城TCA: 中心({CX:.1f},{CY:.1f}) 30NM円から {S:.3f}px/NM')
+
+    # 放射線の途中にある短い切れ目(navaidの記号)を橋渡しする
+    fix = 0
+    for t in TSU_THE:
+        st, ct = math.sin(math.radians(t)), math.cos(math.radians(t))
+        run = np.array([th[int(round(CY-i*ct)), int(round(CX+i*st))]
+                        for i in range(int(S), int(30*S))])
+        i = 0
+        while i < len(run):
+            if not run[i]:
+                j = i
+                while j < len(run) and not run[j]: j += 1
+                if i > 15 and j < len(run)-15 and (j-i) < 45 \
+                        and run[i-15:i].all() and run[j:j+15].all():
+                    for k in range(i-2, j+2):
+                        px = int(round(CX+(k+int(S))*st)); py = int(round(CY-(k+int(S))*ct))
+                        th[py-5:py+6, px-5:px+6] = True
+                    fix += 1
+                i = j
+            i += 1
+    lb, cells = segment(th)
+    print(f'  築城TCA: 切れ目{fix}箇所を橋渡し / {len([c for c in cells if c[1] > 200])}区画')
+
+    out, used = [], set()
+    for pr, pt, up, lo in TSU_CELL:
+        x = CX + pr*S*math.sin(math.radians(pt)); y = CY - pr*S*math.cos(math.radians(pt))
+        cid = int(lb[int(round(y)), int(round(x))])
+        if cid <= 0 or cid in used:
+            print(f'  ⚠ 築城TCA: 代表点({pr},{pt})が区画に当たらない', file=sys.stderr); continue
+        used.add(cid)
+        # 線の中心まで太らせてから追跡する(区画同士に隙間ができないように)
+        pts = trace(dilate(lb == cid, 11))
+        if len(pts) < 20:
+            print(f'  ⚠ 築城TCA: 外周が取れない({pr},{pt})', file=sys.stderr); continue
+        q = Polygon(pts).buffer(0).simplify(2.5)
+        if q.geom_type != 'Polygon': q = max(q.geoms, key=lambda z: z.area)
+        C = list(q.exterior.coords)[:-1]; n = len(C); P = []
+        for i, (px, py) in enumerate(C):
+            r = math.hypot(px-CX, py-CY)/S
+            t = math.degrees(math.atan2(px-CX, -(py-CY))) % 360
+            ax, ay = C[(i-1) % n]; bx, by = C[(i+1) % n]
+            vx, vy = bx-ax, by-ay; L = math.hypot(vx, vy) or 1
+            ux, uy = (px-CX)/(r*S or 1), (py-CY)/(r*S or 1)
+            if abs(vx/L*ux + vy/L*uy) < 0.30:      # 接線方向のときだけ公称半径に寄せる
+                b = min(TSU_RAD, key=lambda v: abs(v-r))
+                if abs(b-r) < 0.35: r = b
+            P.append(_tsu_dest(r, t))
+        out.append(dict(n=f'{up}/{lo}', up=up, lo=lo, pts=P))
+    here = os.path.dirname(os.path.abspath(__file__))
+    dst = os.path.join(here, 'tca_tsuiki.gen.json')
+    eff = os.path.basename(os.path.dirname(os.path.dirname(pdf)))
+    _json.dump({'eff': eff, 'src': 'AIP Japan RJFZ AD 2.17 添付図(図の読み取り・近似)',
+                'f': out}, open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
+    print(f'{len(out)} 区画 → tca_tsuiki.gen.json ({os.path.getsize(dst)/1024:.0f}KB)')
+    return out
+
+
 if __name__ == '__main__':
     main()
     hyakuri()
+    tsuiki()
