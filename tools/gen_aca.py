@@ -483,6 +483,54 @@ SPEC['RJFZ/ACA'] = dict(
                 28, 33, 34, 27, 23, 21, 7, 8, 26, 32, 25, 20, 19, 24]),
    ])
 
+# 福岡ACA。座標表55点は自動抽出できる。弧は5本で、中心は全部navaid:
+#   DGC 45NM(福岡VORTAC)/ IKE 15NM(壱岐VOR/DME)/ AHT 15NM(芦屋TACAN)/
+#   SWE 12NM(周防VOR/DME)/ AKE 9.5NM(天草VOR/DME)
+#   実測: DGC45→(44)44.99 (45)44.96 (52)44.99 (53)45.00 /
+#         IKE15→(46)15.27 (47)14.69 / AHT15→(49)15.01 (51)14.99 /
+#         SWE12→(35)11.98 (49)11.99 / AKE9.5→(2)9.46 (3)9.52
+# ⚠ **AKEはENR 4.1に無い**。RJDA(天草)AD 2.19 から取る。
+#   チャートの「9.5NM」は3.9NMと読み違えやすい
+# ⚠ (55)はIKE VORそのものの位置(図の記号)で、境界の頂点ではない
+# ⚠ (49)はAHT15とSWE12の交点、(48)はDGC45とIKE15の交点。座標表にあるのはそのため
+# ⚠ **注記が横切るところで境界線が白抜きされている**。「9.5NM」が(1)-(2)線を、
+#   「12NM」が(36)-(50)線を切っていて、そのままだと塗り分けが漏れて区画が融合する
+# ⚠ 単独ラベルは**上限**。2段ラベルの上段が FL180/FL160/12000 で、単独ラベルの
+#   FL180・FL160・12000 と同じ値が来る。福岡空港自身も単独ラベルFL180の区画にある
+FF_DGC = (33.67598, 130.38916)     # 福岡VORTAC
+FF_IKE = (33.74751, 129.77685)     # 壱岐VOR/DME
+FF_AHT = (33.88743, 130.64987)     # 芦屋TACAN
+FF_SWE = (33.85662, 131.0294)      # 周防VOR/DME
+FF_AKE = (32.480236, 130.160967)   # 天草VOR/DME(RJDA AD 2.19)
+SPEC['RJFF/ACA'] = dict(
+   jp='福岡進入管制区', n='FUKUOKA ACA', eff_note='下限の記載がない区画は図に下限が書かれていない',
+   outer=[{'arcp': (44, 45), 'c': FF_DGC}, 46, {'arcp': (46, 47), 'c': FF_IKE}, 48, 38, 39,
+          16, 17, 18, 2, {'arcp': (2, 3), 'c': FF_AKE}, 4, 26, 27, 28, 29, 30, 31, 32, 33,
+          7, 8, 9, 37, 36, 54, 53],
+   sub=[
+     dict(n='FL180', up=18000,
+          ring=[44, 49, {'arcp': (49, 35), 'c': FF_SWE}, 19, 20, 21, 22, 40, 41, 42, 43,
+                38, 48, 47, {'arcp': (47, 46), 'c': FF_IKE}, 45,
+                {'arcp': (45, 44), 'c': FF_DGC}]),
+     dict(n='FL180/12000', up=18000, lo=12000, ring=[54, 36, 50, 51, 52, 53]),
+     dict(n='FL180/10000', up=18000, lo=10000,
+          ring=[44, 53, 52, 51, {'arcp': (51, 49), 'c': FF_AHT}]),
+     dict(n='FL180/8000', up=18000, lo=8000,
+          ring=[{'arcp': (49, 51), 'c': FF_AHT}, 50, 34, 35, {'arcp': (35, 49), 'c': FF_SWE}]),
+     dict(n='FL160/12000', up=16000, lo=12000, ring=[36, 37, 9, 10, 34, 50]),
+     dict(n='FL160/8000',  up=16000, lo=8000,  ring=[34, 10, 11, 19, 35]),
+     dict(n='FL160', up=16000,
+          ring=[19, 11, 12, 6, 7, 33, 32, 31, 30, 29, 28, 27, 26, 4, 5, 1, 25, 24, 23,
+                22, 21, 20]),
+     dict(n='12000/6000', up=12000, lo=6000, rmk='上限12000ft・下限6000ftとも含まない',
+          ring=[9, 8, 6, 12, 11, 10]),
+     dict(n='12000(北東)', up=12000, rmk='上限12000ftは含まない', ring=[6, 8, 7]),
+     dict(n='FL170', up=17000,
+          ring=[38, 43, 42, 41, 40, 22, 23, 24, 25, 1, 2, 18, 13, 14, 15, 16, 39]),
+     dict(n='12000(南西)', up=12000, ring=[14, 13, 18, 17, 16, 15]),
+     dict(n='6000', up=6000, ring=[2, 1, 5, 4, {'arcp': (3, 2), 'c': FF_AKE}]),
+   ])
+
 SPEC['RJAH/ACA'] = dict(
    jp='百里進入管制区', n='HYAKURI ACA', eff_note='図に上限の記載なし',
    ctr=NRE49,
@@ -725,11 +773,22 @@ def main():
     score = lambda f: (f['up'] is not None) + (f['lo'] is not None)
     order = sorted(range(len(out)),
                    key=lambda i: (out[i].get('_late', 0), -score(out[i]), -_pg(out[i]).area))
-    keep, acc, drop, clip = [], None, 0, 0
+    # ⚠ **突合は高度帯が重なるものどうしだけ**にする。平面だけで見ると
+    #   隣り合うACAが**上下に積んである**分まで消してしまう。福岡ACAと築城ACAは
+    #   平面ではほぼ重なるが、福岡FL180/12000の下がちょうど築城12000(EXC)、
+    #   福岡12000/6000の下が築城6000で、**垂直の重なりは0**。
+    #   高度を見ないと福岡・築城あわせて5区画が丸ごと消える
+    def _vr(f):
+        return (f['lo'] if f['lo'] is not None else 0,
+                f['up'] if f['up'] is not None else 60000)
+    keep, kept, drop, clip = [], [], 0, 0
     for i in order:
         g = _pg(out[i])
         if g.area <= 0: continue
-        if acc is not None:
+        a0, b0 = _vr(out[i])
+        ov = [q for q, a1, b1 in kept if min(b0, b1) - max(a0, a1) > 0]
+        if ov:
+            acc = unary_union(ov)
             left = g.difference(acc)
             if left.area < 0.05 * g.area:
                 drop += 1; continue                    # ほぼ丸ごと重複
@@ -743,8 +802,7 @@ def main():
             if q.area * S0 < 1.0: continue
             r = dict(f); r['pts'] = [[round(y, 6), round(x/K0, 6)] for x, y in q.exterior.coords]
             keep.append(r)
-        acc = q if acc is None else unary_union([acc, g])
-        acc = unary_union([acc, g])
+        kept.append((g, a0, b0))
     if drop or clip: print(f'  重複: {drop} 件を除外 / {clip} 件を切り取り')
     out = keep + dups + tcas
 
