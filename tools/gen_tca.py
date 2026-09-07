@@ -521,7 +521,290 @@ def tsuiki():
     return out
 
 
+# ── 福岡TCA ────────────────────────────────────────────────────────
+# 出典: AIP Japan **RJFF AD 2.17 添付図 "Fukuoka Terminal Control Area"** (p.24)
+#
+# ⚠ この図は**独立した3つの同心円系**(福岡/長崎/熊本)でできていて、しかも
+#   **系ごとに図上の縮尺が違う**。福岡17.1 / 長崎18.5 / 熊本17.5 px/NM(300dpi)。
+#   海岸線は1枚で連続しているので図としては矛盾しているが、**各系は内部で
+#   完結している**ので、系ごとに極座標(そのARPからの距離NM・真方位)へ直せば
+#   正しく起こせる。ここで散々つまずいた
+# ⚠ 方位は**真方位**(図中の全部に °T が付く)。築城TCAは磁針方位だったので
+#   **TCAごとに違う**。図上の方位とラベルの差は系ごとに一定でない(最大2°)ので
+#   系ごとの平均オフセットを引いてから整数に寄せる
+# ⚠ **線を画像から取ろうとしてはいけない**。この図の区画分割線は海岸線と同じ
+#   細さ(300dpiで2px)でモルフォロジーが効かない。**pdftocairoでSVGに出すと
+#   線幅で分けられる**: 0.38pt=区画分割線 / 1.52pt=外周 / 0.23pt=海岸線。
+#   これが分かるまでが長かった
+# ⚠ 高度ラベルは本文レイヤから66組そのまま取れるが、**回転した文字が化ける**。
+#   0x13..0x1c が '0'..'9'、0xDB が '°' の差し替えになっているので戻す
+# ⚠ 引き出し線がある(ラベルが区画の外に置かれている)。海岸線と同じ線幅で
+#   描かれているものもあるので、**2点の直線でぶら下がっているもの**を拾って
+#   ラベルと1対1で対応づける。1対多にすると同じ区画に複数のラベルが乗る
+# ⚠ 西側の 10000/3000 と 10000/3001 の間に**分割線が引かれていない**。
+#   図の不備で、ここだけ1区画にまとめて下限3000(低い方)を採っている
+FF_PAGE = 24
+FF_SYS = {
+    'FUK': dict(c=(332.29, 239.39), s=4.1084, off=0.92,
+                arp=(33.584444, 130.451667)),   # RJFF 333504N/1302706E
+    'NAG': dict(c=(214.25, 406.28), s=4.4371, off=2.17,
+                arp=(32.916944, 129.913611)),   # RJFU 325501N/1295449E
+    'KUM': dict(c=(418.88, 431.78), s=4.2535, off=0.74,
+                arp=(32.837222, 130.855278)),   # RJFT 325014N/1305119E
+}
+
+
+def _ff_paths(svg):
+    """pdftocairoのSVGから、線幅つきのストロークパスを座標列で取り出す"""
+    num = re.compile(r'[-+]?\d*\.?\d+')
+    pat = re.compile(r'<path fill="none" stroke-width="([\d.]+)"[^>]*?d="([^"]*)"'
+                     r'\s*transform="matrix\(([^)]*)\)"', re.S)
+    body = svg[svg.find('</defs>'):]
+    out = []
+    for m in pat.finditer(body):
+        w = float(m.group(1)); d = m.group(2)
+        a, b, c, dd, e, f = [float(x) for x in num.findall(m.group(3))]
+        subs, cur, pos = [], [], (0.0, 0.0)
+        for op, arg in re.findall(r'([MLCZ])([^MLCZ]*)', d):
+            v = [float(x) for x in num.findall(arg)]
+            if op == 'M':
+                if len(cur) > 1: subs.append(cur)
+                cur = [(v[0], v[1])]; pos = (v[0], v[1])
+                for i in range(2, len(v), 2):
+                    cur.append((v[i], v[i+1])); pos = (v[i], v[i+1])
+            elif op == 'L':
+                for i in range(0, len(v), 2):
+                    cur.append((v[i], v[i+1])); pos = (v[i], v[i+1])
+            elif op == 'C':
+                for i in range(0, len(v), 6):
+                    p0, p1 = pos, (v[i], v[i+1])
+                    p2, p3 = (v[i+2], v[i+3]), (v[i+4], v[i+5])
+                    for k in range(1, 17):
+                        t = k/16.0; u = 1-t
+                        cur.append((u**3*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t**3*p3[0],
+                                    u**3*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t**3*p3[1]))
+                    pos = p3
+            elif op == 'Z':
+                if len(cur) > 1:
+                    cur.append(cur[0]); subs.append(cur)
+                cur = []
+        if len(cur) > 1: subs.append(cur)
+        for sub in subs:
+            out.append((w, [(a*x+c*y+e, b*x+dd*y+f) for x, y in sub]))
+    return out
+
+
+def _ff_len(s):
+    return sum(math.hypot(s[i+1][0]-s[i][0], s[i+1][1]-s[i][1]) for i in range(len(s)-1))
+
+
+def _ff_gridlike(s):
+    """2点の線分が、いずれかの系の弧か放射線に乗っているか"""
+    a, b = s[0], s[1]
+    l = math.hypot(b[0]-a[0], b[1]-a[1])
+    if l < 1e-9: return False
+    for v in FF_SYS.values():
+        cx, cy = v['c']; sc = v['s']
+        d0 = math.hypot(a[0]-cx, a[1]-cy); d1 = math.hypot(b[0]-cx, b[1]-cy)
+        dm = (d0+d1)/2
+        if dm > 34*sc: continue
+        if abs(d1-d0) < 0.08 and abs(dm/sc-round(dm/sc)) < 0.25: return True
+        ux, uy = (b[0]-a[0])/l, (b[1]-a[1])/l
+        if abs(-uy*(cx-a[0]) + ux*(cy-a[1])) < 0.5: return True
+    return False
+
+
+def _ff_dest(arp, r_nm, brg):
+    R = 3440.065
+    la = math.radians(arp[0]); dr = r_nm/R; br = math.radians(brg)
+    la2 = math.asin(math.sin(la)*math.cos(dr) + math.cos(la)*math.sin(dr)*math.cos(br))
+    lo2 = math.radians(arp[1]) + math.atan2(math.sin(br)*math.sin(dr)*math.cos(la),
+                                            math.cos(dr)-math.sin(la)*math.sin(la2))
+    return [round(math.degrees(la2), 6), round(math.degrees(lo2), 6)]
+
+
+def fukuoka():
+    import json as _json, html as _html
+    from shapely.geometry import LineString, Point, MultiLineString
+    from shapely.ops import unary_union, polygonize, nearest_points
+    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/RJFF__*.pdf',
+                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/RJFF__*.pdf'):
+        f = sorted(glob.glob(os.path.expanduser(pat)))
+        if f: pdf = f[-1]; break
+    else:
+        print('RJFFのPDFが無い', file=sys.stderr); return None
+    subprocess.run(['pdftocairo', '-svg', '-f', str(FF_PAGE), '-l', str(FF_PAGE),
+                    pdf, '/tmp/tca_ff.svg'], check=True)
+    subprocess.run(['pdftotext', '-bbox-layout', '-f', str(FF_PAGE), '-l', str(FF_PAGE),
+                    pdf, '/tmp/tca_ff.html'], check=True)
+    D = _ff_paths(open('/tmp/tca_ff.svg', encoding='utf-8').read())
+
+    # ── 線を仕分ける ────────────────────────────────────────────
+    net, cand = [], []
+    for w, s in D:
+        if len(s) < 2: continue
+        r = round(w, 2); L = _ff_len(s)
+        if r in (0.38, 1.52, 1.53):
+            if len(s) == 2 and abs(s[1][1]-s[0][1]) < 0.06 and 4 < L < 16: continue  # 高度の分数線
+            if L > 1500: continue                                                    # 図の枠
+            net.append(s)
+        elif r == 0.39:                       # CTRの破線円
+            xs = [p[0] for p in s]; ys = [p[1] for p in s]
+            if len(s) >= 6 and max(xs)-min(xs) < 60 and max(ys)-min(ys) < 60 and L > 15:
+                net.append(s)
+        elif r in (0.23, 0.24):               # 海岸線と同じ線幅
+            if len(s) == 2 and 3 < L < 80: cand.append(s)
+    # 海岸線の線幅でも、弧か放射線に乗っていれば区画分割線
+    for s in cand:
+        if _ff_gridlike(s) and not (abs(s[1][1]-s[0][1]) < 0.06 and 4 < _ff_len(s) < 16):
+            net.append(s)
+    leaders = list(cand)
+    NL = [LineString(s) for s in net]
+    keep = []
+    for i, s in enumerate(net):
+        if len(s) == 2 and _ff_len(s) < 26 and \
+                math.hypot(s[0][0]-s[-1][0], s[0][1]-s[-1][1]) > 1e-6 and not _ff_gridlike(s):
+            oth = MultiLineString([l for j, l in enumerate(NL) if j != i])
+            if max(Point(s[0]).distance(oth), Point(s[1]).distance(oth)) > 1.5:
+                leaders.append(s); continue
+        keep.append(s)
+
+    def _net(lines, tol):
+        LS = [LineString(s) for s in lines]; conn = []
+        for i, ln in enumerate(LS):
+            oth = MultiLineString([l for j, l in enumerate(LS) if j != i])
+            for p in (ln.coords[0], ln.coords[-1]):
+                d = Point(p).distance(oth)
+                if 1e-9 < d < tol:
+                    q = nearest_points(Point(p), oth)[1]
+                    conn.append(LineString([p, (q.x, q.y)]))
+        return unary_union(LS + conn)
+    faces = [f for f in polygonize(_net(keep, 2.5)) if f.area > 1.0]
+    thick = [s for w, s in D if round(w, 2) in (1.52, 1.53) and len(s) >= 2]
+    lobes = [f for f in polygonize(_net(thick, 3.0)) if f.area > 500]
+    ins = [f for f in faces if any(l.contains(f.representative_point()) for l in lobes)]
+
+    # ── 高度ラベル(回転文字の化けを戻す) ──────────────────────────
+    def dec(t):
+        t = _html.unescape(t); o = ''
+        for ch in t:
+            c = ord(ch)
+            o += (chr(ord('0')+c-0x13) if 0x13 <= c <= 0x1c else
+                  ('°' if c == 0xDB else ch))
+        return o
+    h = open('/tmp/tca_ff.html', encoding='utf-8').read()
+    SCT = (2481/595.22)/4.16556   # 本文レイヤのptとSVGのptは僅かに縮尺が違う
+    ws = re.findall(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" '
+                    r'yMax="([\d.]+)">([^<]*)</word>', h)
+    W = [(dec(t).strip(), (float(a)+float(c))/2*SCT, (float(b)+float(d))/2*SCT)
+         for a, b, c, d, t in ws]
+    labs = []
+    for t, X, Y in W:
+        if t != '10000': continue
+        k = sorted([(Y2-Y, t2, X2, Y2) for t2, X2, Y2 in W
+                    if re.fullmatch(r'\d{3,5}', t2) and t2 != '10000'
+                    and abs(X2-X) < 5.3 and 2.4 < Y2-Y < 11.5])
+        if not k: continue
+        labs.append((int(k[0][1]), (X+k[0][2])/2, (Y+k[0][3])/2))
+
+    def face_of(X, Y):
+        fs = [j for j, f in enumerate(ins) if f.contains(Point(X, Y))]
+        return fs[0] if len(fs) == 1 else None
+    # 引き出し線とラベルは1対1(近い順に貪欲)。1対多にすると同じ区画に集まる
+    pairs = []
+    for i, (lo, X, Y) in enumerate(labs):
+        for li, s in enumerate(leaders):
+            for k in (0, 1):
+                p, q = s[k], s[1-k]
+                d = math.hypot(p[0]-X, p[1]-Y); d2 = math.hypot(q[0]-X, q[1]-Y)
+                if d < 22 and d2 > d+4: pairs.append((d, i, li, p, q))
+    pairs.sort(); usedL, anchor = set(), {}
+    for d, i, li, p, q in pairs:
+        if i in anchor or li in usedL: continue
+        L = math.hypot(q[0]-p[0], q[1]-p[1])
+        anchor[i] = (q[0]+(q[0]-p[0])/L*3.0, q[1]+(q[1]-p[1])/L*3.0)
+        usedL.add(li)
+    final = {i: face_of(X, Y) for i, (lo, X, Y) in enumerate(labs)}
+    for i, a in anchor.items():
+        g = face_of(*a)
+        if g is not None: final[i] = g
+    bf = {}
+    for i, f in final.items():
+        if f is not None: bf.setdefault(f, []).append(i)
+    # ラベルの無い区画(CTRの円の内側など)は境界を一番長く共有する区画へ併合
+    root = list(range(len(ins))); ch = True
+    while ch:
+        ch = False
+        for j in range(len(ins)):
+            if j in bf or root[j] != j: continue
+            best = None
+            for k in bf:
+                if root[k] != k: continue
+                sh = ins[j].boundary.intersection(ins[k].boundary).length
+                if sh > 0.5 and (best is None or sh > best[0]): best = (sh, k)
+            if best: root[j] = best[1]; ch = True
+    grp = {}
+    for j in range(len(ins)):
+        r = root[j]
+        while root[r] != r: r = root[r]
+        grp.setdefault(r, []).append(j)
+
+    # どの外周がどの系か = その系の中心を含む外周
+    L2S = {}
+    for k, v in FF_SYS.items():
+        for j, lb in enumerate(lobes):
+            if lb.contains(Point(v['c'])): L2S[j] = k
+    out = []
+    for r, js in grp.items():
+        if r not in bf: continue
+        g = unary_union([ins[j] for j in js])
+        if g.geom_type != 'Polygon': g = max(g.geoms, key=lambda z: z.area)
+        lo = min(labs[i][0] for i in bf[r])
+        p = g.representative_point(); sysk = None
+        for j, lb in enumerate(lobes):
+            if lb.contains(p): sysk = L2S.get(j)
+        if sysk is None:
+            sysk = min(((math.hypot(p.x-FF_SYS[k]['c'][0], p.y-FF_SYS[k]['c'][1]), k)
+                        for k in FF_SYS))[1]
+        S = FF_SYS[sysk]; cx, cy = S['c']; sc = S['s']
+        q = g.simplify(0.25)
+        if q.geom_type != 'Polygon': q = g
+        C = list(q.exterior.coords)[:-1]; n = len(C); P = []
+        for i, (x, y) in enumerate(C):
+            d = math.hypot(x-cx, y-cy)
+            if d < 1e-9: continue
+            ux, uy = (x-cx)/d, (y-cy)/d
+            rr = d/sc; th = math.degrees(math.atan2(x-cx, -(y-cy))) % 360
+            tang = rad = False
+            for px, py in (C[(i-1) % n], C[(i+1) % n]):
+                vx, vy = px-x, py-y; l = math.hypot(vx, vy)
+                if l < 1e-9: continue
+                cc = abs(vx/l*ux + vy/l*uy)
+                if cc < 0.35: tang = True
+                if cc > 0.95: rad = True
+            if tang and round(rr) >= 3 and abs(rr-round(rr)) < 0.30: rr = float(round(rr))
+            b = (th - S['off']) % 360
+            if rad and abs(b-round(b)) < 0.60: b = float(round(b)) % 360
+            P.append(_ff_dest(S['arp'], rr, b))
+        # ⚠ 寄せた拍子にリングが自分と触れることがある(4区画)。buffer(0)で直す
+        from shapely.geometry import Polygon as _Pg
+        pg = _Pg([(b2, a2) for a2, b2 in P])
+        if not pg.is_valid:
+            pg = pg.buffer(0)
+            if pg.geom_type != 'Polygon': pg = max(pg.geoms, key=lambda z: z.area)
+            P = [[round(y, 6), round(x, 6)] for x, y in list(pg.exterior.coords)[:-1]]
+        out.append(dict(n=f'10000/{lo}', up=10000, lo=lo, pts=P))
+    here = os.path.dirname(os.path.abspath(__file__))
+    dst = os.path.join(here, 'tca_fukuoka.gen.json')
+    eff = os.path.basename(os.path.dirname(os.path.dirname(pdf)))
+    _json.dump({'eff': eff, 'src': 'AIP Japan RJFF AD 2.17 添付図(図の読み取り・近似)',
+                'f': out}, open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
+    print(f'{len(out)} 区画 → tca_fukuoka.gen.json ({os.path.getsize(dst)/1024:.0f}KB)')
+    return out
+
+
 if __name__ == '__main__':
     main()
     hyakuri()
     tsuiki()
+    fukuoka()
