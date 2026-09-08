@@ -185,6 +185,19 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     選択の有無を `dataset.any` でグループ自身に持たせて `syncMtHeads` から見ている
   - 選んだ空域は `hnav.aca` に保存して次回も復元する(11+5個を毎回選び直せない)。
     ⚠ 何も選んでいなければ `aca.json`(260KB)を**取りに行かない**
+- **地図右下の並びは「縮尺目安 / ズーム / NXT PT・ALL」**(2026-09-08)。
+  - ⚠ 以前は `body.mtOpen` でカテゴリ展開中に**ズームとNXT PT/ALLを消していた**が、
+    飛行中に一番使うボタンが消えるので止めた。代わりに `.maptools` の
+    `max-height` で下段ぶん(160px、`body.alerting` なら280px)を空けている。
+    ⚠ この数字はズーム(`margin-bottom:76px`+高さ64)とNXT PT/ALL(bottom16+高さ39)の
+    合計。どれかを動かしたら3つとも直すこと
+  - ⚠ **出典(attribution)はレイヤーを足すほど長くなって折り返し、NXT PT/ALLの下まで伸びる**。
+    右のボタンぶん165pxを空けている。⚠ `max-width` を出典そのものに当てると
+    **1文字ずつ折り返して縦棒になる**。Leafletの入れ物(`.leaflet-bottom.leaflet-left`)側に当てる
+  - **縮尺目安(`#zmScale`)**: 「半径」=画面中心から上端までの距離、「水平線」=その距離が
+    ちょうど水平線になる高度 h=(NM/1.17)²。⚠ **幾何学的な水平線で視程ではない**。
+    ⚠ 拡大すると「2 ft」のような無意味な値になるので**100ft未満は出さない**(—にする)。
+    ⚠ カメラ画角から出す「Google Earthの eye alt」とは**桁が3つ違う**別物
 - **iOSはボタンのダブルタップで画面が拡大する**。viewportに
   `maximum-scale=1.0, user-scalable=no` を入れ、UI側に `touch-action:manipulation` を当てて止めてある。
   ⚠ 地図(`.leaflet-container`)はLeafletが自前で `touch-action:none` を持つので影響を受けない。

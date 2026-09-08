@@ -72,7 +72,8 @@
   .mapwrap{position:relative;flex:1;display:flex}
   #map{flex:1;min-height:300px;background:#08101a;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   #btnTO,#btnLDG{min-width:104px;padding-left:8px;padding-right:8px;text-align:center}
-  .maptools{position:absolute;z-index:900;right:12px;top:calc(var(--ovlH) + 12px);display:flex;flex-direction:column;gap:8px;align-items:flex-end;max-height:calc(100% - var(--ovlH) - 90px);overflow-y:auto;overflow-x:hidden}
+  .maptools{position:absolute;z-index:900;right:12px;top:calc(var(--ovlH) + 12px);display:flex;flex-direction:column;gap:8px;align-items:flex-end;max-height:calc(100% - var(--ovlH) - 160px);overflow-y:auto;overflow-x:hidden}
+  body.alerting .maptools{max-height:calc(100% - var(--ovlH) - 280px)}
   .mtGrp{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
   .mtHead i{font-style:normal;color:var(--dim);font-size:10px;transition:transform .15s}
   .mtGrp.open>.mtHead i{display:inline-block;transform:rotate(180deg)}
@@ -90,6 +91,10 @@
   .mtSub .mtGrp{align-items:flex-end}
   .maptools .on-dot{color:var(--grn)}
   #zmBtns{position:absolute;z-index:900;right:12px;bottom:16px;display:flex;gap:8px}
+  /* ⚠ レイヤーを足すほど出典が長くなって折り返し、**NXT PT/ALLの下まで伸びる**。
+     右のボタンぶん(約165px)を空ける。⚠ max-width を出典そのものに当てると
+     **1文字ずつ折り返して縦棒になる**ので、Leafletの入れ物側に当てること */
+  .mapwrap .leaflet-bottom.leaflet-left{max-width:calc(100% - 165px)}
   #zmBtns button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:10px 14px;border-radius:6px;font-size:13px;font-family:var(--mono);font-weight:600;cursor:pointer}
   /* 右側ボタンは全て同じ幅・高さに揃える(見出し/サブ/単独すべて) */
   .maptools button{background:var(--panel);border:1px solid var(--line);color:var(--txt);
@@ -159,8 +164,17 @@
   .mapwrap{--ovlH:0px}
   .mapwrap .leaflet-top{top:var(--ovlH)}
   .mapwrap .leaflet-bottom.leaflet-right .leaflet-control-zoom{margin-bottom:76px;margin-right:12px}
-  /* カテゴリ展開中はズーム/縮尺ボタンを隠して重なりを防ぐ */
-  body.mtOpen .leaflet-control-zoom,body.mtOpen #zmBtns{display:none}
+  /* ⚠ 以前はカテゴリ展開中にズーム/NXT PT/ALLを display:none で消していたが、
+     **飛行中に一番使うボタンが消える**ので止めた。代わりに .maptools の
+     max-height で下の段(縮尺目安+ズーム+NXT PT/ALL=約160px)を空けている */
+  /* ⚠ ズームボタンの**上**に置くと .maptools の下端とぶつかる。
+     横に並べれば下段に空ける高さが160pxで済む */
+  #zmScale{position:absolute;z-index:900;right:54px;bottom:88px;
+    background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    padding:3px 7px;font-family:var(--mono);font-size:10.5px;color:var(--dim);
+    line-height:1.4;text-align:right;white-space:nowrap;pointer-events:none}
+  #zmScale b{color:var(--cyn);font-weight:600;font-size:11.5px}
+  body.alerting #zmScale{bottom:208px}
   #btnFollow{top:calc(var(--ovlH) + 12px)}#btnMapOnly{top:calc(var(--ovlH) + 52px)}
   #btnGoLog{top:calc(var(--ovlH) + 92px)}#btnSearch{top:calc(var(--ovlH) + 132px)}
   #btnUndo{top:calc(var(--ovlH) + 172px)}
@@ -169,8 +183,8 @@
   .btn.danger{border-color:var(--red);color:var(--red)}
   tr.metSel td{background:rgba(61,213,243,.12);border-bottom:1px solid var(--cyn)}
   tr.metHist td{background:var(--panel2);font-family:var(--mono);font-size:11px;white-space:normal;word-break:break-all;cursor:default}
-  body.hideR .maptools,body.hideR #zmBtns{display:none}
-  body.hideAll .maptools,body.hideAll #zmBtns,body.hideAll .zbtn,body.hideAll .leaflet-control-zoom{display:none}
+  body.hideR .maptools,body.hideR #zmBtns,body.hideR #zmScale{display:none}
+  body.hideAll .maptools,body.hideAll #zmBtns,body.hideAll #zmScale,body.hideAll .zbtn,body.hideAll .leaflet-control-zoom{display:none}
   body.hideAll #btnUiHide{display:block}
   .dct-pin{color:var(--cyn);font-size:20px;line-height:1;text-shadow:0 0 8px rgba(61,213,243,.95)}
   /* ───── FLIGHT LOG 様式(標準のログ用紙に合わせた2行/FIX構成) ───── */
@@ -447,6 +461,9 @@
       <span style="color:var(--dim);font-size:11px">→ 地図を長押しで配置</span>
     </div>
   </div>
+  <div id="zmScale" title="半径=画面の中心から上端までの距離。
+「水平線」は、その距離がちょうど水平線になる高度の目安 h=(NM/1.17)²。
+例: 1000ftなら水平線は37NM先。⚠ 幾何学的な水平線であって視程ではない"></div>
   <div id="zmBtns">
     <button id="btnZmNext" title="自機と次ポイントを表示">NXT PT</button>
     <button id="btnZmAll" title="ルート全体を表示">ALL</button>
@@ -681,7 +698,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-129';
+const VER_TAG='v6-130';
 const BUILD='2026-09-08';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -858,6 +875,31 @@ setInterval(tick,1000);tick();
 /* ───────── map(淡色 → 航空写真 → OSM 切替) ───────── */
 const map=L.map('map',{rotate:true,touchRotate:false,rotateControl:false,fadeAnimation:false}).setView([35.55,139.78],9); // fadeAnimation: leaflet-rotateとの相性問題で無効化
 map.attributionControl.setPosition('bottomleft');
+
+/* ── 縮尺の目安「この画面＝高度何ftから見た広さか」 ──
+   画面の中心から上端までの距離 r を、**その距離がちょうど水平線になる高度**に直す。
+   航空で使う水平線距離 d(NM) = 1.17 × √h(ft) の逆で h = (d/1.17)²。
+   ⚠ **幾何学的な水平線**であって視程(visibility)ではない。雲・靄は考えない。
+   ⚠ カメラの画角から出す「Google Earthの eye alt」とは**桁が3つ違う**。
+     こちらは「高度hから水平線までがこの画面の縦半分」という読み方 */
+const zmScaleEl=document.getElementById('zmScale');
+function updZmScale(){
+  if(!zmScaleEl||!map)return;
+  const c=map.getCenter(),b=map.getBounds();
+  const r=map.distance(c,L.latLng(b.getNorth(),c.lng))/1852;      // NM
+  const h=Math.pow(r/1.17,2);                                     // ft
+  const rt=r<10?r.toFixed(1):Math.round(r).toLocaleString();
+  // ⚠ 拡大すると「水平線 ≒ 2 ft」のような無意味な値になる。
+  //    100ft未満は出さない(意味があるのは概ね12NM=100ft以上)
+  const ht=h<100?null
+          :h>=10000?(Math.round(h/100)*100).toLocaleString()
+          :h>=1000?(Math.round(h/10)*10).toLocaleString()
+          :(Math.round(h/10)*10).toLocaleString();
+  zmScaleEl.innerHTML=`半径 <b>${rt}</b> NM<br>`+
+    (ht?`水平線 ≒ <b>${ht}</b> ft`:`水平線 ≒ <span style="opacity:.5">—</span>`);
+}
+map.on('zoomend moveend resize',updZmScale);
+setTimeout(updZmScale,0);
 map.zoomControl.setPosition('bottomright'); // 右下(ALLボタンの上)
 const BASES=[
   {n:'淡色',ly:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{attribution:'国土地理院',maxZoom:18})},
@@ -1609,8 +1651,10 @@ document.querySelectorAll('.mtGrp').forEach(g=>{
     });
     g.classList.toggle('open',open);
     if(!open)g.querySelectorAll('.mtGrp').forEach(n=>n.classList.remove('open'));
-    if(open&&g.dataset.grp==='aca')acaMenu('ACA');
-    if(open&&g.dataset.grp==='tca')acaMenu('TCA');
+    if(open&&g.dataset.grp==='aca')acaMenu('ACA').then(()=>g.scrollIntoView({block:'nearest'}));
+    if(open&&g.dataset.grp==='tca')acaMenu('TCA').then(()=>g.scrollIntoView({block:'nearest'}));
+    // 下段(ズーム/NXT PT)を隠さないぶん列が短いので、開いた一覧を見える位置へ送る
+    if(open)setTimeout(()=>g.scrollIntoView({block:'nearest'}),0);
     document.body.classList.toggle('mtOpen',
       !!document.querySelector('.maptools>.mtGrp.open'));
     syncMtHeads();
