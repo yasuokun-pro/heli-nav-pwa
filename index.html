@@ -169,12 +169,15 @@
      max-height で下の段(縮尺目安+ズーム+NXT PT/ALL=約160px)を空けている */
   /* ⚠ ズームボタンの**上**に置くと .maptools の下端とぶつかる。
      横に並べれば下段に空ける高さが160pxで済む */
-  #zmScale{position:absolute;z-index:900;right:54px;bottom:88px;
+  #zmScale{position:absolute;z-index:900;right:54px;bottom:84px;
     background:var(--panel);border:1px solid var(--line);border-radius:6px;
-    padding:3px 7px;font-family:var(--mono);font-size:10.5px;color:var(--dim);
+    padding:4px 7px;font-family:var(--mono);font-size:10.5px;color:var(--dim);
     line-height:1.4;text-align:right;white-space:nowrap;pointer-events:none}
   #zmScale b{color:var(--cyn);font-weight:600;font-size:11.5px}
-  body.alerting #zmScale{bottom:208px}
+  /* 縮尺の目盛り。両端に下向きのヒゲを出す古典的なスケールバー */
+  #zmBar{display:flex;align-items:flex-end;justify-content:flex-end;gap:5px;margin-bottom:1px}
+  #zmBar i{display:block;height:5px;border:1.5px solid var(--txt);border-top:none;opacity:.75}
+  body.alerting #zmScale{bottom:204px}
   #btnFollow{top:calc(var(--ovlH) + 12px)}#btnMapOnly{top:calc(var(--ovlH) + 52px)}
   #btnGoLog{top:calc(var(--ovlH) + 92px)}#btnSearch{top:calc(var(--ovlH) + 132px)}
   #btnUndo{top:calc(var(--ovlH) + 172px)}
@@ -461,9 +464,10 @@
       <span style="color:var(--dim);font-size:11px">→ 地図を長押しで配置</span>
     </div>
   </div>
-  <div id="zmScale" title="半径=画面の中心から上端までの距離。
-「水平線」は、その距離がちょうど水平線になる高度の目安 h=(NM/1.17)²。
-例: 1000ftなら水平線は37NM先。⚠ 幾何学的な水平線であって視程ではない"></div>
+  <div id="zmScale" title="上=縮尺の目盛り。
+下=eye alt: Google Earthと同じ「カメラの高さ」の考え方で、
+画面の縦がちょうど画角に収まる高度。画角は垂直60°で計算している。
+⚠ 水平線までの距離(1.17×√h)とは別物"></div>
   <div id="zmBtns">
     <button id="btnZmNext" title="自機と次ポイントを表示">NXT PT</button>
     <button id="btnZmAll" title="ルート全体を表示">ALL</button>
@@ -698,7 +702,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-130';
+const VER_TAG='v6-131';
 const BUILD='2026-09-08';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -876,27 +880,39 @@ setInterval(tick,1000);tick();
 const map=L.map('map',{rotate:true,touchRotate:false,rotateControl:false,fadeAnimation:false}).setView([35.55,139.78],9); // fadeAnimation: leaflet-rotateとの相性問題で無効化
 map.attributionControl.setPosition('bottomleft');
 
-/* ── 縮尺の目安「この画面＝高度何ftから見た広さか」 ──
-   画面の中心から上端までの距離 r を、**その距離がちょうど水平線になる高度**に直す。
-   航空で使う水平線距離 d(NM) = 1.17 × √h(ft) の逆で h = (d/1.17)²。
-   ⚠ **幾何学的な水平線**であって視程(visibility)ではない。雲・靄は考えない。
-   ⚠ カメラの画角から出す「Google Earthの eye alt」とは**桁が3つ違う**。
-     こちらは「高度hから水平線までがこの画面の縦半分」という読み方 */
+/* ── 縮尺の目盛りと eye alt ──
+   eye alt は **Google Earth と同じ「カメラの高さ」**の出し方。画面の縦(H)が
+   ちょうど画角に収まる高度 alt = H / (2·tan(FOV/2))。FOVは垂直60°を採っている
+   (Google Earthの初期表示で地球の視直径が約43°、画面の7割を占めることから)。
+   ⚠ 水平線までの距離 d=1.17√h とは**別物で3桁違う**。混同しないこと
+   ⚠ FOVを変えたければ EYE_FOV だけ直せばいい */
+const EYE_FOV=60;
+const NM_STEP=[0.1,0.2,0.3,0.5,1,2,3,5,10,15,20,30,50,100,150,200,300,500,1000,2000];
+const M_STEP=[10,20,30,50,100,150];   // 0.1NMより細かいときはm表示にする
 const zmScaleEl=document.getElementById('zmScale');
 function updZmScale(){
   if(!zmScaleEl||!map)return;
   const c=map.getCenter(),b=map.getBounds();
-  const r=map.distance(c,L.latLng(b.getNorth(),c.lng))/1852;      // NM
-  const h=Math.pow(r/1.17,2);                                     // ft
-  const rt=r<10?r.toFixed(1):Math.round(r).toLocaleString();
-  // ⚠ 拡大すると「水平線 ≒ 2 ft」のような無意味な値になる。
-  //    100ft未満は出さない(意味があるのは概ね12NM=100ft以上)
-  const ht=h<100?null
-          :h>=10000?(Math.round(h/100)*100).toLocaleString()
-          :h>=1000?(Math.round(h/10)*10).toLocaleString()
-          :(Math.round(h/10)*10).toLocaleString();
-  zmScaleEl.innerHTML=`半径 <b>${rt}</b> NM<br>`+
-    (ht?`水平線 ≒ <b>${ht}</b> ft`:`水平線 ≒ <span style="opacity:.5">—</span>`);
+  const p=map.latLngToContainerPoint(c);
+  const nmPx=map.distance(c,map.containerPointToLatLng(L.point(p.x+100,p.y)))/1852/100;
+  if(!(nmPx>0))return;
+  let nm=null,lbl,w;
+  for(const v of NM_STEP) if(v/nmPx<=92) nm=v;      // 目盛りは最大92px
+  if(nm!==null){lbl=(nm<1?nm:nm.toLocaleString())+' NM'; w=Math.round(nm/nmPx);}
+  else{                                             // 拡大しきったらm目盛りに落とす
+    const mPx=nmPx*1852; let m=M_STEP[0];
+    for(const v of M_STEP) if(v/mPx<=92) m=v;
+    lbl=m+' m'; w=Math.round(m/mPx);
+  }
+  w=Math.max(14,Math.min(92,w));
+  const hM=map.distance(L.latLng(b.getNorth(),c.lng),L.latLng(b.getSouth(),c.lng));
+  const alt=hM/(2*Math.tan(EYE_FOV/2*Math.PI/180))/0.3048;   // ft
+  const a=alt<10000?Math.round(alt/10)*10
+         :alt<100000?Math.round(alt/100)*100
+         :Math.round(alt/1000)*1000;
+  zmScaleEl.innerHTML=
+    `<div id="zmBar"><i style="width:${w}px"></i><b>${lbl}</b></div>`+
+    `eye alt <b>${a.toLocaleString()}</b> ft`;
 }
 map.on('zoomend moveend resize',updZmScale);
 setTimeout(updZmScale,0);
