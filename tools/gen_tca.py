@@ -803,8 +803,168 @@ def fukuoka():
     return out
 
 
+# ── 那覇TCA ────────────────────────────────────────────────────────
+# 出典: AIP Japan **ROAH AD 2.17 添付図 "Naha Terminal Control Area"** (p.24)
+#
+# この図は他のTCAと違って**座標表(8点)が付いている**ので、ジオリファレンスは
+# その8点で決まる。中身は NHC(那覇VORTAC)中心の同心円弧 10/25/30/38/55NM と
+# 放射線 R-050 / R-175 / R-230 だけ。区画はたった**4つ**。
+#
+# ⚠ 上限が区画によって違う(10000 と 3999)。他のTCAは全部10000だった
+# ⚠ **10000/4000 は1区画**。30-38NMの帯が西(真方位270)から南・東をまわって
+#   (5)まで続き、そのまま北東の55NMのローブ((3)-(4)-(6)-(5))につながっている。
+#   図の上では離れて見えるが**ひと続き**なのでラベルが2つ乗る
+# ⚠ 3999/3000 のラベルだけ**引き出し線で区画の外**に置かれている。
+#   ラベルの乗らない区画が1つしか無いのでそこに割り当てている
+# ⚠ 「Kadena CTR」の**文字が1.98ptのパスで描かれていて**、そのまま
+#   polygonize すると文字の輪郭が20個以上の小さな面になる。面積50pt²で切る
+# ⚠ **図上の放射線から出る偏差が3.3〜4.5°W**で、AIPの公示値(ROAH 5°W(2008)、
+#   飛行場図の注記は6°W(2025))と合わない。座標表8点との残差もrms2.95pxあるので
+#   1°ぶんは図の作図誤差。**図に描かれている向きをそのまま使っている**
+# ⚠ W-178A / W-178 / W-174 / W-173 は**切り抜きではない**。TCAの境界が
+#   その脇を通っているだけ。嘉手納CTRだけは境界が円に沿って回り込んでいる
+NH_PAGE = 24
+NHC = (26.2085306, 127.6428667)     # 那覇VORTAC 261230.71N/1273834.32E
+NH_PTS = {1: '263746.4N1270652.4E', 2: '262510.8N1270653.4E', 3: '265952.8N1281002.7E',
+          4: '264848.9N1275715.1E', 5: '262936.9N1281623.3E', 6: '264431.1N1282830.8E',
+          7: '261716.9N1274920.1E', 8: '261633.7N1274845.0E'}
+# 図から拾った座標表の点の位置(pt)。この6点で相似変換を当てる
+NH_OBS = {1: (134.4, 213.4), 2: (134.3, 261.8), 3: (360.8, 126.3),
+          4: (315.2, 169.8), 5: (383.1, 246.1), 6: (426.6, 187.8)}
+NH_R = [10, 25, 30, 38, 55]
+NH_RAY = [46.01, 171.12, 226.72]    # R-050 / R-175 / R-230 の**図上の**方位
+# 高度ラベルの位置(pt)と上下限。ラベル数が5・区画数が4(10000/4000が2つ乗る)
+NH_LAB = [(10000, 4000, 352, 172.5), (10000, 2000, 192, 193), (3999, 2000, 322, 324.5),
+          (3999, 3000, 233, 408.5), (10000, 4000, 224, 445.5)]
+
+
+def _nh_dms(s):
+    m = re.match(r'(\d{2})(\d{2})(\d{2}(?:\.\d+)?)N(\d{3})(\d{2})(\d{2}(?:\.\d+)?)E', s)
+    return (int(m.group(1))+int(m.group(2))/60+float(m.group(3))/3600,
+            int(m.group(4))+int(m.group(5))/60+float(m.group(6))/3600)
+
+
+def _nh_gc(a, b):
+    R = 3440.065
+    la1, lo1 = map(math.radians, a); la2, lo2 = map(math.radians, b); dl = lo2-lo1
+    d = math.acos(min(1, max(-1, math.sin(la1)*math.sin(la2) +
+                             math.cos(la1)*math.cos(la2)*math.cos(dl))))*R
+    br = math.degrees(math.atan2(math.sin(dl)*math.cos(la2),
+                                 math.cos(la1)*math.sin(la2) -
+                                 math.sin(la1)*math.cos(la2)*math.cos(dl))) % 360
+    return d, br
+
+
+def naha():
+    import json as _json
+    import numpy as np
+    from shapely.geometry import LineString, Point, MultiLineString
+    from shapely.ops import unary_union, polygonize, nearest_points
+    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/ROAH__*.pdf',
+                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/ROAH__*.pdf'):
+        f = sorted(glob.glob(os.path.expanduser(pat)))
+        if f: pdf = f[-1]; break
+    else:
+        print('ROAHのPDFが無い', file=sys.stderr); return None
+    subprocess.run(['pdftocairo', '-svg', '-f', str(NH_PAGE), '-l', str(NH_PAGE),
+                    pdf, '/tmp/tca_nh.svg'], check=True)
+    D = _ff_paths(open('/tmp/tca_nh.svg', encoding='utf-8').read())
+    net = []
+    for w, s in D:
+        if round(w, 2) not in (1.98, 1.99): continue
+        s = [p for p in s if p[1] < 470]        # 下のインセット2枚を落とす
+        if len(s) >= 2: net.append(s)
+    LS = [LineString(s) for s in net]
+    conn = []
+    for i, ln in enumerate(LS):
+        oth = MultiLineString([l for j, l in enumerate(LS) if j != i])
+        for p in (ln.coords[0], ln.coords[-1]):
+            d = Point(p).distance(oth)
+            if 1e-9 < d < 2.5:
+                q = nearest_points(Point(p), oth)[1]
+                conn.append(LineString([p, (q.x, q.y)]))
+    # ⚠ 面積50pt²で切らないと「Kadena CTR」の文字の輪郭が区画として出てくる
+    faces = sorted([f for f in polygonize(unary_union(LS+conn)) if f.area > 50],
+                   key=lambda z: -z.area)
+
+    # ── 座標表6点で相似変換(中心・縮尺・回転) ─────────────────────
+    def resid(p):
+        cx, cy, s, off = p; e = []
+        for k, (px, py) in NH_OBS.items():
+            d, b = _nh_gc(NHC, _nh_dms(NH_PTS[k])); th = math.radians(b+off)
+            e += [cx+s*d*math.sin(th)-px, cy-s*d*math.cos(th)-py]
+        return np.array(e)
+    p = np.array([247.79, 313.20, 3.9823, 0.0])
+    for it in range(80):
+        r0 = resid(p); J = np.zeros((len(r0), 4))
+        for j in range(4):
+            q = p.copy(); q[j] += 1e-6 if j < 3 else 1e-4
+            J[:, j] = (resid(q)-r0)/(1e-6 if j < 3 else 1e-4)
+        dp, _, _, _ = np.linalg.lstsq(J, -r0, rcond=None); p = p+dp
+        if np.max(np.abs(dp)) < 1e-11: break
+    CX, CY, S, OFF = p
+    r = resid(p)
+    rms = math.sqrt(sum(r[2*i]**2+r[2*i+1]**2 for i in range(len(NH_OBS)))/len(NH_OBS))
+    print(f'  那覇TCA: 中心({CX:.2f},{CY:.2f}) {S:.4f}pt/NM 回転{OFF:+.2f}° '
+          f'座標表6点の残差rms {rms*4.16556:.2f}px')
+    NOMB = [(b-OFF) % 360 for b in NH_RAY]
+    TP = [_nh_dms(v) for v in NH_PTS.values()]
+
+    def dest(a, rr, b):
+        R = 3440.065
+        la = math.radians(a[0]); dr = rr/R; br = math.radians(b)
+        la2 = math.asin(math.sin(la)*math.cos(dr)+math.cos(la)*math.sin(dr)*math.cos(br))
+        lo2 = math.radians(a[1])+math.atan2(math.sin(br)*math.sin(dr)*math.cos(la),
+                                            math.cos(dr)-math.sin(la)*math.sin(la2))
+        return [round(math.degrees(la2), 6), round(math.degrees(lo2), 6)]
+    out = []
+    for f in faces:
+        hit = [(u, lo) for u, lo, x, y in NH_LAB if f.contains(Point(x, y))]
+        up, lo = hit[0] if hit else (3999, 3000)   # 引き出し線で外に出ている1区画
+        q = f.simplify(0.25)
+        if q.geom_type != 'Polygon': q = f
+        C = list(q.exterior.coords)[:-1]; n = len(C); P = []
+        for i, (x, y) in enumerate(C):
+            d = math.hypot(x-CX, y-CY)
+            if d < 1e-9: continue
+            ux, uy = (x-CX)/d, (y-CY)/d
+            rr = d/S; th = (math.degrees(math.atan2(x-CX, -(y-CY)))-OFF) % 360
+            tang = rad = False
+            for px, py in (C[(i-1) % n], C[(i+1) % n]):
+                vx, vy = px-x, py-y; l = math.hypot(vx, vy)
+                if l < 1e-9: continue
+                c = abs(vx/l*ux+vy/l*uy)
+                if c < 0.35: tang = True
+                if c > 0.95: rad = True
+            if tang:
+                b = min(NH_R, key=lambda v: abs(v-rr))
+                if abs(b-rr) < 0.45: rr = float(b)
+            if rad:
+                b = min(NOMB, key=lambda v: abs(((v-th+180) % 360)-180))
+                if abs(((b-th+180) % 360)-180) < 1.2: th = b
+            pt = dest(NHC, rr, th)
+            near = min(((_nh_gc(pt, t)[0], t) for t in TP))
+            if near[0] < 0.5: pt = [round(near[1][0], 6), round(near[1][1], 6)]
+            P.append(pt)
+        from shapely.geometry import Polygon as _Pg
+        pg = _Pg([(b2, a2) for a2, b2 in P])
+        if not pg.is_valid:                      # 寄せた拍子の自己接触を直す
+            pg = pg.buffer(0)
+            if pg.geom_type != 'Polygon': pg = max(pg.geoms, key=lambda z: z.area)
+            P = [[round(y, 6), round(x, 6)] for x, y in list(pg.exterior.coords)[:-1]]
+        out.append(dict(n=f'{up}/{lo}', up=up, lo=lo, pts=P))
+    here = os.path.dirname(os.path.abspath(__file__))
+    dst = os.path.join(here, 'tca_naha.gen.json')
+    eff = os.path.basename(os.path.dirname(os.path.dirname(pdf)))
+    _json.dump({'eff': eff, 'src': 'AIP Japan ROAH AD 2.17 添付図(座標表8点でジオリファレンス)',
+                'f': out}, open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
+    print(f'{len(out)} 区画 → tca_naha.gen.json ({os.path.getsize(dst)/1024:.0f}KB)')
+    return out
+
+
 if __name__ == '__main__':
     main()
     hyakuri()
     tsuiki()
     fukuoka()
+    naha()

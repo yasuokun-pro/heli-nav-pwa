@@ -739,7 +739,9 @@ def main():
             ('tca_tsuiki.gen.json', 'TSUIKI TCA', '築城ターミナルコントロールエリア', 'RJFZ',
              'TQTを中心とする同心円弧と磁針方位の放射線だけで組まれていて座標表が無い'),
             ('tca_fukuoka.gen.json', 'FUKUOKA TCA', '福岡ターミナルコントロールエリア', 'RJFF',
-             '福岡・長崎・熊本の3つの同心円系でできていて座標表が無く、系ごとに図上の縮尺も違う')):
+             '福岡・長崎・熊本の3つの同心円系でできていて座標表が無く、系ごとに図上の縮尺も違う'),
+            ('tca_naha.gen.json', 'NAHA TCA', '那覇ターミナルコントロールエリア', 'ROAH',
+             '座標表8点でジオリファレンスできるが、放射線の向きは図の作図に従っている')):
         tcaf = os.path.join(here, fn)
         if not os.path.exists(tcaf): continue
         t = json.load(open(tcaf))
