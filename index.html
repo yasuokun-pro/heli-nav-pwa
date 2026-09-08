@@ -178,6 +178,7 @@
   #zmScale .tap{cursor:pointer;display:block;pointer-events:auto}
   #zmScale .tap:active{opacity:.6}
   #zmLos{color:var(--amb)}#zmLos b{color:var(--amb)}
+  #zmShade{display:block;color:#9fd0ff}
   /* 縮尺の目盛り。両端に下向きのヒゲを出す古典的なスケールバー */
   #zmBar{display:flex;align-items:flex-end;justify-content:flex-end;gap:5px;margin-bottom:1px}
   #zmBar i{display:block;height:5px;border:1.5px solid var(--txt);border-top:none;opacity:.75}
@@ -500,7 +501,14 @@
         <button id="btnSup">臨時</button>
         <button id="btnNuke">原子力</button>
         <button id="btnDid" title="人口集中地区(2020年国勢調査)。最低安全高度=600m以内の最高障害物+300m">DID</button>
-        <button id="btnLos" title="見通し円。その高度から水平線まで(1.17×√h NM)の円を、自機(GPSの実高度)とルートの各ポイント(設定高度)に描く。幾何学的な水平線で視程ではない">見通し</button>
+      </div>
+    </div>
+    <div class="mtGrp" data-grp="own">
+      <button class="mtHead">自機<i>▾</i></button>
+      <div class="mtSub">
+        <button id="btnRing" title="自機(GPS OFFなら画面の中心)から 3/5/10NM の距離環">距離環</button>
+        <button id="btnLos" title="見通し円。その高度から水平線まで(1.17×√h NM)の円を、自機(GPSの実高度)とルートの各ポイント(設定高度)に描く。幾何学的な水平線で地形は見ていない">見通し</button>
+        <button id="btnShade" title="地形の遮蔽。国土地理院の標高タイルを読んで、見えない範囲を暗く塗る。⚠ 建物・樹木は入っていない">遮蔽</button>
       </div>
     </div>
     <div class="mtGrp" data-grp="feat">
@@ -707,7 +715,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-132';
+const VER_TAG='v6-133';
 const BUILD='2026-09-08';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -898,7 +906,7 @@ const M_STEP=[10,20,30,50,100,150];   // 0.1NMより細かいときはm表示に
 const zmScaleEl=document.getElementById('zmScale');
 let zmMode=store.get('hnav.zmMode')||'los';    // 'los'=水平線基準 / 'eye'=eye alt
 // ⚠ updZmScale から参照するので**先に**宣言しておく(TDZ回避)
-let losOn=false,losAltFt=store.get('hnav.losAlt')||1000;
+let losOn=false,losAltFt=store.get('hnav.losAlt')||1000,shadeMsg='';
 function losNM(ft){return 1.17*Math.sqrt(Math.max(0,ft))}   // 水平線までの距離
 function fmtFt(v){
   const a=v<100?Math.round(v)
@@ -938,9 +946,10 @@ function updZmScale(){
       `GPSに高度があれば自機の円だけ実高度で描く">`+
       `見通し ${ownAltFt!==null?'実':''}<b>${lft.toLocaleString()}</b>ft `+
       `⌀<b>${losNM(lft).toFixed(0)}</b>NM</span>`:'';
+  const sh=shadeMsg?`<span id="zmShade">${shadeMsg}</span>`:'';
   zmScaleEl.innerHTML=
     `<div id="zmBar"><i style="width:${w}px"></i><b>${lbl}</b></div>`+
-    `<span class="tap" id="zmAlt" title="タップで 水平線基準 ⇄ eye alt を切替">${line2}</span>`+los;
+    `<span class="tap" id="zmAlt" title="タップで 水平線基準 ⇄ eye alt を切替">${line2}</span>`+los+sh;
   const a=document.getElementById('zmAlt');
   if(a)a.onclick=e=>{e.stopPropagation();
     zmMode=zmMode==='eye'?'los':'eye';store.set('hnav.zmMode',zmMode);updZmScale()};
@@ -974,6 +983,164 @@ function askLosAlt(){
   if(!(n>=0)){alert('数字で入れてください。');return}
   losAltFt=Math.round(n);store.set('hnav.losAlt',losAltFt);drawLos();updZmScale();
 }
+/* ── 距離環(自機から 3/5/10NM) ──
+   ⚠ GPSがOFFのときは画面の中心に描く。パンで追従させるので moveend でも引き直す */
+const RING_NM=[3,5,10];
+let ringOn=false;
+const ringLayer=L.layerGroup(),RING_COL='#3df5ff';
+function ringCenter(){
+  if(ownPos)return [ownPos.lat,ownPos.lng];
+  const c=map.getCenter();return [c.lat,c.lng];
+}
+function drawRing(){
+  ringLayer.clearLayers();
+  if(!ringOn)return;
+  const c=ringCenter();
+  RING_NM.forEach(nm=>{
+    // ⚠ 明るい地形図の上だと細い線は**まず見えない**。下に暗い線を敷いて縁取る
+    L.circle(c,{radius:nm*1852,renderer:ovRenderer,color:'#06121e',weight:4,opacity:.55,
+      fill:false,interactive:false}).addTo(ringLayer);
+    L.circle(c,{radius:nm*1852,renderer:ovRenderer,color:RING_COL,weight:2,opacity:1,
+      dashArray:'6 6',fill:false,interactive:false}).addTo(ringLayer);
+    // 真上に距離を書く。地図を回してもポイントの数字と混ざらないよう小さく
+    L.marker([c[0]+nm*1852/110540,c[1]],{interactive:false,icon:L.divIcon({className:'',
+      html:`<div style="font:600 10px var(--mono);color:${RING_COL};text-shadow:0 0 4px #000,0 0 4px #000;white-space:nowrap">${nm}NM</div>`,
+      iconAnchor:[14,14]})}).addTo(ringLayer);
+  });
+}
+document.getElementById('btnRing').onclick=function(){
+  ringOn=!ringOn;this.classList.toggle('on',ringOn);
+  if(ringOn){ringLayer.addTo(map);drawRing()}else map.removeLayer(ringLayer);
+  restackOverlays();
+};
+map.on('moveend',()=>{if(ringOn&&!ownPos)drawRing()});
+
+/* ── 地形の遮蔽(viewshed) ──
+   出典: 国土地理院 **標高タイル dem_png**(z1-14)。RGB→標高は
+   x = R*65536+G*256+B (x>=2^23 なら x-2^24)、h = x*0.01m、(128,0,0)はデータ無し。
+   観測点から1440方位へ光線を飛ばし、**それまでの最大仰角を超えたところだけ見える**
+   という素直なviewshed。
+   ⚠ 大気の屈折を見込んで地球半径を**4/3倍**(k=1.33・標準大気)にしている
+   ⚠ **DEMは地表面**。建物・樹木・鉄塔・送電線は入っていない。過信しないこと
+   ⚠ 半径が大きいほど粗いズームのDEMになる(タイル数を抑えるため)。
+     30NMだとz11=約63m解像度で、小さな尾根は表現できない */
+const DEM_MAX_R=760;                 // 出力の半径(px)。1440方位×760で約110万回
+const SHADE_MAX_NM=25;               // これ以上広げるとDEMが粗くなりすぎる
+const DEM_CACHE=new Map();
+function demTile(z,x,y){
+  const k=z+'/'+x+'/'+y;
+  if(DEM_CACHE.has(k))return DEM_CACHE.get(k);
+  if(DEM_CACHE.size>400)DEM_CACHE.clear();
+  const pr=fetch(`https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png`)
+    .then(r=>r.ok?r.blob().then(createImageBitmap):null).catch(()=>null);
+  DEM_CACHE.set(k,pr);return pr;
+}
+function gpx(lat,lng,z){const n=2**z*256,la=lat*Math.PI/180;
+  return{x:(lng+180)/360*n, y:(1-Math.log(Math.tan(la)+1/Math.cos(la))/Math.PI)/2*n}}
+function gll(x,y,z){const n=2**z*256,t=Math.PI-2*Math.PI*y/n;
+  return[180/Math.PI*Math.atan(0.5*(Math.exp(t)-Math.exp(-t))), x/n*360-180]}
+async function demWindow(lat,lng,radM){
+  const RES0=156543.03392*Math.cos(lat*Math.PI/180);
+  let z=14; while(z>7&&radM/(RES0/2**z)>DEM_MAX_R)z--;
+  const res=RES0/2**z, R=Math.max(20,Math.min(DEM_MAX_R,Math.round(radM/res))), W=R*2+1;
+  const g=gpx(lat,lng,z), x0=Math.round(g.x)-R, y0=Math.round(g.y)-R;
+  const tx0=Math.floor(x0/256),tx1=Math.floor((x0+W-1)/256);
+  const ty0=Math.floor(y0/256),ty1=Math.floor((y0+W-1)/256);
+  const cv=document.createElement('canvas');cv.width=cv.height=W;
+  const ctx=cv.getContext('2d',{willReadFrequently:true});
+  const jobs=[]; let miss=0;
+  for(let tx=tx0;tx<=tx1;tx++)for(let ty=ty0;ty<=ty1;ty++)
+    jobs.push(demTile(z,tx,ty).then(im=>{im?ctx.drawImage(im,tx*256-x0,ty*256-y0):miss++}));
+  await Promise.all(jobs);
+  const d=ctx.getImageData(0,0,W,W).data, el=new Float32Array(W*W);
+  for(let i=0,j=0;i<d.length;i+=4,j++){
+    const r=d[i],gg=d[i+1],b=d[i+2];
+    if(d[i+3]===0||(r===128&&gg===0&&b===0)){el[j]=NaN;continue}
+    let v=r*65536+gg*256+b; if(v>=8388608)v-=16777216;
+    el[j]=v*0.01;
+  }
+  // ⚠ 取れなかったタイルは「遮るものが無い」扱いになって**見えすぎる**方向に
+  //   間違える。欠けた枚数を返して表示で断る
+  return {el,W,R,res,z,x0,y0,tiles:jobs.length,miss};
+}
+const NAZ=1440;
+function viewshed(el,W,R,obsM,res){
+  const vis=new Uint8Array(NAZ*R), KR=2*(4/3)*6371000;   // 見かけの落ち込み d²/KR
+  for(let a=0;a<NAZ;a++){
+    const th=a*2*Math.PI/NAZ,sn=Math.sin(th),cs=Math.cos(th);
+    let mx=-Infinity;
+    for(let r=1;r<=R;r++){
+      const px=Math.round(R+r*sn),py=Math.round(R-r*cs);
+      if(px<0||py<0||px>=W||py>=W)break;
+      const h=el[py*W+px]; if(!(h===h))continue;          // NaN=データ無し
+      const d=r*res, ang=(h-d*d/KR-obsM)/d;
+      if(ang>mx){vis[a*R+r-1]=1;mx=ang}
+    }
+  }
+  return vis;
+}
+let shadeOn=false,shadeBusy=false,shadeAt=null;
+const shadeLayer=L.layerGroup();
+/* ⚠ この地図は**回転プラグイン**が入っていて、タイルも重ね図も `rotatePane`
+   (z-index 400)の中にある。createPane を素で呼ぶと mapPane 直下にできて、
+   z-index 350 にしても **rotatePane ごと上に被さって見えなくなる**。
+   必ず rotatePane の中に作ること(トラックアップでも一緒に回る) */
+map.createPane('shadePane',map.getPane('rotatePane')||undefined);
+map.getPane('shadePane').style.zIndex=350;
+map.getPane('shadePane').style.pointerEvents='none';
+async function drawShade(){
+  if(shadeBusy)return; shadeBusy=true;
+  try{
+    shadeLayer.clearLayers();
+    if(!shadeOn)return;
+    const c=ownPos?[ownPos.lat,ownPos.lng]:[map.getCenter().lat,map.getCenter().lng];
+    const altFt=(ownAltFt!==null?ownAltFt:losAltFt);
+    // ⚠ 半径は水平線までと25NMの小さい方。**25NMまでならDEMはz11(約62m)**で
+    //    足りるが、それ以上に広げるとz10(124m)に落ちて小さな尾根が消える。
+    //    遮蔽が効くのは手前ほど大事なので、広さより解像度を取っている
+    const radNM=Math.min(losNM(altFt),SHADE_MAX_NM), radM=radNM*1852;
+    setShadeMsg('計算中…');
+    const w=await demWindow(c[0],c[1],radM);
+    const gh=w.el[w.R*w.W+w.R];                            // 観測点の地表標高
+    const obsM=Math.max(altFt*0.3048,(gh===gh?gh:0)+3);    // 高度はMSL扱い。地面より下は持ち上げる
+    const vis=viewshed(w.el,w.W,w.R,obsM,w.res);
+    const img=new ImageData(w.W,w.W);
+    for(let y=0;y<w.W;y++)for(let x=0;x<w.W;x++){
+      const dx=x-w.R,dy=y-w.R,rr=Math.hypot(dx,dy);
+      if(rr>w.R||rr<1)continue;
+      let a=Math.atan2(dx,-dy); if(a<0)a+=2*Math.PI;
+      const ai=Math.round(a/(2*Math.PI)*NAZ)%NAZ, ri=Math.min(w.R-1,Math.round(rr)-1);
+      if(!vis[ai*w.R+ri]){
+        const i=(y*w.W+x)*4;
+        img.data[i]=10;img.data[i+1]=14;img.data[i+2]=22;img.data[i+3]=132;
+      }
+    }
+    const cv=document.createElement('canvas');cv.width=cv.height=w.W;
+    cv.getContext('2d').putImageData(img,0,0);
+    const nw=gll(w.x0,w.y0,w.z), se=gll(w.x0+w.W,w.y0+w.W,w.z);
+    L.imageOverlay(cv.toDataURL(),[nw,se],{pane:'shadePane',interactive:false}).addTo(shadeLayer);
+    L.circle(c,{radius:radM,renderer:ovRenderer,color:'#ffb454',weight:1.6,opacity:.8,
+      dashArray:'4 6',fill:false,interactive:false}).addTo(shadeLayer);
+    shadeAt={lat:c[0],lng:c[1],ft:altFt};
+    setShadeMsg(`遮蔽 ${Math.round(altFt).toLocaleString()}ft ⌀${radNM.toFixed(0)}NM z${w.z}`+
+                (w.miss?` <span style="color:var(--amb)">欠測${w.miss}</span>`:''));
+  }catch(e){setShadeMsg('遮蔽: 標高を取れず');}
+  finally{shadeBusy=false}
+}
+function setShadeMsg(t){shadeMsg=t;updZmScale()}
+document.getElementById('btnShade').onclick=function(){
+  shadeOn=!shadeOn;this.classList.toggle('on',shadeOn);
+  if(shadeOn){shadeLayer.addTo(map);drawShade()}
+  else{map.removeLayer(shadeLayer);shadeMsg='';shadeAt=null;updZmScale()}
+};
+// GPSで0.5NM以上動いたら引き直す(毎回やると重い)
+function shadeMaybe(){
+  if(!shadeOn||shadeBusy||!ownPos)return;
+  if(!shadeAt||map.distance([shadeAt.lat,shadeAt.lng],[ownPos.lat,ownPos.lng])>926
+     ||Math.abs((ownAltFt!==null?ownAltFt:losAltFt)-shadeAt.ft)>300)drawShade();
+}
+map.on('moveend',()=>{if(shadeOn&&!ownPos&&!shadeBusy)drawShade()});
+
 document.getElementById('btnLos').onclick=function(){
   losOn=!losOn;this.classList.toggle('on',losOn);
   if(losOn){losLayer.addTo(map);drawLos()}else map.removeLayer(losLayer);
@@ -2331,6 +2498,7 @@ document.getElementById('btnGPS').onclick=function(){
   if(gpsWatch!==null){navigator.geolocation.clearWatch(gpsWatch);gpsWatch=null;
     ownPos=null;ownSpdKt=null;ownAltFt=null;setFollow(false);
     if(ownMarker){map.removeLayer(ownMarker);ownMarker=null}
+    if(ringOn)drawRing(); if(losOn)drawLos();
     this.classList.remove('on');renderLiveGs();redraw();return}
   if(!navigator.geolocation){alert('この環境では位置情報が使えません。');return}
   let firstFix=true;
@@ -2351,6 +2519,8 @@ document.getElementById('btnGPS').onclick=function(){
     if(applyAutoVar())redraw();   // 移動で偏差が変わったら再計算
     trackRecord(); // 飛行中ならGPS軌跡を記録
     if(losOn){drawLos();updZmScale()}   // 自機の見通し円を実高度で追従させる
+    if(ringOn)drawRing();
+    shadeMaybe();                       // 0.5NM以上動いたら遮蔽を引き直す
     document.getElementById('btnGPS').classList.add('on');
     renderLiveGs();
     if(liveGsActive())redraw();else updateDct(); // 表の毎秒再構築を抑制(名称編集の中断防止)
