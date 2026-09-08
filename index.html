@@ -715,7 +715,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-133';
+const VER_TAG='v6-134';
 const BUILD='2026-09-08';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -941,12 +941,14 @@ function updZmScale(){
               :`水平線 ≒ <b>${fmtFt(h)}</b> ft`;
   }
   // ⚠ 飛行中(GPSに高度がある)は**実高度**を出す。計画高度はポイント側の円に使う
-  const lft=(losOn&&ownAltFt!==null)?Math.round(ownAltFt):losAltFt;
-  const los=losOn?`<span class="tap" id="zmLos" title="タップで計画高度を変える。`+
-      `GPSに高度があれば自機の円だけ実高度で描く">`+
-      `見通し ${ownAltFt!==null?'実':''}<b>${lft.toLocaleString()}</b>ft `+
+  // ⚠ 高度の行は**見通しでも遮蔽でも**出す(片方だけだと高度を変えられなくなる)
+  const anyLos=losOn||shadeOn;
+  const lft=(anyLos&&ownAltFt!==null)?Math.round(ownAltFt):losAltFt;
+  const los=anyLos?`<span class="tap" id="zmLos" title="タップで計画高度を変える。`+
+      `GPSに高度があれば自機は実高度で描く">`+
+      `高度 ${ownAltFt!==null?'実':''}<b>${lft.toLocaleString()}</b>ft `+
       `⌀<b>${losNM(lft).toFixed(0)}</b>NM</span>`:'';
-  const sh=shadeMsg?`<span id="zmShade">${shadeMsg}</span>`:'';
+  const sh=shadeMsg?`<span class="tap" id="zmShade" title="タップで高度を変える">${shadeMsg}</span>`:'';
   zmScaleEl.innerHTML=
     `<div id="zmBar"><i style="width:${w}px"></i><b>${lbl}</b></div>`+
     `<span class="tap" id="zmAlt" title="タップで 水平線基準 ⇄ eye alt を切替">${line2}</span>`+los+sh;
@@ -955,6 +957,8 @@ function updZmScale(){
     zmMode=zmMode==='eye'?'los':'eye';store.set('hnav.zmMode',zmMode);updZmScale()};
   const l=document.getElementById('zmLos');
   if(l)l.onclick=e=>{e.stopPropagation();askLosAlt()};
+  const sv=document.getElementById('zmShade');
+  if(sv)sv.onclick=e=>{e.stopPropagation();askLosAlt()};
 }
 map.on('zoomend moveend resize',updZmScale);
 
@@ -981,7 +985,9 @@ function askLosAlt(){
   if(v===null)return;
   const n=parseFloat(String(v).replace(/[^\d.]/g,''));
   if(!(n>=0)){alert('数字で入れてください。');return}
-  losAltFt=Math.round(n);store.set('hnav.losAlt',losAltFt);drawLos();updZmScale();
+  losAltFt=Math.round(n);store.set('hnav.losAlt',losAltFt);
+  drawLos();updZmScale();
+  if(shadeOn)drawShade();      // 遮蔽も新しい高度で引き直す
 }
 /* ── 距離環(自機から 3/5/10NM) ──
    ⚠ GPSがOFFのときは画面の中心に描く。パンで追従させるので moveend でも引き直す */
@@ -1031,8 +1037,11 @@ function demTile(z,x,y){
   const k=z+'/'+x+'/'+y;
   if(DEM_CACHE.has(k))return DEM_CACHE.get(k);
   if(DEM_CACHE.size>400)DEM_CACHE.clear();
+  // ⚠ 海の上はタイルが**404**になる。欠測ではなく「標高0m」として扱わないと、
+  //   海岸沿いで「欠測だらけ」になってしまう。通信エラー(null)とは区別する
   const pr=fetch(`https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png`)
-    .then(r=>r.ok?r.blob().then(createImageBitmap):null).catch(()=>null);
+    .then(r=>r.ok?r.blob().then(createImageBitmap).then(im=>({im}))
+                :(r.status===404?{sea:1}:null)).catch(()=>null);
   DEM_CACHE.set(k,pr);return pr;
 }
 function gpx(lat,lng,z){const n=2**z*256,la=lat*Math.PI/180;
@@ -1049,13 +1058,19 @@ async function demWindow(lat,lng,radM){
   const cv=document.createElement('canvas');cv.width=cv.height=W;
   const ctx=cv.getContext('2d',{willReadFrequently:true});
   const jobs=[]; let miss=0;
+  ctx.fillStyle='#000';                       // 0m(海)で埋めておく用
   for(let tx=tx0;tx<=tx1;tx++)for(let ty=ty0;ty<=ty1;ty++)
-    jobs.push(demTile(z,tx,ty).then(im=>{im?ctx.drawImage(im,tx*256-x0,ty*256-y0):miss++}));
+    jobs.push(demTile(z,tx,ty).then(t=>{
+      if(t&&t.im)ctx.drawImage(t.im,tx*256-x0,ty*256-y0);
+      else if(t&&t.sea)ctx.fillRect(tx*256-x0,ty*256-y0,256,256);   // 海=0m
+      else miss++;
+    }));
   await Promise.all(jobs);
   const d=ctx.getImageData(0,0,W,W).data, el=new Float32Array(W*W);
   for(let i=0,j=0;i<d.length;i+=4,j++){
     const r=d[i],gg=d[i+1],b=d[i+2];
-    if(d[i+3]===0||(r===128&&gg===0&&b===0)){el[j]=NaN;continue}
+    if(d[i+3]===0){el[j]=NaN;continue}                 // 取れなかったところ
+    if(r===128&&gg===0&&b===0){el[j]=0;continue}       // データ無し=水面とみなす
     let v=r*65536+gg*256+b; if(v>=8388608)v-=16777216;
     el[j]=v*0.01;
   }
@@ -1104,15 +1119,28 @@ async function drawShade(){
     const gh=w.el[w.R*w.W+w.R];                            // 観測点の地表標高
     const obsM=Math.max(altFt*0.3048,(gh===gh?gh:0)+3);    // 高度はMSL扱い。地面より下は持ち上げる
     const vis=viewshed(w.el,w.W,w.R,obsM,w.res);
-    const img=new ImageData(w.W,w.W);
-    for(let y=0;y<w.W;y++)for(let x=0;x<w.W;x++){
+    /* 塗り分け。⚠ **暗くするだけだと見える/見えないの境目が分かりにくい**ので
+       ①暗く沈める ②斜めのハッチを重ねる ③境界に明るい線を引く の3つを重ねる */
+    const W2=w.W, m=new Uint8Array(W2*W2);      // 0=範囲外 1=見える 2=見えない
+    for(let y=0;y<W2;y++)for(let x=0;x<W2;x++){
       const dx=x-w.R,dy=y-w.R,rr=Math.hypot(dx,dy);
-      if(rr>w.R||rr<1)continue;
+      if(rr>w.R)continue;
       let a=Math.atan2(dx,-dy); if(a<0)a+=2*Math.PI;
-      const ai=Math.round(a/(2*Math.PI)*NAZ)%NAZ, ri=Math.min(w.R-1,Math.round(rr)-1);
-      if(!vis[ai*w.R+ri]){
-        const i=(y*w.W+x)*4;
-        img.data[i]=10;img.data[i+1]=14;img.data[i+2]=22;img.data[i+3]=132;
+      const ai=Math.round(a/(2*Math.PI)*NAZ)%NAZ, ri=Math.min(w.R-1,Math.max(0,Math.round(rr)-1));
+      m[y*W2+x]=vis[ai*w.R+ri]?1:2;
+    }
+    const img=new ImageData(W2,W2),D=img.data;
+    for(let y=0;y<W2;y++)for(let x=0;x<W2;x++){
+      const k=y*W2+x,i=k*4;
+      if(m[k]!==2)continue;
+      const hatch=((x+y)%9)<2;                  // 斜めのハッチ(見えない範囲の目印)
+      D[i]=6;D[i+1]=9;D[i+2]=15;D[i+3]=hatch?214:150;
+    }
+    for(let y=1;y<W2-1;y++)for(let x=1;x<W2-1;x++){   // 見える側と接する縁を光らせる
+      const k=y*W2+x;
+      if(m[k]!==2)continue;
+      if(m[k-1]===1||m[k+1]===1||m[k-W2]===1||m[k+W2]===1){
+        const i=k*4;D[i]=255;D[i+1]=205;D[i+2]=125;D[i+3]=200;
       }
     }
     const cv=document.createElement('canvas');cv.width=cv.height=w.W;
@@ -1122,7 +1150,7 @@ async function drawShade(){
     L.circle(c,{radius:radM,renderer:ovRenderer,color:'#ffb454',weight:1.6,opacity:.8,
       dashArray:'4 6',fill:false,interactive:false}).addTo(shadeLayer);
     shadeAt={lat:c[0],lng:c[1],ft:altFt};
-    setShadeMsg(`遮蔽 ${Math.round(altFt).toLocaleString()}ft ⌀${radNM.toFixed(0)}NM z${w.z}`+
+    setShadeMsg(`遮蔽<span style="opacity:.75"> 斜線=見えない</span> ⌀${radNM.toFixed(0)}NM z${w.z}`+
                 (w.miss?` <span style="color:var(--amb)">欠測${w.miss}</span>`:''));
   }catch(e){setShadeMsg('遮蔽: 標高を取れず');}
   finally{shadeBusy=false}
