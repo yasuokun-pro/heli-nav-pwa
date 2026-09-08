@@ -75,12 +75,19 @@
   .maptools{position:absolute;z-index:900;right:12px;top:calc(var(--ovlH) + 12px);display:flex;flex-direction:column;gap:8px;align-items:flex-end;max-height:calc(100% - var(--ovlH) - 90px);overflow-y:auto;overflow-x:hidden}
   .mtGrp{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
   .mtHead i{font-style:normal;color:var(--dim);font-size:10px;transition:transform .15s}
-  .mtGrp.open .mtHead i{display:inline-block;transform:rotate(180deg)}
-  .mtGrp.open .mtHead{border-color:var(--grn);color:var(--grn)}
+  .mtGrp.open>.mtHead i{display:inline-block;transform:rotate(180deg)}
+  .mtGrp.open>.mtHead{border-color:var(--grn);color:var(--grn)}
   .mtSub{display:none;flex-direction:column;gap:6px;align-items:flex-end;
     border-right:2px solid var(--line);padding-right:6px;margin-right:2px;
     background:rgba(10,20,32,.92);border-radius:6px;padding:6px 8px 6px 6px}
-  .mtGrp.open .mtSub{display:flex}
+  .mtGrp.open>.mtSub{display:flex}
+  /* ACA/TCAは空域が10個以上ある。⚠ .maptools が overflow:auto なので
+     絶対配置で左へ出すと**親にクリップされて見えない**。2列に折り返して
+     列の中に置く(はみ出す分は .maptools が縦スクロールする) */
+  /* box-sizing:border-box なので、ボタン72x2 + すきま6 + 内側の余白14 + 枠2 = 168 */
+  .mtFly>.mtSub{flex-flow:row wrap;gap:6px;width:168px;justify-content:flex-end;
+    background:rgba(6,14,24,.96)}
+  .mtSub .mtGrp{align-items:flex-end}
   .maptools .on-dot{color:var(--grn)}
   #zmBtns{position:absolute;z-index:900;right:12px;bottom:16px;display:flex;gap:8px}
   #zmBtns button{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:10px 14px;border-radius:6px;font-size:13px;font-family:var(--mono);font-weight:600;cursor:pointer}
@@ -445,22 +452,39 @@
     <button id="btnZmAll" title="ルート全体を表示">ALL</button>
   </div>
   <div class="maptools">
-    <div class="mtGrp" data-grp="air">
-      <button class="mtHead">航空<i>▾</i></button>
+    <div class="mtGrp" data-grp="ctl">
+      <button class="mtHead">管制<i>▾</i></button>
       <div class="mtSub">
-        <button id="btnAsp">空域</button>
+        <button id="btnAsp" title="管制圏・情報圏・特別管制区(AIP AD 2.17 / 特別管制区チャート)">管制圏</button>
+        <div class="mtGrp mtFly" data-grp="aca">
+          <button class="mtHead" title="進入管制区(AIP AD 2.17添付図)。Class E。空域ごとに出し分ける">ACA<i>▾</i></button>
+          <div class="mtSub" id="subAca"></div>
+        </div>
+        <div class="mtGrp mtFly" data-grp="tca">
+          <button class="mtHead" title="ターミナルコントロールエリア(AIP AD 2.17添付図)。Class E。空域ごとに出し分ける">TCA<i>▾</i></button>
+          <div class="mtSub" id="subTca"></div>
+        </div>
+      </div>
+    </div>
+    <div class="mtGrp" data-grp="area">
+      <button class="mtHead">区域<i>▾</i></button>
+      <div class="mtSub">
+        <button id="btnRes" title="制限空域・警戒区域(AIP ENR 5.1)。射撃・爆撃が行われる区域。多くはNOTAMで運用">制限</button>
+        <button id="btnTra" title="自衛隊低高度訓練/試験空域(AIP ENR 5.2.1)。SFCから上限まで・2200-1200UTC">低訓</button>
+        <button id="btnCiv" title="民間訓練試験空域(AIP ENR 5.3.1)。使用にはATMセンターへの訓練計画提出が必要">民訓</button>
+        <button id="btnSup">臨時</button>
+        <button id="btnNuke">原子力</button>
+        <button id="btnDid" title="人口集中地区(2020年国勢調査)。最低安全高度=600m以内の最高障害物+300m">DID</button>
+      </div>
+    </div>
+    <div class="mtGrp" data-grp="feat">
+      <button class="mtHead">地物<i>▾</i></button>
+      <div class="mtSub">
         <button id="btnAp">飛行場</button>
         <button id="btnNav">NAV</button>
         <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AD 1.4)と滑空場(ENR 5.5.1)">ヘリ場</button>
         <button id="btnObst">障害物</button>
-        <button id="btnSup">臨時</button>
         <button id="btnJsdf">自衛隊</button>
-        <button id="btnNuke">原子力</button>
-        <button id="btnTra" title="自衛隊低高度訓練/試験空域(AIP ENR 5.2.1)。SFCから上限まで・2200-1200UTC">低訓</button>
-        <button id="btnCiv" title="民間訓練試験空域(AIP ENR 5.3.1)。使用にはATMセンターへの訓練計画提出が必要">民訓</button>
-        <button id="btnAca" title="進入管制区・ターミナルコントロールエリア(AIP AD 2.17添付図)。Class E。図から起こせた分のみ">進入</button>
-        <button id="btnRes" title="制限空域・警戒区域(AIP ENR 5.1)。射撃・爆撃が行われる区域。多くはNOTAMで運用">制限</button>
-        <button id="btnDid" title="人口集中地区(2020年国勢調査)。最低安全高度=600m以内の最高障害物+300m">DID</button>
       </div>
     </div>
     <div class="mtGrp" data-grp="wx">
@@ -657,7 +681,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-128';
+const VER_TAG='v6-129';
 const BUILD='2026-09-08';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -1296,41 +1320,102 @@ async function loadTra(){
    Class E の管制区。**上限しか図に無いものがある**ので、下限は持っていれば出し、
    無ければ「図に記載なし」と正直に書く(勝手にGNDと決めない)。
    ⚠ 図から起こせた空域だけを載せている。**載っていない=無い ではない** */
-let ACA=null,acaOn=false;
+let ACA=null;
 const NOALT='<span style="color:var(--dim)">図に記載なし(AIPで確認)</span>';
 const acaLayer=L.layerGroup(),ACA_COL='#7d8cff';
+/* ⚠ 進入管制区とTCAを1つのボタンで全部出すと**関東・九州で地図が真っ青になる**。
+   空域(羽田・横田…)ごとにレイヤーを分けて、ボタンで出し分ける。
+   acaPoly: 'ACA|RJTT' → ポリゴンの配列 / acaSel: 表示中のキー */
+const acaPoly={},acaMeta={},acaSel=new Set(store.get('hnav.aca')||[]);
 async function loadAca(){
   if(ACA)return ACA;
   try{const r=await fetch('aca.json?v='+VER_TAG);ACA=await r.json()}catch(e){ACA={f:[]}}
   ACA.f.forEach(f=>{
-    L.polygon(f.pts,{renderer:ovRenderer,color:ACA_COL,weight:2,dashArray:'7 5',
-      fillColor:ACA_COL,fillOpacity:.07})
-      .bindPopup(()=>{
-        const el=document.createElement('div');el.className='apPop';
-        el.innerHTML=`<h5 style="color:${ACA_COL}">${f.jp} ${f.n.split(' ').pop()}</h5>`+
-          `<dl><dt>空域</dt><dd>${f.k==='TCA'?'ターミナルコントロールエリア':'進入管制区'} (Class E)</dd>`+
-          // ⚠ 未記載を altTxt に渡すと「UNL(無制限)」になってしまう。
-          //   上限だけ載せた図・下限だけ載せた図の両方があるので別扱いにする
-          `<dt>上限</dt><dd>${f.up!==null&&f.up!==undefined?altTxt(f.up):NOALT}</dd>`+
-          `<dt>下限</dt><dd>${f.lo!==null&&f.lo!==undefined?altTxt(f.lo):NOALT}</dd>`+
-          `</dl>`+
-          // ⚠ 東京TCAだけは**図に座標表が無く**、画像から起こした近似形状。
-          //    他は全部AIPの座標そのままなので、混ざっていることを明示する
-          (/近似/.test(f.rmk||'')?`<div class="note" style="color:var(--amb)">`+
-            `⚠ ${f.rmk}。他の空域はAIPの座標そのままだが、ここだけ性格が違う。`+
-            `境界付近ではAIPのチャートで確認すること</div>`:'')+
-          `<div class="note">AIP ${f.icao} AD 2.17 添付図${ACA.eff?' (EFF '+ACA.eff+')':''}。`+
-          `<b>図から起こせた空域のみ表示している。載っていない=無い ではない。</b></div>`;
-        return el;
-      }).addTo(acaLayer);
+    const key=f.k+'|'+f.icao;
+    (acaPoly[key]=acaPoly[key]||[]).push(
+      L.polygon(f.pts,{renderer:ovRenderer,color:ACA_COL,weight:2,dashArray:'7 5',
+        fillColor:ACA_COL,fillOpacity:.07})
+        .bindPopup(()=>{
+          const el=document.createElement('div');el.className='apPop';
+          el.innerHTML=`<h5 style="color:${ACA_COL}">${f.jp} ${f.n.split(' ').pop()}</h5>`+
+            `<dl><dt>空域</dt><dd>${f.k==='TCA'?'ターミナルコントロールエリア':'進入管制区'} (Class E)</dd>`+
+            // ⚠ 未記載を altTxt に渡すと「UNL(無制限)」になってしまう。
+            //   上限だけ載せた図・下限だけ載せた図の両方があるので別扱いにする
+            `<dt>上限</dt><dd>${f.up!==null&&f.up!==undefined?altTxt(f.up):NOALT}</dd>`+
+            `<dt>下限</dt><dd>${f.lo!==null&&f.lo!==undefined?altTxt(f.lo):NOALT}</dd>`+
+            `</dl>`+
+            // ⚠ 座標表の無い図は画像から起こした近似形状。混ざっていることを明示する
+            (/近似/.test(f.rmk||'')?`<div class="note" style="color:var(--amb)">`+
+              `⚠ ${f.rmk}。他の空域はAIPの座標そのままだが、ここだけ性格が違う。`+
+              `境界付近ではAIPのチャートで確認すること</div>`:'')+
+            `<div class="note">AIP ${f.icao} AD 2.17 添付図${ACA.eff?' (EFF '+ACA.eff+')':''}。`+
+            `<b>図から起こせた空域のみ表示している。載っていない=無い ではない。</b></div>`;
+          return el;
+        }));
+    const m=acaMeta[key]=acaMeta[key]||{k:f.k,icao:f.icao,jp:f.jp,n:0,la:0,np:0};
+    m.n++; f.pts.forEach(q=>{m.la+=q[0];m.np++});   // 飛行場が引けなければ重心を使う
+  });
+  Object.values(acaMeta).forEach(m=>{
+    m.la/=m.np;
+    const ap=ASP.find(a=>a.icao===m.icao);   // 並べる基準は**飛行場の緯度**
+    if(ap)m.la=ap.lat;
+    m.short=m.jp.replace(/進入管制区$/,'').replace(/ターミナルコントロールエリア$/,'');
   });
   return ACA;
 }
-document.getElementById('btnAca').onclick=async function(){
-  acaOn=!acaOn;this.classList.toggle('on',acaOn);
-  if(acaOn){await loadAca();acaLayer.addTo(map)}else map.removeLayer(acaLayer);
-  restackOverlays();
-};
+function acaApply(){
+  acaLayer.clearLayers();
+  acaSel.forEach(k=>(acaPoly[k]||[]).forEach(p=>acaLayer.addLayer(p)));
+  if(acaSel.size){if(!map.hasLayer(acaLayer))acaLayer.addTo(map)}
+  else if(map.hasLayer(acaLayer))map.removeLayer(acaLayer);
+  store.set('hnav.aca',[...acaSel]);
+  document.querySelectorAll('#subAca button,#subTca button').forEach(b=>{
+    if(b.dataset.key)b.classList.toggle('on',acaSel.has(b.dataset.key));
+  });
+  ['aca','tca'].forEach(g=>{
+    const box=document.getElementById(g==='aca'?'subAca':'subTca');
+    const all=box.querySelector('button[data-all]');
+    if(all){
+      const keys=[...box.querySelectorAll('button[data-key]')].map(b=>b.dataset.key);
+      all.classList.toggle('on',keys.length>0&&keys.every(k=>acaSel.has(k)));
+    }
+    // ⚠ 一覧をまだ開いていないと中にボタンが無いので、**見出しが緑にならない**。
+    //    選択の有無をグループ自身に持たせて syncMtHeads から見る
+    const grp=document.querySelector(`.mtGrp[data-grp="${g}"]`);
+    if(grp)grp.dataset.any=[...acaSel].some(k=>k.startsWith(g.toUpperCase()+'|'))?'1':'';
+  });
+  restackOverlays();syncMtHeads();
+}
+/* 空域一覧のボタンは aca.json から作る(空域を足しても手で直さなくていい) */
+async function acaMenu(kind){
+  const box=document.getElementById(kind==='ACA'?'subAca':'subTca');
+  if(box.dataset.built)return;
+  box.innerHTML='<span style="color:var(--dim);font-size:11px">読込中…</span>';
+  await loadAca();
+  const list=Object.entries(acaMeta).filter(([k,m])=>m.k===kind)
+    .sort((a,b)=>b[1].la-a[1].la);           // 北→南
+  box.innerHTML='';
+  const all=document.createElement('button');
+  all.textContent='全'+kind;all.dataset.all='1';all.title=kind+'を全部出す/消す';
+  all.onclick=()=>{
+    const keys=list.map(([k])=>k);
+    const on=!keys.every(k=>acaSel.has(k));
+    keys.forEach(k=>on?acaSel.add(k):acaSel.delete(k));
+    acaApply();
+  };
+  box.appendChild(all);
+  list.forEach(([key,m])=>{
+    const b=document.createElement('button');
+    b.textContent=m.short;b.dataset.key=key;b.title=`${m.jp} (${m.icao}) ${m.n}区画`;
+    b.onclick=()=>{acaSel.has(key)?acaSel.delete(key):acaSel.add(key);acaApply()};
+    box.appendChild(b);
+  });
+  box.dataset.built='1';
+  acaApply();
+}
+/* 前回出していた空域は起動時に戻す(11+5個を毎回選び直すのは現実的でない)。
+   ⚠ 何も選んでいなければ aca.json(260KB) を取りに行かない */
+if(acaSel.size)loadAca().then(acaApply);
 
 /* ── 制限空域・警戒区域(AIP ENR 5.1) ──
    航空法80条の飛行制限区域(RJR)と、射撃・爆撃が行われる R-nnn / W-nnn。
@@ -1508,21 +1593,36 @@ function restackOverlays(){
     obstLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
 }
 
-/* ── 地図ボタンのカテゴリ折りたたみ(既定は閉じてボタン数を減らす) ── */
+/* ── 地図ボタンのカテゴリ折りたたみ(既定は閉じてボタン数を減らす) ──
+   ⚠ ACA/TCAは**入れ子のグループ**なので、開閉は`>`で自分の階層だけを見る。
+     全部の.mtGrpを閉じると親まで閉じてしまう */
 document.querySelectorAll('.mtGrp').forEach(g=>{
-  const head=g.querySelector('.mtHead');
-  head.onclick=()=>{
+  const head=g.querySelector(':scope>.mtHead');
+  head.onclick=ev=>{
+    ev.stopPropagation();
     const open=!g.classList.contains('open');
-    document.querySelectorAll('.mtGrp').forEach(o=>o.classList.remove('open')); // 1つだけ開く
+    [...g.parentElement.children].forEach(o=>{      // 同じ階層の兄弟だけ閉じる
+      if(o!==g&&o.classList&&o.classList.contains('mtGrp')){
+        o.classList.remove('open');
+        o.querySelectorAll('.mtGrp').forEach(n=>n.classList.remove('open'));
+      }
+    });
     g.classList.toggle('open',open);
-    document.body.classList.toggle('mtOpen',open);
+    if(!open)g.querySelectorAll('.mtGrp').forEach(n=>n.classList.remove('open'));
+    if(open&&g.dataset.grp==='aca')acaMenu('ACA');
+    if(open&&g.dataset.grp==='tca')acaMenu('TCA');
+    document.body.classList.toggle('mtOpen',
+      !!document.querySelector('.maptools>.mtGrp.open'));
     syncMtHeads();
   };
 });
 function syncMtHeads(){ // 閉じていてもONのレイヤーがあれば見出しを緑に
   document.querySelectorAll('.mtGrp').forEach(g=>{
-    const anyOn=[...g.querySelectorAll('.mtSub button')].some(b=>b.classList.contains('on'));
-    const head=g.querySelector('.mtHead');
+    const anyOn=g.dataset.any==='1'||
+      [...g.querySelectorAll(':scope>.mtSub button')]
+        .some(b=>b.classList.contains('on')&&!b.dataset.all)||
+      [...g.querySelectorAll(':scope>.mtSub>.mtGrp')].some(n=>n.dataset.any==='1');
+    const head=g.querySelector(':scope>.mtHead');
     if(!g.classList.contains('open'))head.classList.toggle('on',anyOn);
     else head.classList.remove('on');
   });
