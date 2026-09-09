@@ -206,6 +206,8 @@
   #thrPanel .lg{border-bottom:1px solid rgba(255,255,255,.06);padding:3px 0}
   #thrPanel .ex{color:var(--red)}#thrPanel .sf{color:#4fd08a}
   #thrPanel .leg{color:var(--cyn)}
+  #thrPanel .tap{cursor:pointer;color:var(--cyn);border-bottom:1px dashed var(--cyn)}
+  #thrPanel .tap:active{opacity:.6}
   .thrBandLegend{display:flex;flex-wrap:wrap;gap:4px 8px;margin-top:4px}
   .thrBandLegend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:3px;
     vertical-align:-1px}
@@ -757,7 +759,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-138';
+const VER_TAG='v6-139';
 const BUILD='2026-09-09';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -1289,7 +1291,16 @@ async function demElevAll(pts,z){            // [{lat,lng}] → [m]
   }
   return out;
 }
-const RTE_CLR_FT=500;     // 地形からの最低余裕(ft)。低高度飛行の目安として置いている
+/* 地形からの最低余裕(ft)。経路パネルの数字をタップで変えられる(hnav.rteClr) */
+let RTE_CLR_FT=store.get('hnav.rteClr')||500;
+function askRteClr(){
+  const v=prompt('地形からの最低余裕(ft)\n'+
+    '高度の逆算で「これ以上は下げない」とする地表からの高さ(AGL)',RTE_CLR_FT);
+  if(v===null)return;
+  const n=parseFloat(String(v).replace(/[^\d.]/g,''));
+  if(!(n>=0&&n<=5000)){alert('0〜5000の数字で入れてください。');return}
+  RTE_CLR_FT=Math.round(n);store.set('hnav.rteClr',RTE_CLR_FT);thrRoute();
+}
 /* ── ルートに沿った露出 ──
    0.2NMごとに拾って、各点で全脅威の minAlt の最小(=一番厳しい境界高度)を出す。
    自機/計画高度で赤(露出)・緑(遮蔽)に塗り分け、レグごとの要約も作る */
@@ -1418,10 +1429,14 @@ async function thrRoute(){
   }).join('');
   bd.innerHTML=`<div class="lg" style="color:var(--dim)">自機/計画高度 `+
     `<b style="color:var(--txt)">${Math.round(myFt).toLocaleString()}ft MSL</b> で判定。`+
-    `赤=露出 / 緑=遮蔽。<b>推奨高度は地形+${RTE_CLR_FT}ftを下限</b>として逆算</div>`+html+
+    `赤=露出 / 緑=遮蔽。推奨高度は<b>地形+<span class="tap" id="rteClrBtn">`+
+    `${RTE_CLR_FT.toLocaleString()}ft</span></b>を下限として逆算`+
+    `<span style="opacity:.6">(タップで変更)</span></div>`+html+
     `<div class="lg" style="color:var(--dim)">合成の色分け(見つからずにいられる上限)`+
     `<div class="thrBandLegend">${leg}</div></div>`+
     `<div class="lg" style="color:var(--dim)">⚠ 地形だけの判定。レーダー性能・樹木・建物は見ていない</div>`;
+  const cb=document.getElementById('rteClrBtn');
+  if(cb)cb.onclick=askRteClr;
   document.getElementById('thrPanel').style.display='flex';
 }
 document.querySelector('#thrPanel .x').onclick=()=>{
