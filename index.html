@@ -757,7 +757,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-137';
+const VER_TAG='v6-138';
 const BUILD='2026-09-09';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -1250,6 +1250,46 @@ async function thrComposite(){
   L.imageOverlay(cv.toDataURL(),[nw,se],{pane:'shadePane',interactive:false}).addTo(thrCompLayer);
 }
 
+/* ── 標高を1点ずつ引く(ルートの地形高を出すため) ──
+   demWindow は円の窓をまとめて取る用。ルートは細長いので窓が巨大になる。
+   **タイルを画素配列で持ってから点で引く**方が軽い */
+const DEM_PIX=new Map();
+function demPix(z,x,y){
+  const k=z+'/'+x+'/'+y;
+  if(DEM_PIX.has(k))return DEM_PIX.get(k);
+  if(DEM_PIX.size>200)DEM_PIX.clear();
+  const pr=demTile(z,x,y).then(t=>{
+    if(!t)return null;
+    const a=new Float32Array(256*256);
+    if(t.sea)return a;                       // 海=0m
+    const c=document.createElement('canvas');c.width=c.height=256;
+    const g=c.getContext('2d',{willReadFrequently:true});
+    g.drawImage(t.im,0,0);
+    const d=g.getImageData(0,0,256,256).data;
+    for(let i=0,j=0;i<d.length;i+=4,j++){
+      const R=d[i],G=d[i+1],B=d[i+2];
+      if(R===128&&G===0&&B===0){a[j]=0;continue}
+      let v=R*65536+G*256+B; if(v>=8388608)v-=16777216;
+      a[j]=v*0.01;
+    }
+    return a;
+  });
+  DEM_PIX.set(k,pr);return pr;
+}
+async function demElevAll(pts,z){            // [{lat,lng}] → [m]
+  const need=new Set();
+  const g=pts.map(p=>{const q=gpx(p.lat,p.lng,z);
+    need.add(Math.floor(q.x/256)+'/'+Math.floor(q.y/256));return q});
+  await Promise.all([...need].map(k=>{const [x,y]=k.split('/');return demPix(z,+x,+y)}));
+  const out=[];
+  for(let i=0;i<g.length;i++){
+    const tx=Math.floor(g[i].x/256),ty=Math.floor(g[i].y/256);
+    const a=await demPix(z,tx,ty);
+    out.push(a?a[Math.floor(g[i].y-ty*256)*256+Math.floor(g[i].x-tx*256)]:NaN);
+  }
+  return out;
+}
+const RTE_CLR_FT=500;     // 地形からの最低余裕(ft)。低高度飛行の目安として置いている
 /* ── ルートに沿った露出 ──
    0.2NMごとに拾って、各点で全脅威の minAlt の最小(=一番厳しい境界高度)を出す。
    自機/計画高度で赤(露出)・緑(遮蔽)に塗り分け、レグごとの要約も作る */
@@ -1267,6 +1307,36 @@ function thrMinAltAt(lat,lng,list){
   }
   return {m:mn,who};
 }
+/* レグ(または全区間)の高度の逆算。
+   ①地形追随: 各点で「地形+余裕」まで下げたとき、それでも見られる距離
+   ②一定高度: 一つの高度で通すなら何ftが一番露出が短いか(尾根が高いと現実的でない) */
+function thrLegAdvice(l,expAt){
+  const CL=RTE_CLR_FT*0.3048;
+  let followM=0,anyThreat=false,fMin=Infinity,fMax=-Infinity;
+  for(let k=1;k<l.pts.length;k++){
+    const g=l.elev[k], need=l.need[k].m;
+    if(isFinite(need))anyThreat=true;
+    if(g===g){const f=g+CL; if(f<fMin)fMin=f; if(f>fMax)fMax=f; if(f>=need)followM+=l.dM}
+  }
+  if(!anyThreat)return `<span class="sf">脅威圏の外</span>`;
+  const totNM=l.legM/1852, folNM=followM/1852;
+  const band=`地形追随なら ${Math.round(fMin/0.3048/100)*100}〜`+
+             `${Math.round(fMax/0.3048/100)*100}ft`;
+  // ⚠ 一定高度の探索は**地形の最高+余裕から**始めること。最低側から始めると
+  //   「1,500ftで露出0.6NM」のように**尾根に突っ込む高度**を勧めてしまう
+  let best=null;
+  const f0=Math.round(fMax/0.3048/100)*100;
+  for(let h=f0;h<=f0+8000;h+=100){
+    const e=expAt(l,h*0.3048);
+    if(!best||e<best.e-1)best={h,e};
+  }
+  const konst=`一定高度(地形最高+${RTE_CLR_FT}ft以上)なら <b>${best.h.toLocaleString()}ft</b> で露出 `+
+              `<b>${(best.e/1852).toFixed(1)}NM</b>`;
+  if(followM<0.05*1852)
+    return `<span class="sf">◯ 地形追随(${band})で全区間 遮蔽できる</span><br>　${konst}`;
+  return `<span class="ex">地形追随でも露出 ${folNM.toFixed(1)}NM</span>`+
+    `(${Math.round(folNM/totNM*100)}%) ${band}<br>　${konst}`;
+}
 async function thrRoute(){
   thrRteLayer.clearLayers();
   const bd=document.querySelector('#thrPanel .bd');
@@ -1278,36 +1348,68 @@ async function thrRoute(){
   if(!map.hasLayer(thrRteLayer))thrRteLayer.addTo(map);
   const myFt=thrMyAltFt(),myM=myFt*0.3048;
   const STEP=0.2*1852;                    // 0.2NMごと
-  let html='';
+  /* まず全レグのサンプル点を作って、脅威の境界高度と地形標高をまとめて引く */
+  const legs=[];
   for(let i=0;i<wps.length-1;i++){
     const A=wps[i],B=wps[i+1];
     const legM=map.distance([A.lat,A.lng],[B.lat,B.lng]);
-    const nstep=Math.max(2,Math.ceil(legM/STEP));
-    let exM=0,worst=Infinity,worstWho=null,prev=null;
-    for(let k=0;k<=nstep;k++){
-      const f=k/nstep, la=A.lat+(B.lat-A.lat)*f, ln=A.lng+(B.lng-A.lng)*f;
-      const r=thrMinAltAt(la,ln,list);
-      const exposed=myM>=r.m;
+    const n=Math.max(2,Math.ceil(legM/STEP)),pts=[];
+    for(let k=0;k<=n;k++){
+      const f=k/n;
+      pts.push({lat:A.lat+(B.lat-A.lat)*f,lng:A.lng+(B.lng-A.lng)*f});
+    }
+    legs.push({A,B,legM,n,pts,dM:legM/n});
+  }
+  const flat=[].concat(...legs.map(l=>l.pts));
+  const elev=await demElevAll(flat,12);    // 地形はz12(約31m)で十分
+  let ei=0;
+  legs.forEach(l=>{l.elev=elev.slice(ei,ei+l.pts.length);ei+=l.pts.length});
+  legs.forEach(l=>{
+    l.need=l.pts.map(p=>thrMinAltAt(p.lat,p.lng,list));    // 見えるようになる高度(m)
+  });
+  /* 高度hで飛んだときの露出距離(m) */
+  const expAt=(l,hM)=>{let e=0;for(let k=1;k<l.pts.length;k++) if(hM>=l.need[k].m)e+=l.dM;return e};
+  let html='';
+  for(let i=0;i<legs.length;i++){
+    const l=legs[i];
+    let exM=0,worst=Infinity,worstWho=null;
+    for(let k=0;k<l.pts.length;k++){
+      const r=l.need[k], exposed=myM>=r.m;
       if(isFinite(r.m)&&r.m<worst){worst=r.m;worstWho=r.who}
-      if(prev){
+      if(k){
         // ⚠ ルート線(マゼンタ)より太い縁取りにして、線そのものは残す。
         //    後から routeLine.bringToFront() で前に出す
-        L.polyline([[prev.la,prev.ln],[la,ln]],{renderer:ovRenderer,
-          color:exposed?'#ff2d40':'#2fd07a',weight:10,opacity:exposed?.85:.6,
-          interactive:false}).addTo(thrRteLayer);
-        if(exposed)exM+=legM/nstep;
+        L.polyline([[l.pts[k-1].lat,l.pts[k-1].lng],[l.pts[k].lat,l.pts[k].lng]],
+          {renderer:ovRenderer,color:exposed?'#ff2d40':'#2fd07a',weight:10,
+           opacity:exposed?.85:.6,interactive:false}).addTo(thrRteLayer);
+        if(exposed)exM+=l.dM;
       }
-      prev={la,ln};
     }
-    const nm=exM/1852, tot=legM/1852;
-    html+=`<div class="lg"><span class="leg">${i+1}. ${A.name} → ${B.name}</span> ${tot.toFixed(1)}NM<br>`+
+    // ── 高度の逆算 ──
+    // ⚠ **一定高度で解こうとすると尾根1本で破綻する**(甲府の西だと地形最高9,430ftで
+    //   全部「不可」になる)。実際は地形に沿って上下するので、
+    //   **各点で「地形+余裕」まで下げたときにまだ見られる距離**を主に出す
+    const advice=thrLegAdvice(l,expAt);
+    const nm=exM/1852, tot=l.legM/1852;
+    html+=`<div class="lg"><span class="leg">${i+1}. ${l.A.name} → ${l.B.name}</span> ${tot.toFixed(1)}NM<br>`+
       (isFinite(worst)
         ? (exM>0.05*1852
-            ? `<span class="ex">露出 ${nm.toFixed(1)}NM</span>(${Math.round(nm/tot*100)}%) `+
-              `最も厳しい境界 <b>${Math.round(worst/0.3048).toLocaleString()}ft</b> (${worstWho})`
-            : `<span class="sf">全区間 遮蔽</span> 最も厳しい境界 `+
-              `<b>${Math.round(worst/0.3048).toLocaleString()}ft</b> (${worstWho})`)
-        : `<span class="sf">脅威圏の外</span>`)+`</div>`;
+            ? `いま(${Math.round(myFt).toLocaleString()}ft): <span class="ex">露出 ${nm.toFixed(1)}NM</span>`+
+              `(${Math.round(nm/tot*100)}%) 最厳 <b>${Math.round(worst/0.3048).toLocaleString()}ft</b> (${worstWho})`
+            : `いま(${Math.round(myFt).toLocaleString()}ft): <span class="sf">全区間 遮蔽</span> `+
+              `最厳 <b>${Math.round(worst/0.3048).toLocaleString()}ft</b> (${worstWho})`)
+        : `<span class="sf">脅威圏の外</span>`)+
+      `<br>　${advice}</div>`;
+  }
+  /* 全区間まとめ */
+  {
+    const all={pts:[],need:[],elev:[],dM:legs[0].dM,legM:0};
+    legs.forEach(l=>{all.pts=all.pts.concat(l.pts);all.need=all.need.concat(l.need);
+                     all.elev=all.elev.concat(l.elev);all.legM+=l.legM});
+    const gMax=Math.max(...all.elev.filter(v=>v===v));
+    html=`<div class="lg" style="background:rgba(255,255,255,.04)"><b>ルート全体</b> `+
+      `${(all.legM/1852).toFixed(1)}NM / 地形最高 ${Math.round(gMax/0.3048).toLocaleString()}ft<br>　`+
+      thrLegAdvice(all,expAt)+`</div>`+html;
   }
   if(routeLine.bringToFront)routeLine.bringToFront();   // 縁取りの上にルート線を戻す
   const leg=THR_BAND.map(([lim,c],i)=>{
@@ -1316,7 +1418,7 @@ async function thrRoute(){
   }).join('');
   bd.innerHTML=`<div class="lg" style="color:var(--dim)">自機/計画高度 `+
     `<b style="color:var(--txt)">${Math.round(myFt).toLocaleString()}ft MSL</b> で判定。`+
-    `赤=露出 / 緑=遮蔽</div>`+html+
+    `赤=露出 / 緑=遮蔽。<b>推奨高度は地形+${RTE_CLR_FT}ftを下限</b>として逆算</div>`+html+
     `<div class="lg" style="color:var(--dim)">合成の色分け(見つからずにいられる上限)`+
     `<div class="thrBandLegend">${leg}</div></div>`+
     `<div class="lg" style="color:var(--dim)">⚠ 地形だけの判定。レーダー性能・樹木・建物は見ていない</div>`;
