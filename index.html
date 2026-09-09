@@ -715,8 +715,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-134';
-const BUILD='2026-09-08';
+const VER_TAG='v6-135';
+const BUILD='2026-09-09';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -946,7 +946,7 @@ function updZmScale(){
   const lft=(anyLos&&ownAltFt!==null)?Math.round(ownAltFt):losAltFt;
   const los=anyLos?`<span class="tap" id="zmLos" title="タップで計画高度を変える。`+
       `GPSに高度があれば自機は実高度で描く">`+
-      `高度 ${ownAltFt!==null?'実':''}<b>${lft.toLocaleString()}</b>ft `+
+      `高度 ${ownAltFt!==null?'実':''}<b>${lft.toLocaleString()}</b>ft<span style="opacity:.6">MSL</span> `+
       `⌀<b>${losNM(lft).toFixed(0)}</b>NM</span>`:'';
   const sh=shadeMsg?`<span class="tap" id="zmShade" title="タップで高度を変える">${shadeMsg}</span>`:'';
   zmScaleEl.innerHTML=
@@ -981,7 +981,9 @@ function drawLos(){
   });
 }
 function askLosAlt(){
-  const v=prompt('見通しを描く高度(ft)\n※GPSがONなら自機だけは実高度で描きます',losAltFt);
+  const v=prompt('見通し・遮蔽を描く高度(ft)\n'+
+    '※**MSL(平均海面から)**で入れてください。AGLではありません\n'+
+    '※GPSがONなら自機だけはGPSの実高度で描きます',losAltFt);
   if(v===null)return;
   const n=parseFloat(String(v).replace(/[^\d.]/g,''));
   if(!(n>=0)){alert('数字で入れてください。');return}
@@ -1150,7 +1152,10 @@ async function drawShade(){
     L.circle(c,{radius:radM,renderer:ovRenderer,color:'#ffb454',weight:1.6,opacity:.8,
       dashArray:'4 6',fill:false,interactive:false}).addTo(shadeLayer);
     shadeAt={lat:c[0],lng:c[1],ft:altFt};
+    // ⚠ 高度はMSL。観測点の地表標高も出しておかないと「AGLのつもり」で読まれる
+    const ghFt=(gh===gh)?Math.round(gh/0.3048):null;
     setShadeMsg(`遮蔽<span style="opacity:.75"> 斜線=見えない</span> ⌀${radNM.toFixed(0)}NM z${w.z}`+
+                (ghFt!==null?`<span style="opacity:.75"> 地表${ghFt.toLocaleString()}ft</span>`:'')+
                 (w.miss?` <span style="color:var(--amb)">欠測${w.miss}</span>`:''));
   }catch(e){setShadeMsg('遮蔽: 標高を取れず');}
   finally{shadeBusy=false}
