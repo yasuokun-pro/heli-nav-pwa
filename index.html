@@ -179,10 +179,17 @@
   #zmScale .tap:active{opacity:.6}
   #zmLos{color:var(--amb)}#zmLos b{color:var(--amb)}
   /* 脅威(敵の対空)。赤で統一する */
-  .thr-ico{color:var(--red);font-size:15px;line-height:1;text-shadow:0 0 5px #000,0 0 5px #000;
-    white-space:nowrap;font-weight:700}
-  .thr-ico span{font:600 10px var(--mono);margin-left:3px;color:#ffb0b0}
-  .thr-ico.moving{filter:drop-shadow(0 0 7px #ff5a5a)}
+  /* 敵のピン。⚠ ◈の文字だけだと当たりが15pxしかなく、掴み損ねて**地図側に
+     ポイントが作られていた**。ポイント(.wp-pin)と同じ28pxの円にする */
+  .thr-pin{width:28px;height:28px;border-radius:50%;background:rgba(40,4,8,.88);
+    border:2.5px solid var(--red);color:var(--red);font-size:15px;line-height:23px;
+    text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.6);transition:transform .12s}
+  .thr-pin.armed{border-color:#b06800;background:var(--amb);color:#3a1500;transform:scale(1.35);
+    box-shadow:0 0 0 4px rgba(255,90,90,.35),0 2px 8px rgba(0,0,0,.6)}
+  .thr-pin.moving{border-color:#b06800;background:var(--amb);color:#3a1500;transform:scale(1.45);
+    box-shadow:0 0 0 6px rgba(255,90,90,.45),0 3px 10px rgba(0,0,0,.7)}
+  .thr-lbl{position:absolute;left:32px;top:6px;font:600 10.5px var(--mono);color:#ffb0b0;
+    white-space:nowrap;text-shadow:0 0 4px #000,0 0 4px #000}
   #thrBar{position:absolute;z-index:974;top:calc(var(--ovlH) + 8px);left:56px;
     max-width:min(48%,300px);display:none;background:rgba(44,6,10,.96);
     border:2px solid var(--red);border-radius:8px;padding:6px 9px;
@@ -551,7 +558,7 @@
       <button class="mtHead">自機<i>▾</i></button>
       <div class="mtSub">
         <button id="btnRing" title="自機(GPS OFFなら画面の中心)から 3/5/10NM の距離環">距離環</button>
-        <button id="btnLos" title="見通し円。その高度から水平線まで(1.17×√h NM)の円を、自機(GPSの実高度)とルートの各ポイント(設定高度)に描く。幾何学的な水平線で地形は見ていない">見通し</button>
+        <button id="btnLos" title="見通し円。その高度から水平線まで(1.17×√h NM)の円を、自機(GPS中は実高度・OFFなら画面の中心に設定高度)に描く。幾何学的な水平線で地形は見ていない">見通し</button>
         <button id="btnShade" title="地形の遮蔽。国土地理院の標高タイルを読んで、見えない範囲を暗く塗る。⚠ 建物・樹木は入っていない">遮蔽</button>
       </div>
     </div>
@@ -759,8 +766,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-139';
-const BUILD='2026-09-09';
+const VER_TAG='v6-140';
+const BUILD='2026-09-10';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1008,16 +1015,16 @@ map.on('zoomend moveend resize',updZmScale);
 
 /* ── 見通し円(その高度から水平線までの円) ──
    ⚠ **幾何学的な水平線**であって視程でも電波の見通しでもない。地形も見ていない。
-   中心は GPS中の自機 → ルートのポイント → どれも無ければ画面の中心 の順。
+   中心は GPS中の自機、GPSがOFFなら画面の中心(ルートの各ポイントには描かない)。
    自機だけは**GPSの実高度**があればそれを使う(計画高度ではなく実高度で描く) */
 const losLayer=L.layerGroup(),LOS_COL='#ffb454';
 function drawLos(){
   losLayer.clearLayers();
   if(!losOn)return;
   const pts=[];
+  // ⚠ 以前はルートの各ポイントにも円を描いていたが、使わないとのことで止めた(v6-140)
   if(ownPos)pts.push({ll:[ownPos.lat,ownPos.lng],ft:(ownAltFt!==null?ownAltFt:losAltFt),me:1});
-  wps.forEach(w=>pts.push({ll:[w.lat,w.lng],ft:losAltFt}));
-  if(!pts.length){const c=map.getCenter();pts.push({ll:[c.lat,c.lng],ft:losAltFt})}
+  else{const c=map.getCenter();pts.push({ll:[c.lat,c.lng],ft:losAltFt})}
   pts.forEach(q=>{
     L.circle(q.ll,{radius:losNM(q.ft)*1852,renderer:ovRenderer,color:LOS_COL,
       weight:q.me?2.4:1.8,opacity:.95,dashArray:q.me?null:'7 6',fill:true,
@@ -1094,8 +1101,32 @@ function thrPaint(t,c,myAltM){
   return L.imageOverlay(cv.toDataURL(),[nw,se],{pane:'shadePane',interactive:false});
 }
 function thrIcon(t){
-  return L.divIcon({className:'',iconAnchor:[8,8],
-    html:`<div class="thr-ico">◈<span>${t.name}</span></div>`});
+  return L.divIcon({className:'thr-mk',iconSize:[28,28],iconAnchor:[14,14],
+    html:`<div class="thr-pin">◈</div><div class="thr-lbl">${t.name}</div>`});
+}
+/* ポイント(bindWpPress)と同じ「**長押しで解錠 → ドラッグ**」。触っただけでは動かない。
+   ⚠ 押している間は wpPressing を立てる。地図側の長押し(contextmenu)が
+     それを見て**新しいポイントを作らない**ようにしている */
+function thrBindPress(t,mk){
+  const el=mk.getElement&&mk.getElement();
+  if(!el||el._thrBound)return; el._thrBound=true;
+  let tm=null,sx=0,sy=0;
+  const pin=()=>el.querySelector('.thr-pin');
+  const cancel=()=>{if(tm){clearTimeout(tm);tm=null}};
+  el.addEventListener('pointerdown',e=>{
+    wpPressing=true;sx=e.clientX;sy=e.clientY;cancel();
+    tm=setTimeout(()=>{
+      tm=null;t.armed=true;const p=pin();if(p)p.classList.add('armed');
+      if(navigator.vibrate)navigator.vibrate(15);
+    },WP_HOLD);
+  });
+  el.addEventListener('pointermove',e=>{
+    if(tm&&Math.hypot(e.clientX-sx,e.clientY-sy)>WP_MOVE_CANCEL)cancel();
+  });
+  const up=()=>{cancel();wpPressing=false;
+    if(!t.dragging){t.armed=false;const p=pin();if(p)p.classList.remove('armed','moving')}};
+  el.addEventListener('pointerup',up);
+  el.addEventListener('pointercancel',up);
 }
 function thrPopup(t,mk){
   const el=document.createElement('div');el.className='apPop thrPop';
@@ -1124,13 +1155,27 @@ function thrDrawMarkers(){
   thrLayer.clearLayers();
   if(!thrOn)return;
   THR.forEach(t=>{
+    t.armed=false;t.dragging=false;
     const mk=L.marker([t.lat,t.lng],{icon:thrIcon(t),draggable:true,bubblingMouseEvents:false});
-    mk.on('dragstart',()=>{const e=mk.getElement();if(e)e.firstChild.classList.add('moving')});
+    mk.on('dragstart',()=>{
+      if(!t.armed)return;
+      t.dragging=true;
+      const p=mk.getElement()&&mk.getElement().querySelector('.thr-pin');
+      if(p){p.classList.remove('armed');p.classList.add('moving')}
+    });
+    mk.on('drag',()=>{if(!t.armed)mk.setLatLng([t.lat,t.lng])});   // 未解錠なら動かさない
     mk.on('dragend',()=>{
+      const was=t.armed; t.dragging=false; t.armed=false;
+      if(!was){mk.setLatLng([t.lat,t.lng]);return}
       const p=mk.getLatLng();t.lat=+p.lat.toFixed(5);t.lng=+p.lng.toFixed(5);
       delete thrCache[t.id];thrSave();thrRefresh(true);
     });
     mk.bindPopup(()=>thrPopup(t,mk));
+    // ⚠ 要素は地図に載ったときに作られる(レイヤーを出し直すと作り直される)ので add で結ぶ
+    mk.on('add',()=>{
+      if(mk.dragging&&mk.dragging._draggable)mk.dragging._draggable.options.clickTolerance=14;
+      thrBindPress(t,mk);
+    });
     mk.addTo(thrLayer);
     if(t.show)L.circle([t.lat,t.lng],{radius:t.r*1852,renderer:ovRenderer,color:'#ff4d5a',
       weight:1.8,opacity:.9,dashArray:'6 6',fill:false,interactive:false}).addTo(thrLayer);
@@ -1138,7 +1183,9 @@ function thrDrawMarkers(){
 }
 async function thrRefresh(recalc){
   thrDrawMarkers();
-  if(!thrOn){map.removeLayer(thrShade);thrBar(null);return}
+  if(!thrOn){map.removeLayer(thrShade);
+    if(typeof thrCompLayer!=='undefined'){thrCompLayer.clearLayers();map.removeLayer(thrCompLayer)}
+    thrBar(null);return}
   if(!map.hasLayer(thrShade))thrShade.addTo(map);
   if(thrBusy)return; thrBusy=true;
   try{
@@ -1210,7 +1257,7 @@ async function thrEnsure(list){
 async function thrComposite(){
   thrCompLayer.clearLayers();
   const list=THR.filter(t=>t.show);
-  if(!thrCompOn||!list.length)return;
+  if(!thrOn||!thrCompOn||!list.length)return;
   await thrEnsure(list);
   let n=-90,s2=90,e=-180,w2=180;
   list.forEach(t=>{const dl=t.r/60,dlo=t.r/60/Math.cos(t.lat*Math.PI/180);
@@ -1445,6 +1492,11 @@ document.querySelector('#thrPanel .x').onclick=()=>{
 };
 document.getElementById('btnThrComp').onclick=async function(){
   thrCompOn=!thrCompOn;this.classList.toggle('on',thrCompOn);
+  if(thrCompOn&&!thrOn){   // 敵が消えたまま色だけ出ないよう、表示も一緒に入れる
+    thrOn=true;store.set('hnav.thrOn',true);
+    document.getElementById('btnThr').classList.add('on');
+    thrLayer.addTo(map);thrCompLayer.addTo(map);await thrRefresh(true);return;
+  }
   if(thrCompOn){thrCompLayer.addTo(map);await thrComposite()}
   else{thrCompLayer.clearLayers();map.removeLayer(thrCompLayer)}
 };
@@ -1452,8 +1504,17 @@ document.getElementById('btnThrRte').onclick=function(){thrRoute()};
 
 document.getElementById('btnThr').onclick=function(){
   thrOn=!thrOn;this.classList.toggle('on',thrOn);store.set('hnav.thrOn',thrOn);
-  if(thrOn){thrLayer.addTo(map);thrRefresh(true)}
-  else{map.removeLayer(thrLayer);map.removeLayer(thrShade);thrBar(null)}
+  // ⚠ 「表示」は**マスタースイッチ**。以前は合成の色だけ残っていた。
+  //   合成の ON/OFF 自体は覚えておき、表示を戻したら合成も戻す
+  document.getElementById('btnThrComp').classList.toggle('on',thrOn&&thrCompOn);
+  if(thrOn){thrLayer.addTo(map);if(thrCompOn)thrCompLayer.addTo(map);thrRefresh(true)}
+  else{
+    map.removeLayer(thrLayer);map.removeLayer(thrShade);
+    thrCompLayer.clearLayers();map.removeLayer(thrCompLayer);
+    thrRteLayer.clearLayers();map.removeLayer(thrRteLayer);
+    document.getElementById('thrPanel').style.display='none';
+    thrBar(null);
+  }
   restackOverlays();
 };
 document.getElementById('btnThrAdd').onclick=function(){
@@ -1660,7 +1721,7 @@ document.getElementById('btnLos').onclick=function(){
   if(losOn){losLayer.addTo(map);drawLos()}else map.removeLayer(losLayer);
   updZmScale();restackOverlays();
 };
-map.on('moveend',()=>{if(losOn&&!ownPos&&!wps.length)drawLos()});
+map.on('moveend',()=>{if(losOn&&!ownPos)drawLos()});
 setTimeout(updZmScale,0);
 map.zoomControl.setPosition('bottomright'); // 右下(ALLボタンの上)
 const BASES=[
@@ -3200,7 +3261,8 @@ function insertWpAt(leg,lat,lng,name){ // leg番目の区間(leg→leg+1の間)�
 }
 // 経路線は細くて押しにくいので、透明で太い当たり判定用の線を重ねる
 const routeHit=L.polyline([],{color:'#000',opacity:0,weight:24,bubblingMouseEvents:false}).addTo(map);
-routeHit.on('contextmenu',e=>{ // 長押し: その区間にWPを挿入
+routeHit.on('contextmenu',e=>{
+  if(wpPressing)return;   // 敵やポイントを掴もうとした長押しでは挿入しない // 長押し: その区間にWPを挿入
   if(typeof drawMode!=='undefined'&&drawMode)return; // 作図中は作図優先
   if(flt&&flt.legOff)return;                          // 飛行中(空中)はD→ピン優先
   const leg=nearestLeg(e.latlng);
@@ -3418,7 +3480,7 @@ map.on('contextmenu',e=>{ // 長押し: 作図中=描画 / 飛行中=D→ピン(
   // ⚠ ポイントを掴もうと長押ししたときに新しいポイントを作らない
   if(wpPressing)return;
   const tg=e.originalEvent&&e.originalEvent.target;
-  if(tg&&tg.closest&&tg.closest('.wp-pin'))return;
+  if(tg&&tg.closest&&tg.closest('.wp-pin,.thr-mk'))return;
   if(typeof drawMode!=='undefined'&&drawMode){drawAdd(e.latlng.lat,e.latlng.lng);return}
   if(flt&&flt.legOff){setDctPin(e.latlng.lat,e.latlng.lng);return}
   pushUndo();addWp(e.latlng.lat,e.latlng.lng);redraw();
