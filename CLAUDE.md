@@ -25,6 +25,7 @@ heli-nav-pwa/            … 場所: ~/Claudeディレクトリ/heli-nav-pwa (gi
 ├─ index.html    … アプリ本体(HTML+CSS+JS全部入り)
 ├─ sw.js         … Service Worker(オフラインキャッシュ)
 ├─ manifest.json … PWAマニフェスト
+├─ IFR.md                    … IFRモードの設計メモ(未着手・再開はここから)
 ├─ icon-192.png / icon-512.png … アプリアイコン(男の子+プロペラ)
 ├─ icon-512-maskable.png … Android用。⚠ OSが円/角丸に切り抜くので**中央80%に収める**
 ├─ favicon.ico / icon-y-180.png … タブのアイコン。⚠ 16pxだと顔が潰れるので**「y」マーク**
