@@ -8,7 +8,7 @@
 | 段階 | 状態 | 成果物 |
 |---|---|---|
 | Stage 1-1 FIX | ✅ | `tools/gen_fix.py` → `fix.json`(**2,926点**・254KB) |
-| Stage 1-2 航空路 | ✅ | `tools/gen_awy.py` → `awy.json`(**367本**=ENR 3.1 71本+ENR 3.3 296本・312KB) |
+| Stage 1-2 航空路 | ✅ | `tools/gen_awy.py` → `awy.json`(**623本**=ENR 3.1 71本+ENR 3.3 296本+**ENR 3.5.1 直行経路 256本**・386KB) |
 | Stage 1-3 方式索引 | ✅ | `tools/gen_proc.py` → `proc.json`(**113空港 SID 418/STAR 193/IAC 665**・77KB。索引の grep 数と完全一致) |
 | Stage 1-4 IACミニマ | ✅ 結論: **取れない**(図の本文レイヤが文字化け)。Stage 2 では代替最低気象条件の標準値で代用 | — |
 | Stage 1-5 地図レイヤー | ✅ | 地物グループに **FIX** と **航空路** ボタン(`btnFix`/`btnAwy`。index.html の「FIXレイヤー」「航空路レイヤー」のブロック) |
@@ -40,6 +40,7 @@
 | **ENR 3.1** (10362行〜13957行) | 下層ATSルート(A/B/G/R/V/W) FIX列・磁方位・距離・MEA・高度方向 | **70本** | ○ 表。列が縦に散るので状態機械で読む |
 | **ENR 3.3** (13968行〜31361行) | RNAV経路(Y/Z) 同上+航法仕様(RNAV5等)・MOCA・DME要件 | **261本** | ○ 同上。**主力の経路はほぼこちら** |
 | **ENR 3.4** | ヘリコプター経路 | **Nil** | — AIPにヘリ専用IFR経路は無い |
+| **ENR 3.5.1** (31376行〜33297行) | **直行経路**(navaid/FIX間の公示直行区間。磁方位・距離・MEA。DMEフィックス経由あり) | **256本**(両端から2回載るので行は340) | ○ 座標が無い。navaid(ENR 4.1+各AD 2.19)とFIXから引く。**v6-142で追加**(当初漏れていた) |
 | **AD 2.24 索引** (各飛行場PDFの "CHARTS RELATED TO AN AERODROME" ページ) | SID/STAR/IAC の**名前と種別の一覧** | 113空港 / **SID 418・STAR 193・IAC 665** | ◎ 本文レイヤの1行1図。`grep "Standard Departure Chart\|Standard Arrival Chart\|Instrument Approach Chart"` で取れる |
 | **AD 2.22** | 飛行方式(文章)。離陸最低気象条件など | 各空港 | △ 英文の散文。必要な数字だけ正規表現 |
 | **AD 2.24 各図**(SID/STAR/IAC本体) | 経路の**形**、DA/MDA、RVR、MAP | 1,276枚 | ✕ **図。福岡TCAと同じ図の読み取り仕事**。全国は現実的でない |
@@ -110,9 +111,9 @@ fix.json  { eff:"20260709", src, f:[ {n:"ABASA", lat, lng,
               id:"WKE"             … navaid名の点だけ(略号欄のID),
               rt:["N884","Y531"]   … ATSルート列(無い点もある),
               brg:"101°/14.0NM YNE, 277°/53.9NM IGE", ja:"アバサ" } ] }
-awy.json  { eff, src, f:[ {n:"Y10", k:"LOW"(ENR 3.1)|"RNAV"(ENR 3.3),
+awy.json  { eff, src, f:[ {n:"Y10"|"WKE-MVE"(直行経路は端点のID/FIX名), k:"LOW"(ENR 3.1)|"RNAV"(ENR 3.3)|"DCT"(ENR 3.5.1),
               spec:"RNAV5", sens:["VOR/DME","DME/DME","INS/IRS","GNSS"]   … RNAVだけ,
-              pts:[ {n:"LUMIN", lat, lng, id?:"WKE"} … ],
+              pts:[ {n:"LUMIN", lat, lng, id?:"WKE"} … ]   … 直行経路の "TBE 10DME" は経路直線上に作った点,
               segs:[ {a:"LUMIN", b:"WAKKANAI", mag:194, true:183.8, dist:20.6,
                       up:"UNL", mea:"FL200"|7000, moca:3000|"FL150",
                       odd:"↑", even:"↓"      … その方向に飛ぶときの奇数/偶数高度(矢印は表の向き),

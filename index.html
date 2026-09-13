@@ -327,6 +327,7 @@
   .awy-lab{display:inline-block;background:rgba(13,26,41,.8);border:1px solid rgba(224,176,96,.6);border-radius:3px;
     color:#e0b060;font-family:var(--mono);font-size:9px;padding:0 3px;line-height:14px;white-space:nowrap}
   .awy-lab.rnav{color:#6fc3ff;border-color:rgba(111,195,255,.6)}
+  .awy-lab.dct{color:#9fd39f;border-color:rgba(159,211,159,.6)}
   .awyTbl{border-collapse:collapse;font-family:var(--mono);font-size:10px;white-space:nowrap}
   .awyTbl th,.awyTbl td{padding:1px 4px;border-bottom:1px solid rgba(120,160,220,.2);text-align:right}
   .awyTbl th{color:#8a9bb3;font-weight:400}
@@ -777,7 +778,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-141';
+const VER_TAG='v6-142';
 const BUILD='2026-09-13';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2007,14 +2008,18 @@ document.getElementById('btnFix').onclick=async function(){
   if(fixOn){await loadFix();fixLayer.addTo(map)}else map.removeLayer(fixLayer);
   drawFix();
 };
-map.on('moveend zoomend',()=>{if(fixOn)drawFix()});
+// ⚠ ポップアップの autoPan で moveend が来て描き直すと、そのマーカーごと消えて開いた瞬間に閉じる。
+//   このレイヤーのポップアップが開いている間は描き直さない(閉じた次の移動で追いつく)
+function popupOn(layer){const p=map._popup;return !!(p&&p.isOpen()&&p._source&&layer.hasLayer(p._source))}
+map.on('moveend zoomend',()=>{if(fixOn&&!popupOn(fixLayer))drawFix()});
 
-/* ── 航空路レイヤー(AIP ENR 3.1 下層ATSルート71本 + ENR 3.3 RNAV経路296本・tools/gen_awy.py → awy.json) ──
-   線はCanvas(ovRenderer)で画面内(3割の余白つき)の区間だけ。下層ATS=アンバー実線、RNAV=シアン破線。
+/* ── 航空路レイヤー(AIP ENR 3.1 下層ATSルート71本 + ENR 3.3 RNAV経路296本 + ENR 3.5.1 直行経路226本・tools/gen_awy.py → awy.json) ──
+   線はCanvas(ovRenderer)で画面内(3割の余白つき)の区間だけ。下層ATS=アンバー実線、RNAV=シアン破線、直行経路=緑の点線。
    ラベルはズーム7以上で経路ごとに1つ(画面中央に一番近い区間の中点)。区間タップで方位/距離/MEA/MOCAの表 */
 let AWY=null,awyOn=false;
 const awyLayer=L.layerGroup();
-const AWY_COL={LOW:'#e0b060',RNAV:'#6fc3ff'};
+const AWY_COL={LOW:'#e0b060',RNAV:'#6fc3ff',DCT:'#9fd39f'};
+const AWY_KNAME={LOW:'下層ATSルート',RNAV:'RNAV経路',DCT:'直行経路(ENR 3.5.1)'};
 async function loadAwy(){
   if(AWY)return AWY;
   try{const r=await fetch('awy.json?v='+VER_TAG);AWY=await r.json()}catch(e){AWY={f:[]}}
@@ -2027,7 +2032,7 @@ function awyPop(r,seg){
     `<td>${s.mag!=null?fmt3(s.mag):'—'}</td><td>${v(s.dist)}</td><td>${v(s.mea)}</td><td>${v(s.moca)}</td>`+
     `<td>${s.odd||''}${s.even?' '+s.even:''}</td></tr>`).join('');
   const el=document.createElement('div');el.className='apPop';
-  el.innerHTML=`<h5 style="color:${AWY_COL[r.k]}">${r.n} <span style="font-size:10px;font-weight:400">${r.k==='RNAV'?'RNAV経路 '+(r.spec||''):'下層ATSルート'}</span></h5>
+  el.innerHTML=`<h5 style="color:${AWY_COL[r.k]}">${r.n} <span style="font-size:10px;font-weight:400">${AWY_KNAME[r.k]}${r.spec?' '+r.spec:''}</span></h5>
     ${r.sens?'<div style="font-size:10px;color:#8a9bb3">センサ: '+r.sens.join(', ')+'</div>':''}
     <div style="max-height:180px;overflow:auto;margin-top:4px"><table class="awyTbl">
       <tr><th>FM</th><th>TO</th><th>MAG</th><th>NM</th><th>MEA</th><th>MOCA</th><th>奇 偶</th></tr>${rows}</table></div>
@@ -2044,13 +2049,14 @@ function drawAwy(){
     r.segs.forEach(sg=>{
       const a=r.pts[r._ix[sg.a]],b=r.pts[r._ix[sg.b]];if(!a||!b)return;
       if(Math.max(a.lat,b.lat)<S||Math.min(a.lat,b.lat)>N||Math.max(a.lng,b.lng)<W||Math.min(a.lng,b.lng)>E)return;
-      L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{renderer:ovRenderer,color:AWY_COL[r.k],weight:r.k==='RNAV'?1.5:2,
-        opacity:.85,dashArray:r.k==='RNAV'?'6 4':null}).bindPopup(()=>awyPop(r,sg)).addTo(awyLayer);
+      L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{renderer:ovRenderer,color:AWY_COL[r.k],weight:r.k==='LOW'?2:1.5,
+        opacity:r.k==='DCT'?.7:.85,dashArray:r.k==='RNAV'?'6 4':r.k==='DCT'?'2 5':null}).bindPopup(()=>awyPop(r,sg)).addTo(awyLayer);
       const ml=(a.lat+b.lat)/2,mg=(a.lng+b.lng)/2,d=Math.hypot(ml-cy,mg-cx);
       if(d<bd){bd=d;best=[ml,mg]}
     });
-    if(best&&z>=7)L.marker(best,{interactive:false,icon:L.divIcon({className:'',
-      html:`<div class="awy-lab${r.k==='RNAV'?' rnav':''}">${r.n}</div>`,iconAnchor:[14,7]})}).addTo(awyLayer);
+    // ⚠ 直行経路は226本あって端点の組が名前なので、ラベルはズーム9から(7だと経路名だらけになる)
+    if(best&&z>=(r.k==='DCT'?9:7))L.marker(best,{interactive:false,icon:L.divIcon({className:'',
+      html:`<div class="awy-lab ${r.k.toLowerCase()}">${r.n}</div>`,iconAnchor:[14,7]})}).addTo(awyLayer);
   });
 }
 document.getElementById('btnAwy').onclick=async function(){
@@ -2058,7 +2064,7 @@ document.getElementById('btnAwy').onclick=async function(){
   if(awyOn){await loadAwy();awyLayer.addTo(map)}else map.removeLayer(awyLayer);
   drawAwy();restackOverlays();
 };
-map.on('moveend zoomend',()=>{if(awyOn){drawAwy();restackOverlays()}});
+map.on('moveend zoomend',()=>{if(awyOn&&!popupOn(awyLayer)){drawAwy();restackOverlays()}});
 
 /* ── 臨時空域(SUP)レイヤー: 射撃訓練・臨時訓練空域・無人機運用など ── */
 let SUP=null,supOn=false;
