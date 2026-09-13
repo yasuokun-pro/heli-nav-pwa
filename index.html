@@ -258,6 +258,12 @@
   table.fltlog td.cNum.rem{text-align:right}
   table.fltlog td.cNav{text-align:left;font-size:11px}
   tr.total td{color:var(--amb);font-weight:600}
+  /* FIX列は横スクロールしても左に固定する。⚠ 実機で表が横に数十px流れて、名前の先頭2文字が隠れる
+     (番号の行は≡の分だけ余白があるので気づきにくく「2行目だけずれて見える」)。固定するには背景を不透明に */
+  table.fltlog td:first-child,table.fltlog th.cFix{position:sticky;left:0;z-index:2;background:var(--panel)}
+  table.fltlog thead th.cFix{z-index:4;background:var(--panel2)}
+  tr.nextwp td:first-child{background:linear-gradient(rgba(61,213,243,.12),rgba(61,213,243,.12)) var(--panel)}
+  tr.dctOnRow td:first-child{background:linear-gradient(rgba(61,213,243,.08),rgba(61,213,243,.08)) var(--panel)}
   /* 印刷: A4横に同じログを2面付け(切るとA5×2枚) */
   #printArea{display:none}
   @media print{
@@ -394,7 +400,7 @@
   .ifrAp span.nm{color:var(--dim);font-size:11px;min-width:60px}
   /* 飛行場の入力: 直接入力しながら候補一覧も出す(datalist は iOS で出たり出なかったりで使えなかった) */
   .apWrap{position:relative;display:inline-block}
-  .apDrop{position:absolute;top:100%;left:0;z-index:5;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+  .apDrop{position:absolute;top:100%;left:0;z-index:5;touch-action:pan-y;overscroll-behavior:contain;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
     max-height:230px;overflow:auto;min-width:230px;display:none;box-shadow:0 6px 18px rgba(0,0,0,.5);margin-top:2px}
   .apDrop div{padding:8px 10px;font-size:13px;cursor:pointer;white-space:nowrap;border-bottom:1px solid rgba(30,53,80,.5)}
   .apDrop div b{font-family:var(--mono);color:var(--cyn);margin-right:8px}
@@ -857,7 +863,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-144';
+const VER_TAG='v6-145';
 const BUILD='2026-09-13';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4828,11 +4834,17 @@ function apPicker(id){
     items=list(inp.value);hi=-1;
     drop.innerHTML=items.map(a=>`<div><b>${a.icao}</b>${a.n||''}<small>${inp.value.trim()?'':Math.round(distNM(c(),a))+'NM'}</small></div>`).join('')||'<div style="color:var(--dim)">該当なし</div>';
     drop.style.display='block';
-    [...drop.children].forEach((el,i)=>{el.onpointerdown=e=>{e.preventDefault();if(items[i])pick(items[i])}});
+    // ⚠ pointerdown で確定すると一覧をスクロールしようと触っただけで選ばれる(実機で発生)。
+    //   押した位置を覚えて、指が8px以上動いていなければ pointerup で確定する
+    [...drop.children].forEach((el,i)=>{
+      el.onpointerdown=e=>{e.preventDefault();el._p=[e.clientX,e.clientY]};   // preventDefault: 入力欄のフォーカスを奪わない
+      el.onpointerup=e=>{if(el._p&&Math.hypot(e.clientX-el._p[0],e.clientY-el._p[1])<8&&items[i])pick(items[i]);el._p=null};
+    });
   }
   function pick(a){inp.value=a.icao;drop.style.display='none';ifrApName(id,id+'N');inp.blur()}
   inp.onfocus=render;inp.oninput=()=>{ifrApName(id,id+'N');render()};
-  inp.onblur=()=>setTimeout(()=>{drop.style.display='none'},200);
+  // 閉じるのは「一覧の外をタップ」か確定・Escape。blur で閉じると一覧のスクロール中に消える
+  document.addEventListener('pointerdown',e=>{if(!inp.parentElement.contains(e.target))drop.style.display='none'});
   inp.onkeydown=e=>{
     if(drop.style.display!=='block')return;
     if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();hi=Math.max(0,Math.min(items.length-1,hi+(e.key==='ArrowDown'?1:-1)));
