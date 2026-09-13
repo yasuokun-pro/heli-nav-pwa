@@ -392,6 +392,14 @@
   #ifrModal input.n5{width:70px}
   .ifrAp{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:13px}
   .ifrAp span.nm{color:var(--dim);font-size:11px;min-width:60px}
+  /* 飛行場の入力: 直接入力しながら候補一覧も出す(datalist は iOS で出たり出なかったりで使えなかった) */
+  .apWrap{position:relative;display:inline-block}
+  .apDrop{position:absolute;top:100%;left:0;z-index:5;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    max-height:230px;overflow:auto;min-width:230px;display:none;box-shadow:0 6px 18px rgba(0,0,0,.5);margin-top:2px}
+  .apDrop div{padding:8px 10px;font-size:13px;cursor:pointer;white-space:nowrap;border-bottom:1px solid rgba(30,53,80,.5)}
+  .apDrop div b{font-family:var(--mono);color:var(--cyn);margin-right:8px}
+  .apDrop div small{color:var(--dim);margin-left:6px}
+  .apDrop div.hi{background:var(--line)}
   table.ifrMin{width:auto;font-size:12px}
   table.ifrMin td{padding:3px 6px;white-space:nowrap}
   table.ifrLog{font-family:var(--mono);font-size:12px}
@@ -813,12 +821,11 @@
 
   <h4>2. 飛行場</h4>
   <div class="ifrAp">
-    <label>出発 <input type="text" id="ifrDep" class="ap" list="ifrApList" placeholder="RJTT" autocapitalize="characters"><span class="nm" id="ifrDepN"></span></label>
-    <label>目的 <input type="text" id="ifrDst" class="ap" list="ifrApList" placeholder="RJNA" autocapitalize="characters"><span class="nm" id="ifrDstN"></span></label>
-    <label>代替 <input type="text" id="ifrAlt" class="ap" list="ifrApList" placeholder="RJGG" autocapitalize="characters"><span class="nm" id="ifrAltN"></span></label>
+    <label>出発 <span class="apWrap"><input type="text" id="ifrDep" class="ap" placeholder="RJTT" autocomplete="off" autocapitalize="characters"><div class="apDrop"></div></span><span class="nm" id="ifrDepN"></span></label>
+    <label>目的 <span class="apWrap"><input type="text" id="ifrDst" class="ap" placeholder="RJNA" autocomplete="off" autocapitalize="characters"><div class="apDrop"></div></span><span class="nm" id="ifrDstN"></span></label>
+    <label>代替 <span class="apWrap"><input type="text" id="ifrAlt" class="ap" placeholder="RJGG" autocomplete="off" autocapitalize="characters"><div class="apDrop"></div></span><span class="nm" id="ifrAltN"></span></label>
     <label>経由(任意) <input type="text" id="ifrVia" style="width:200px" placeholder="FIX名 空白区切り" autocapitalize="characters"></label>
   </div>
-  <datalist id="ifrApList"></datalist>
 
   <h4>3. 最低気象条件の目安(編集可)</h4>
   <table class="ifrMin"><tbody id="ifrMinBody"></tbody></table>
@@ -850,7 +857,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-143';
+const VER_TAG='v6-144';
 const BUILD='2026-09-13';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4785,8 +4792,6 @@ function ifrApName(id,nid){const a=apOf(document.getElementById(id).value.trim()
 async function openIfr(){
   const m=document.getElementById('ifrModal');m.style.display='flex';
   await loadAd();
-  const dl=document.getElementById('ifrApList');
-  if(!dl.children.length)ASP.filter(a=>a.icao).sort((x,y)=>x.icao<y.icao?-1:1).forEach(a=>{const o=document.createElement('option');o.value=a.icao;o.label=a.n;dl.appendChild(o)});
   const mb=document.getElementById('ifrMinBody');
   if(!mb.children.length){
     const sv=store.get('hnav.ifrMin')||{};
@@ -4804,7 +4809,39 @@ async function openIfr(){
 }
 document.getElementById('btnIfr').onclick=openIfr;
 document.getElementById('ifrClose').onclick=()=>{ifrSaveInputs();document.getElementById('ifrModal').style.display='none'};
-['ifrDep','ifrDst','ifrAlt'].forEach(id=>document.getElementById(id).oninput=()=>ifrApName(id,id+'N'));
+/* 飛行場ピッカー: フォーカスで候補一覧(空なら全部)、入力でICAO前方一致・和名/英名の部分一致に絞る。タップで確定。
+   ⚠ blur で閉じると項目のタップが先に blur を起こして選べない → 項目は pointerdown で確定し、閉じるのは少し遅らせる */
+function apPicker(id){
+  const inp=document.getElementById(id),drop=inp.parentElement.querySelector('.apDrop');
+  let hi=-1,items=[];
+  const c=()=>ownPos||map.getCenter();
+  function list(q){
+    q=q.trim().toUpperCase();
+    const all=ASP.filter(a=>a.icao);
+    let r=q?all.filter(a=>a.icao.startsWith(q)||(a.n||'').toUpperCase().includes(q)||(a.en||'').toUpperCase().includes(q))
+          :all.slice();
+    if(q)r.sort((x,y)=>(y.icao.startsWith(q)-x.icao.startsWith(q))||(x.icao<y.icao?-1:1));
+    else{const o=c();r.sort((x,y)=>distNM(o,x)-distNM(o,y))}      // 空のときは近い順
+    return r.slice(0,40);
+  }
+  function render(){
+    items=list(inp.value);hi=-1;
+    drop.innerHTML=items.map(a=>`<div><b>${a.icao}</b>${a.n||''}<small>${inp.value.trim()?'':Math.round(distNM(c(),a))+'NM'}</small></div>`).join('')||'<div style="color:var(--dim)">該当なし</div>';
+    drop.style.display='block';
+    [...drop.children].forEach((el,i)=>{el.onpointerdown=e=>{e.preventDefault();if(items[i])pick(items[i])}});
+  }
+  function pick(a){inp.value=a.icao;drop.style.display='none';ifrApName(id,id+'N');inp.blur()}
+  inp.onfocus=render;inp.oninput=()=>{ifrApName(id,id+'N');render()};
+  inp.onblur=()=>setTimeout(()=>{drop.style.display='none'},200);
+  inp.onkeydown=e=>{
+    if(drop.style.display!=='block')return;
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();hi=Math.max(0,Math.min(items.length-1,hi+(e.key==='ArrowDown'?1:-1)));
+      [...drop.children].forEach((el,i)=>el.classList.toggle('hi',i===hi));drop.children[hi]&&drop.children[hi].scrollIntoView({block:'nearest'})}
+    else if(e.key==='Enter'){e.preventDefault();const a=hi>=0?items[hi]:items[0];if(a)pick(a)}
+    else if(e.key==='Escape'){drop.style.display='none'}
+  };
+}
+['ifrDep','ifrDst','ifrAlt'].forEach(apPicker);
 
 /* 装備でその経路が使えるか。使えなければ理由(文字列)を返す */
 function awyBlock(r,ac){

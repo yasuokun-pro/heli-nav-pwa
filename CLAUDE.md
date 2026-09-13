@@ -903,6 +903,9 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     閉じる。`popupOn(layer)` で「このレイヤーのポップアップが開いている間は描き直さない」
 - **IFR計画の画面(`#ifrModal`・v6-143)**: タブ列の `IFR` ボタンで開く**別画面**。
   設計と未了は `IFR.md`。保存キー `hnav.acft`(装備) `hnav.ifr`(飛行場・経由) `hnav.ifrMin`(気象の目安)
+  - ⚠ 飛行場の入力は **`<datalist>` を使わない**(iOSで候補が出たり出なかったりする)。`apPicker()` の自前
+    ドロップダウン: フォーカスで近い順の一覧、入力でICAO前方一致+和名/英名の部分一致。項目は **pointerdown で確定**
+    (click だと先に blur が走って閉じる)
   - ⚠ `IFR` ボタンは `.tabs` の中にあるがタブではない。タブ切替の処理は
     `.tabs button[data-tab]` で拾うこと(素の `.tabs button` だと `tab-ifr` が無くて落ちる)
   - 経路探索は `awy.json` の区間を両方向の辺にした Dijkstra。**装備で使えない辺は `blk`**
