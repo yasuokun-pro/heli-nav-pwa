@@ -12,7 +12,16 @@
 | Stage 1-3 方式索引 | ✅ | `tools/gen_proc.py` → `proc.json`(**113空港 SID 418/STAR 193/IAC 665**・77KB。索引の grep 数と完全一致) |
 | Stage 1-4 IACミニマ | ✅ 結論: **取れない**(図の本文レイヤが文字化け)。Stage 2 では代替最低気象条件の標準値で代用 | — |
 | Stage 1-5 地図レイヤー | ✅ | 地物グループに **FIX** と **航空路** ボタン(`btnFix`/`btnAwy`。index.html の「FIXレイヤー」「航空路レイヤー」のブロック) |
-| Stage 2 | 未着手 | **別画面**(ユーザー指示: "別画面で良いのでStage1から進めて") |
+| Stage 2 | ✅ 第1版(v6-143) | **別画面**(タブ列の `IFR` ボタン → `#ifrModal`)。機体プロファイル(`hnav.acft`)・出発/目的/代替・経由FIX・経路探索(Dijkstra)・巡航高度・方式候補・METAR突合・燃料・「地図に反映」まで動く。残りは下の「Stage 2 の未了」 |
+
+### Stage 2 の未了(次にやること)
+- [ ] **風**: 計画画面は無風。「地図に反映」後は飛行ログ側が風三角で計算するのでそちらで見る
+- [ ] **TAF** との突合(今は METAR のみ。TAF は metar.json に無い → Actions で取るか要判断)
+- [ ] SID/STAR の**終点/始点のFIX**に経路を繋ぐ(今は最寄りFIXへ仮の直行線。方式名しか無いので図が要る=Stage 3)
+- [ ] 方式ごとの**実ミニマ**(図からは取れない。手で表を持つなら空港ごと)
+- [ ] 代替飛行場の最低気象条件の**法規の値**(今は編集可能な既定値 600/3200・800/3200)
+- [ ] 経路の**手直しUI**(今は経由FIXの指定と、地図に落としてからの既存の編集)
+- [ ] 与圧なしで上限内の経路が無いときの案内(今は上限を外して赤で警告)
 
 パーサの落とし穴は各 `tools/gen_*.py` の docstring と CLAUDE.md §8「IFRデータ」に書いた。
 **AIRAC更新時は3本とも走らせ直す**だけでよい(手修正の箇所は無い)。
@@ -149,8 +158,9 @@ hnav.acft { gnss:true, ils:true, vor:true, dme:true, ndb:false, press:false,
 
 ## 8. 再開のしかた
 
-1. **Stage 2 から**(Stage 1 は完了)。`IFR.md` の「4. 進め方」Stage 2-1 機体プロファイルを
-   別画面で作る。既存の設定画面・ログ画面の作法(index.html の `#settings` 周辺)に合わせる
+1. **「0. 現在地」の Stage 2 の未了から**。コードは index.html の
+   `/* ───────── IFR計画(別画面・IFR.md Stage 2) ─────────` のブロック(`openIfr` / `ifrGraph` /
+   `dijkstra` / `cruiseAlt` / `procOk` / `wxJudge` / `renderIfrOut`)。落とし穴は CLAUDE.md §8「IFRデータ」の末尾
 2. データは `fix.json` / `awy.json` / `proc.json`(いずれも `fetch('xxx.json?v='+VER_TAG)`)。
    地図側の読込関数 `loadFix()` / `loadAwy()` をそのまま使える
 3. 生成器を直すときの材料: `enr.txt` は scratchpad に無ければ
