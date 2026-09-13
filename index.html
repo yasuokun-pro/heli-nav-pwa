@@ -322,6 +322,15 @@
   .nk-pin span{font-size:10px;color:#ffd24d;text-shadow:0 0 3px #000,0 1px 3px #000;font-family:var(--sans)}
   .obst-ico{font-family:var(--mono);font-size:9px;font-weight:700;color:#ffd24d;text-shadow:0 1px 3px #000;white-space:nowrap}
   .obst-ico i{font-style:normal;font-size:12px}
+  .fix-ico{font-family:var(--mono);font-size:9px;color:#c9a7ff;text-shadow:0 1px 3px #000;white-space:nowrap;line-height:1}
+  .fix-ico i{font-style:normal;font-size:10px;margin-right:1px}
+  .awy-lab{display:inline-block;background:rgba(13,26,41,.8);border:1px solid rgba(224,176,96,.6);border-radius:3px;
+    color:#e0b060;font-family:var(--mono);font-size:9px;padding:0 3px;line-height:14px;white-space:nowrap}
+  .awy-lab.rnav{color:#6fc3ff;border-color:rgba(111,195,255,.6)}
+  .awyTbl{border-collapse:collapse;font-family:var(--mono);font-size:10px;white-space:nowrap}
+  .awyTbl th,.awyTbl td{padding:1px 4px;border-bottom:1px solid rgba(120,160,220,.2);text-align:right}
+  .awyTbl th{color:#8a9bb3;font-weight:400}
+  .awyTbl td:first-child,.awyTbl td:nth-child(2){text-align:left}
   .cat{display:inline-block;font-family:var(--mono);font-weight:700;font-size:11px;padding:1px 6px;border-radius:3px;color:#04120a}
   .cat.VFR{background:var(--grn)}.cat.MVFR{background:#4da3ff}.cat.IFR{background:var(--red);color:#fff}.cat.LIFR{background:#c060e0;color:#fff}.cat.NA{background:var(--line);color:var(--dim)}
   a.imoc{display:inline-block;color:var(--cyn);border:1px solid var(--cyn);border-radius:4px;
@@ -567,6 +576,8 @@
       <div class="mtSub">
         <button id="btnAp">飛行場</button>
         <button id="btnNav">NAV</button>
+        <button id="btnFix" title="重要地点(AIP ENR 4.3)。▲義務位置通報点 △任意">FIX</button>
+        <button id="btnAwy" title="航空路(AIP ENR 3.1 下層ATSルート / ENR 3.3 RNAV経路)">航空路</button>
         <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AD 1.4)と滑空場(ENR 5.5.1)">ヘリ場</button>
         <button id="btnObst">障害物</button>
         <button id="btnJsdf">自衛隊</button>
@@ -766,8 +777,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-140';
-const BUILD='2026-09-10';
+const VER_TAG='v6-141';
+const BUILD='2026-09-13';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1949,6 +1960,105 @@ document.getElementById('btnObst').onclick=async function(){
   drawObst();
 };
 map.on('moveend zoomend',()=>{if(obstOn){drawObst();restackOverlays()}});
+
+/* ── FIXレイヤー(AIP ENR 4.3・全国2,926点・tools/gen_fix.py → fix.json) ──
+   障害物と同じく画面内だけ描く。ズーム8〜9は義務位置通報点(▲)とnavaid名だけ、10以上で全部(上限300)。
+   ⚠ IFRモード(IFR.md)の土台。経路探索はここの点と awy.json の区間をグラフにして行う */
+let FIX=null,fixOn=false;
+const fixLayer=L.layerGroup();
+async function loadFix(){
+  if(FIX)return FIX;
+  try{const r=await fetch('fix.json?v='+VER_TAG);FIX=await r.json()}catch(e){FIX={f:[]}}
+  return FIX;
+}
+function fixPop(p,mk){
+  const el=document.createElement('div');el.className='apPop';
+  el.innerHTML=`<h5 style="color:#c9a7ff">${p.c===1?'▲':'△'} ${p.n}${p.ja?' <span style="font-size:10px;color:#8a9bb3">'+p.ja+'</span>':''}</h5>
+    <dl><dt>種別</dt><dd>${p.c===1?'義務位置通報点':p.c===0?'任意位置通報点':'—'}${p.id?' / '+p.id:''}</dd>
+      ${p.rt?'<dt>経路</dt><dd style="white-space:normal">'+p.rt.join(' ')+'</dd>':''}
+      ${p.brg?'<dt>方位距離</dt><dd style="white-space:normal">'+p.brg+'</dd>':''}
+      <dt>位置</dt><dd>${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}</dd></dl>
+    <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>
+    <div style="font-size:10px;color:#8a9bb3">AIP ENR 4.3 ${FIX.eff||''}現在・要最新チャート確認</div>`;
+  el.querySelector('.apDct').onclick=()=>{setDct({name:p.n,lat:p.lat,lng:p.lng,isWp:false});mk.closePopup()};
+  el.querySelector('.add').onclick=()=>{pushUndo();addWp(p.lat,p.lng,p.n);redraw();mk.closePopup()};
+  return el;
+}
+function drawFix(){
+  fixLayer.clearLayers();
+  if(!fixOn||!FIX)return;
+  const z=map.getZoom();
+  if(z<8){
+    fixLayer.addLayer(L.marker(map.getCenter(),{interactive:false,icon:L.divIcon({className:'',
+      html:'<div class="fix-ico" style="background:rgba(13,26,41,.9);padding:3px 7px;border-radius:4px">FIX: ズーム8以上で表示(8〜9は▲と navaid のみ)</div>',iconAnchor:[110,8]})}));
+    return;
+  }
+  const [s,n,w,e]=viewBox();
+  let inview=FIX.f.filter(p=>p.lat>=s&&p.lat<=n&&p.lng>=w&&p.lng<=e);
+  if(z<10)inview=inview.filter(p=>p.c===1||p.id);
+  inview.slice(0,300).forEach(p=>{
+    const mk=L.marker([p.lat,p.lng],{bubblingMouseEvents:false,
+      icon:L.divIcon({className:'',html:`<div class="fix-ico"><i>${p.c===1?'▲':'△'}</i>${p.n}</div>`,iconAnchor:[5,5]})});
+    mk.bindPopup(()=>fixPop(p,mk));mk.addTo(fixLayer);
+  });
+}
+document.getElementById('btnFix').onclick=async function(){
+  fixOn=!fixOn;this.classList.toggle('on',fixOn);
+  if(fixOn){await loadFix();fixLayer.addTo(map)}else map.removeLayer(fixLayer);
+  drawFix();
+};
+map.on('moveend zoomend',()=>{if(fixOn)drawFix()});
+
+/* ── 航空路レイヤー(AIP ENR 3.1 下層ATSルート71本 + ENR 3.3 RNAV経路296本・tools/gen_awy.py → awy.json) ──
+   線はCanvas(ovRenderer)で画面内(3割の余白つき)の区間だけ。下層ATS=アンバー実線、RNAV=シアン破線。
+   ラベルはズーム7以上で経路ごとに1つ(画面中央に一番近い区間の中点)。区間タップで方位/距離/MEA/MOCAの表 */
+let AWY=null,awyOn=false;
+const awyLayer=L.layerGroup();
+const AWY_COL={LOW:'#e0b060',RNAV:'#6fc3ff'};
+async function loadAwy(){
+  if(AWY)return AWY;
+  try{const r=await fetch('awy.json?v='+VER_TAG);AWY=await r.json()}catch(e){AWY={f:[]}}
+  AWY.f.forEach(r=>{r._ix={};r.pts.forEach((p,i)=>{if(!(p.n in r._ix))r._ix[p.n]=i})});
+  return AWY;
+}
+function awyPop(r,seg){
+  const v=x=>x==null?'—':x;
+  const rows=r.segs.map(s=>`<tr${s===seg?' style="color:var(--amb)"':''}><td>${s.a}</td><td>${s.b}</td>`+
+    `<td>${s.mag!=null?fmt3(s.mag):'—'}</td><td>${v(s.dist)}</td><td>${v(s.mea)}</td><td>${v(s.moca)}</td>`+
+    `<td>${s.odd||''}${s.even?' '+s.even:''}</td></tr>`).join('');
+  const el=document.createElement('div');el.className='apPop';
+  el.innerHTML=`<h5 style="color:${AWY_COL[r.k]}">${r.n} <span style="font-size:10px;font-weight:400">${r.k==='RNAV'?'RNAV経路 '+(r.spec||''):'下層ATSルート'}</span></h5>
+    ${r.sens?'<div style="font-size:10px;color:#8a9bb3">センサ: '+r.sens.join(', ')+'</div>':''}
+    <div style="max-height:180px;overflow:auto;margin-top:4px"><table class="awyTbl">
+      <tr><th>FM</th><th>TO</th><th>MAG</th><th>NM</th><th>MEA</th><th>MOCA</th><th>奇 偶</th></tr>${rows}</table></div>
+    <div style="font-size:10px;color:#8a9bb3;margin-top:4px">MEAは記載の無い区間に前の値を継いでいる。AIP ENR 3 ${AWY.eff||''}現在・要最新チャート確認</div>`;
+  return el;
+}
+function drawAwy(){
+  awyLayer.clearLayers();
+  if(!awyOn||!AWY)return;
+  const [s,n,w,e]=viewBox(),z=map.getZoom();
+  const pad=(n-s)*.3,S=s-pad,N=n+pad,W=w-pad,E=e+pad,cy=(s+n)/2,cx=(w+e)/2;
+  AWY.f.forEach(r=>{
+    let best=null,bd=1e9;
+    r.segs.forEach(sg=>{
+      const a=r.pts[r._ix[sg.a]],b=r.pts[r._ix[sg.b]];if(!a||!b)return;
+      if(Math.max(a.lat,b.lat)<S||Math.min(a.lat,b.lat)>N||Math.max(a.lng,b.lng)<W||Math.min(a.lng,b.lng)>E)return;
+      L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{renderer:ovRenderer,color:AWY_COL[r.k],weight:r.k==='RNAV'?1.5:2,
+        opacity:.85,dashArray:r.k==='RNAV'?'6 4':null}).bindPopup(()=>awyPop(r,sg)).addTo(awyLayer);
+      const ml=(a.lat+b.lat)/2,mg=(a.lng+b.lng)/2,d=Math.hypot(ml-cy,mg-cx);
+      if(d<bd){bd=d;best=[ml,mg]}
+    });
+    if(best&&z>=7)L.marker(best,{interactive:false,icon:L.divIcon({className:'',
+      html:`<div class="awy-lab${r.k==='RNAV'?' rnav':''}">${r.n}</div>`,iconAnchor:[14,7]})}).addTo(awyLayer);
+  });
+}
+document.getElementById('btnAwy').onclick=async function(){
+  awyOn=!awyOn;this.classList.toggle('on',awyOn);
+  if(awyOn){await loadAwy();awyLayer.addTo(map)}else map.removeLayer(awyLayer);
+  drawAwy();restackOverlays();
+};
+map.on('moveend zoomend',()=>{if(awyOn){drawAwy();restackOverlays()}});
 
 /* ── 臨時空域(SUP)レイヤー: 射撃訓練・臨時訓練空域・無人機運用など ── */
 let SUP=null,supOn=false;

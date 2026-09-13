@@ -1,7 +1,21 @@
-# IFRモード 設計メモ(2026-09-13 起草・未着手)
+# IFRモード 設計メモ(2026-09-13 起草)
 
 **この文書は、どのセッション・どのモデルからでも作業を再開できるように書いてある。**
-まず「4. 進め方」の Stage 1 から。判断済みの事項は「6. 決めたこと」にある。
+**Stage 1 は完了(2026-09-13, v6-141)**。次は「4. 進め方」の Stage 2 から。判断済みの事項は「6. 決めたこと」にある。
+
+## 0. 現在地(2026-09-13)
+
+| 段階 | 状態 | 成果物 |
+|---|---|---|
+| Stage 1-1 FIX | ✅ | `tools/gen_fix.py` → `fix.json`(**2,926点**・254KB) |
+| Stage 1-2 航空路 | ✅ | `tools/gen_awy.py` → `awy.json`(**367本**=ENR 3.1 71本+ENR 3.3 296本・312KB) |
+| Stage 1-3 方式索引 | ✅ | `tools/gen_proc.py` → `proc.json`(**113空港 SID 418/STAR 193/IAC 665**・77KB。索引の grep 数と完全一致) |
+| Stage 1-4 IACミニマ | ✅ 結論: **取れない**(図の本文レイヤが文字化け)。Stage 2 では代替最低気象条件の標準値で代用 | — |
+| Stage 1-5 地図レイヤー | ✅ | 地物グループに **FIX** と **航空路** ボタン(`btnFix`/`btnAwy`。index.html の「FIXレイヤー」「航空路レイヤー」のブロック) |
+| Stage 2 | 未着手 | **別画面**(ユーザー指示: "別画面で良いのでStage1から進めて") |
+
+パーサの落とし穴は各 `tools/gen_*.py` の docstring と CLAUDE.md §8「IFRデータ」に書いた。
+**AIRAC更新時は3本とも走らせ直す**だけでよい(手修正の箇所は無い)。
 
 ## 1. やりたいこと(要望の原文に沿って)
 
@@ -30,9 +44,13 @@
 | **AD 2.22** | 飛行方式(文章)。離陸最低気象条件など | 各空港 | △ 英文の散文。必要な数字だけ正規表現 |
 | **AD 2.24 各図**(SID/STAR/IAC本体) | 経路の**形**、DA/MDA、RVR、MAP | 1,276枚 | ✕ **図。福岡TCAと同じ図の読み取り仕事**。全国は現実的でない |
 
-⚠ IACのミニマ欄(DA/RVR)が本文レイヤから取れるかは**未確認**(Stage 1 で最初に確かめる。
-`pdftotext -layout` で IAC のページを1枚出して DA/MDA/RVR の数字が文字で出るか見る。
-索引ページ(RJTTならAD2-81)は図ではないので間違えないこと)。
+⚠ IACのミニマ欄(DA/RVR)は本文レイヤから**取れない**(確認済み 2026-09-13: RJTT AD2-259 の
+IACを `pdftotext -layout` に出すと数字が文字化け混じりで、表として読めない)。
+ミニマは Stage 2 で「進入の種類ごとの標準値」を持ち、実値はチャートで確認する運用にする。
+
+実測(パース後): FIX **2,926点**(ENR 4.3。上の「約1,900」は見積り違い。navaid名の義務通報点や
+東経160°超の福岡FIR東端の点も含む)/ 航空路 **71+296本**(ENR 3.3 は "(Cont'd)" と
+"Y10  Procedure for…" のような行末の注記を含めると 296 本になる。261 は注記なしの行数)。
 
 ## 3. 装備で決まること(ルールの骨子)
 
@@ -84,20 +102,31 @@
   「pdftocairo -svg → 線幅で仕分け → polygonize」の応用。線ではなく**経路(折れ線)**を追う
 - **全国はやらない**。ユーザーの使う空港から順に(まず出発・目的で選ばれた空港)
 
-## 5. データモデル(案)
+## 5. データモデル(Stage 1 で確定した実物)
 
 ```
-fix.json  { eff, f:[ {n:"ABASA", lat, lng, c:1(義務)|0, rt:["Y10",…] } ] }
-awy.json  { eff, f:[ {n:"Y10", spec:"RNAV5", sens:["GNSS","DME/DME"],
-                       seg:[ {a:"LUMIN", b:"WKE", mag:194, dist:20.6,
-                              mea:"FL200", moca:3000, up:"UNL", dir:"↓奇数↑偶数",
-                              dme:"RSE<2.0nm…", unit:"Fukuoka ACC 133.3"} ] } ] }
-proc.json { eff, f:[ {icao:"RJTT", k:"SID"|"STAR"|"IAC", n:"VAMOS FOUR DEPARTURE",
-                       rnav:true, typ:"ILS"|"LOC"|"LDA"|"VOR"|"NDB"|"RNP"|"GLS"|null,
-                       rwy:"34L"|null, page:81 } ] }
+fix.json  { eff:"20260709", src, f:[ {n:"ABASA", lat, lng,
+              c:1(▲義務)|0(△任意)  … 無ければ記号なし,
+              id:"WKE"             … navaid名の点だけ(略号欄のID),
+              rt:["N884","Y531"]   … ATSルート列(無い点もある),
+              brg:"101°/14.0NM YNE, 277°/53.9NM IGE", ja:"アバサ" } ] }
+awy.json  { eff, src, f:[ {n:"Y10", k:"LOW"(ENR 3.1)|"RNAV"(ENR 3.3),
+              spec:"RNAV5", sens:["VOR/DME","DME/DME","INS/IRS","GNSS"]   … RNAVだけ,
+              pts:[ {n:"LUMIN", lat, lng, id?:"WKE"} … ],
+              segs:[ {a:"LUMIN", b:"WAKKANAI", mag:194, true:183.8, dist:20.6,
+                      up:"UNL", mea:"FL200"|7000, moca:3000|"FL150",
+                      odd:"↑", even:"↓"      … その方向に飛ぶときの奇数/偶数高度(矢印は表の向き),
+                      rmk:"DME required…", inh:["mea","mag"] … 前の区間から継いだ属性(3.1のみ) } ] } ] }
+proc.json { eff, src, f:[ {icao:"RJTT", k:"SID"|"STAR"|"IAC", n:"VAMOS-RNAV",
+              rnav:1, typ:"ILS"|"LOC"|"LDA"|"VOR"|"VOR/DME"|"TACAN"|"NDB"|"RNP"|"RNAV"|"RNAV(GPS)"|"GLS"|"HI-ILS"|…,
+              rwy:"34L", cat:"II/III", heli:1,
+              nn:1  … 索引に名前が無い(自衛隊系。n は "#1" のような枚数。図参照) } ] }
 hnav.acft { gnss:true, ils:true, vor:true, dme:true, ndb:false, press:false,
-            maxAlt:10000, fuelKg, burnKgH, vhf:true, uhf:false }
+            maxAlt:10000, fuelKg, burnKgH, vhf:true, uhf:false }   … Stage 2 で
 ```
+
+グラフ化の勘所(Stage 2-3): `awy.json` の `pts` の名前は `fix.json` の `n` と一致する
+(navaid名の点は `id` でも引ける)。同名で座標が僅かに違う点は同一点とみなしてよい。
 
 ## 6. 決めたこと
 
@@ -109,15 +138,21 @@ hnav.acft { gnss:true, ils:true, vor:true, dme:true, ndb:false, press:false,
 
 ## 7. 未確認・要判断
 
-- [ ] IAC のミニマ(DA/MDA/RVR)が本文レイヤから取れるか(Stage 1-4)
-- [ ] ENR 3.1/3.3 の表で、1ページをまたぐルートの続き("(Cont'd)")の扱い
+- [x] IAC のミニマ(DA/MDA/RVR)→ **取れない**(2026-09-13)。Stage 2 は種類別の標準値で
+- [x] "(Cont'd)" → 同じ経路名に合流させる(`routes.setdefault`)。点の重複は名前で除く
 - [ ] 代替飛行場の最低気象条件のルール(国の標準値をどう持つか)
-- [ ] IFRモードのUI: 既存のログ画面に組み込むか、別画面か
+- [x] IFRモードのUI → **別画面**(ユーザー指示 2026-09-13)
+- [ ] ENR 3.1 の先頭区間に MEA が無いものがある(V13 CHITOSE-SIRAO など 478区間中77)。
+      表で MEA が最初の区間より後にしか書かれていないのか、取りこぼしかは未確認
+- [ ] `proc.json` の `nn`(名前の無い方式・20件)は装備フィルタに掛けられない。図参照と出す
 
 ## 8. 再開のしかた
 
-1. `IFR.md`(この文書)の Stage 1-1 から。まず `tools/gen_fix.py` を書く
-2. 材料: `enr.txt` は scratchpad に無ければ
+1. **Stage 2 から**(Stage 1 は完了)。`IFR.md` の「4. 進め方」Stage 2-1 機体プロファイルを
+   別画面で作る。既存の設定画面・ログ画面の作法(index.html の `#settings` 周辺)に合わせる
+2. データは `fix.json` / `awy.json` / `proc.json`(いずれも `fetch('xxx.json?v='+VER_TAG)`)。
+   地図側の読込関数 `loadFix()` / `loadAwy()` をそのまま使える
+3. 生成器を直すときの材料: `enr.txt` は scratchpad に無ければ
    `pdftotext -layout "~/Downloads/AIP File Download Service/1_AIP (PDF)/20260709/ENR_20260709.pdf" enr.txt`
-3. 行番号の当たりは「2. データの棚卸し」の表
+   行番号の当たりは「2. データの棚卸し」の表
 4. できたら BACKLOG.md の IFR の項を更新し、この文書の「7. 未確認」を潰していく
