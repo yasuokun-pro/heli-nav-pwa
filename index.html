@@ -411,13 +411,19 @@
   .apDrop div small{color:var(--dim);margin-left:6px}
   .apDrop div.hi{background:var(--line)}
   table.ifrMin{width:auto;font-size:12px}
+  table.altMin{border-collapse:collapse;font-size:11px;margin:4px 0;width:100%}
+  table.altMin th,table.altMin td{border:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top}
+  table.altMin th{color:var(--dim);font-weight:500}
+  table.altMin tr.hit td{color:var(--grn);background:rgba(56,224,123,.08)}
   table.ifrMin td{padding:3px 6px;white-space:nowrap}
   table.ifrLog{font-family:var(--mono);font-size:12px}
   table.ifrLog td{padding:4px 5px;border-bottom:1px solid var(--line);white-space:nowrap}
   table.ifrLog td.r{text-align:right}
   table.ifrLog td.brg{font-size:10px;color:var(--dim);line-height:1.25;white-space:nowrap}
   table.ifrLog tr.rca td{color:var(--amb);font-style:italic}
-  pre.tomin{font-family:var(--mono);font-size:9.5px;line-height:1.3;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;overflow:auto;max-height:260px;margin:4px 0;white-space:pre}
+  /* AIPの表を原文のまま出すブロック。等幅なので ch 単位で縦罫を引ける(ruledPre) */
+  pre.tomin{--ln:rgba(130,170,225,.22);font-family:var(--mono);font-size:9.5px;line-height:15px;background:var(--bg);
+    border:1px solid var(--line);border-radius:6px;padding:6px 8px;overflow:auto;max-height:280px;margin:4px 0;white-space:pre}
   table.ifrLog .wIn{white-space:nowrap;font-size:11px}
   table.ifrLog .wIn input[type=number]{width:52px;padding:2px 3px;font-size:11px}
   table.ifrLog .wIn input[type=checkbox]{width:14px;height:14px;vertical-align:middle;accent-color:var(--grn)}
@@ -877,7 +883,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-156';
+const VER_TAG='v6-157';
 const BUILD='2026-09-14';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -5082,12 +5088,49 @@ function wxJudge(icao,needVis,needCig){
 let IACMIN=null;
 async function loadIacMin(){if(IACMIN)return IACMIN;try{const r=await fetch('iacmin.json?v='+VER_TAG);IACMIN=await r.json()}catch(e){IACMIN={f:{}}}return IACMIN}
 /* 選んだ進入方式のミニマ表(IAC図の原文)。proc の並び順 n 番目 = 図の AD2.24-IAC-n */
+/* 原文の表に薄い罫線を敷く。⚠ 等幅フォント前提: 縦線は「全行が空白の列」の真ん中に 1ch 単位で置く。
+   横線は line-height(PRE_LH)ごと。背景のグラデーションなので選択・コピーの邪魔にならない */
+const PRE_LH=15;
+function ruledPre(txt,cls){
+  const lines=String(txt).replace(/\t/g,'    ').split('\n');
+  const w=Math.max(...lines.map(l=>l.length),1);
+  // ⚠ 表の下の注記(英文)は横いっぱいに伸びるので、縦線の判定からは外す(残すと区切りが1本も出ない)
+  const tbl=lines.filter(l=>!/[a-z]{5,}/.test(l));
+  const base=tbl.length>2?tbl:lines;
+  const blank=[];for(let c=0;c<w;c++)blank[c]=base.every(l=>(l[c]||' ')===' ');
+  const cols=[];let st=-1;
+  for(let c=0;c<=w;c++){
+    if(c<w&&blank[c]){if(st<0)st=c}
+    else{if(st>0&&c-st>=4&&c<w)cols.push((st+c)/2);st=-1}
+  }
+  const H=lines.length*PRE_LH;
+  const lay=cols.map(c=>`linear-gradient(var(--ln),var(--ln)) ${c.toFixed(1)}ch 0/1px ${H}px no-repeat`);
+  lay.push(`repeating-linear-gradient(transparent 0 ${PRE_LH-1}px,var(--ln) ${PRE_LH-1}px ${PRE_LH}px) 0 0/100% ${H}px no-repeat`);
+  lay.push('var(--bg)');
+  const esc=lines.map(l=>l.replace(/&/g,'&amp;').replace(/</g,'&lt;')).join('\n');
+  return `<pre class="tomin ${cls||''}" style="background:${lay.join(',')}">${esc}</pre>`;
+}
+/* 代替飛行場としての最低気象条件(AIP AD 1.1.6.10.1.6)。使える進入方式の種類で足す量が変わる */
+function altMinRule(sel){
+  // ⚠ 判定は figure の種別で。sel.cat は 'CAT I' のような**文字列**なので真偽で見ない(LOC が CAT II/III 扱いになった)
+  const k=!sel?null:sel.p.cat?'c23':sel.prec?'c1':'np';
+  const row=(id,a,b)=>`<tr${id===k?' class="hit"':''}><td>${a}</td><td>${b}</td></tr>`;
+  return `<div style="margin-top:6px"><b style="font-size:11px;color:var(--dim)">代替飛行場としての最低気象条件(AIP AD 1.1.6.10.1.6・目的地代替)</b>
+  <table class="altMin"><tr><th>使える進入方式</th><th>代替としての条件(上の表の値から)</th></tr>
+  ${row('c23','CAT II/III 精密進入','地上視程 = <b>CAT I 精密進入</b>の視程の値(雲高の指定なし)')}
+  ${row('c1','CAT I 精密進入','雲高 = <b>非精密進入の MDH</b>(100ft単位に切上げ)／地上視程 = <b>非精密進入</b>の視程の値')}
+  ${row('np','非精密進入のみ','雲高 = 非精密進入の MDH <b>+200ft</b>(切上げ)／地上視程 = その視程 <b>+1000m</b>')}
+  ${row('cir','周回進入','雲高 = 周回進入の MDH(切上げ)／地上視程 = 周回進入の視程の値')}
+  </table>
+  <div class="hint">比較に使う予報に <b>RVR は含まれない</b>(地上視程で見る)。「視程の値」は公示値の数字そのまま(CMV2000M→地上視程2000m)。
+  離陸代替(TKOF ALTN)は CAT II/III・CAT I とも「その方式の視程の値」で雲高の加算なし、非精密・周回は MDH(切上げ)と視程の値</div></div>`;
+}
 function iacMinHtml(icao,sel){
   if(!sel)return '';
   const list=PROC.f.filter(x=>x.icao===icao&&x.k==='IAC'),n=list.indexOf(sel.p)+1;
   const blk=IACMIN&&IACMIN.f&&IACMIN.f[icao+'|'+n];
   return `<div style="margin-top:8px"><b style="font-size:11px;color:var(--dim)">進入ミニマ ${icao} ${sel.p.n}(AIP IAC 図の表・原文)</b>`+
-    (blk?`<pre class="tomin">${blk.replace(/</g,'&lt;')}</pre>`:'<div class="ifrNa">この図の表は読めなかった(図で確認)</div>')+'</div>';
+    (blk?ruledPre(blk):'<div class="ifrNa">この図の表は読めなかった(図で確認)</div>')+'</div>';
 }
 let TOMIN=null;
 async function loadTomin(){if(TOMIN)return TOMIN;try{const r=await fetch('tomin.json?v='+VER_TAG);TOMIN=await r.json()}catch(e){TOMIN={f:{}}}return TOMIN}
@@ -5264,9 +5307,9 @@ function renderIfrOut(P){
     ${alt?`<div>代替 ${alt.icao}: ${wxLine(alt.icao)}</div>`:''}
     <div class="hint" style="margin-top:4px">METARは ${METAR&&METAR.updated?METAR.updated+' 更新(UTC)':'未取得'}。TAF・NOTAMは別途確認</div>
     <div style="margin-top:8px"><b style="font-size:11px;color:var(--dim)">離陸ミニマ ${dep.icao}(AIP AD 2.22 原文)</b>
-      ${tomin?`<pre class="tomin">${tomin.replace(/</g,'&lt;')}</pre>`:'<div class="ifrNa">AIP に記載なし(自衛隊・米軍飛行場など)</div>'}</div>
+      ${tomin?ruledPre(tomin):'<div class="ifrNa">AIP に記載なし(自衛隊・米軍飛行場など)</div>'}</div>
     ${iacMinHtml(dst.icao,S.iac)}
-    ${alt?iacMinHtml(alt.icao,S.iacA):''}
+    ${alt?iacMinHtml(alt.icao,S.iacA)+altMinRule(S.iacA):''}
     <div class="hint">ミニマ表は図の文字をそのまま並べたもの(列は分類 A/B/C/D、DA(H)/MDA(H)・RVR/CMV・VIS)。数値の読み違いを避けるため解釈はしていない。社内ミニマは別途</div>
   </div>
   <div class="ifrBox"><b class="k">燃料(FF ${ff}/h・風込み)</b>
