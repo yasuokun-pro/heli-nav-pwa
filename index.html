@@ -889,7 +889,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-159';
+const VER_TAG='v6-160';
 const BUILD='2026-09-14';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4977,6 +4977,12 @@ function procTokens(n){
   return n.toUpperCase().split(/[\s,\/()]+/).map(t=>t.replace(/-?RNAV$/,'').replace(/-\d[A-Z]?$/,'').replace(/-[A-Z]$/,''))
     .filter(t=>/^[A-Z]{3,}$/.test(t));
 }
+/* 方式(SID/STAR)の到達点。図から取れた `to` を優先し、無ければ方式名の語。
+   ⚠ 飛行場自身の navaid("to SHT TACAN")が混ざるので 8NM 以内は捨てる */
+function procEnd(G,ap,x){
+  const ch=(x.p.to||[]).filter(t=>{const n=G.nodes[t]||(FIX&&FIX._ix[t]);return n&&distNM(ap,n)>8});
+  return ch.length?[ch[ch.length-1]]:procTokens(x.p.n);
+}
 /* 飛行場を経路網につなぐ。使える SID/STAR の名前が FIX に一致すればそこへ(=方式の終点/始点)、
    無ければ最寄りのFIXへ仮の直行線(30NMから広げて最低3点・8点まで、距離1.15倍で航空路を優先)。
    ⚠ 以前は最寄り優先だったので立川→八丈島で DAIBU を選び、EDARR SID を無視していた
@@ -4991,12 +4997,7 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
     let R=30,pick=[];while(R<=120){pick=all.filter(x=>x.d<=R).slice(0,limit);if(pick.length>=3)break;R+=30}return pick;
   };
   let linked=0;
-  // 図から取れた到達点(chart)を優先し、無ければ方式名の語。⚠ 飛行場自身の navaid("to SHT TACAN")は捨てる
-  const endOf=x=>{
-    const ch=(x.p.to||[]).filter(t=>{const n=G.nodes[t]||(FIX&&FIX._ix[t]);return n&&distNM(ap,n)>8});
-    return ch.length?[ch[ch.length-1]]:procTokens(x.p.n);
-  };
-  (procs||[]).filter(x=>x.ok===1).forEach(x=>endOf(x).forEach(t=>{
+  (procs||[]).filter(x=>x.ok===1).forEach(x=>procEnd(G,ap,x).forEach(t=>{
     if(!G.nodes[t]){   // 航空路に乗っていない方式の終点(羽田 OPPAR/ISOGO、小牧 IBUKI 等)は FIX 表から点を足して最寄りへつなぐ
       const f=FIX&&FIX._ix[t];if(!f||!usable(t))return;
       G.nodes[t]={n:t,lat:f.lat,lng:f.lng,id:f.id};
@@ -5010,10 +5011,9 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   (iacs||[]).filter(x=>x.ok===1&&x.p.iaf).forEach(x=>x.p.iaf.forEach(t=>{
     if(!G.nodes[t]){const f=FIX&&FIX._ix[t];if(!f||!usable(t))return;
       G.nodes[t]={n:t,lat:f.lat,lng:f.lng,id:f.id};
-      // ⚠ 進入は**外側から**入る。IAFより飛行場に近い点と仮線で結ぶと、飛行場の上を通ってから
-      //   IAFへ戻る経路になる(館山で TATEYAMA→SAPIM→RJTE になった)。遠い側だけに繋ぐ
-      const dI=distNM(ap,G.nodes[t]);
-      near(G.nodes[t],6).filter(({n})=>distNM(ap,n)>dI).forEach(({n,d})=>add(t,n.n,{d:d*1.15,tr:1,tag:'IAF→航空路(仮)'}));
+      // ⚠ 飛行場の navaid を通ってから IAF へ回るのは実際の進入としてあり得る(館山 TET→SAPIM)。
+      //   近い側を除く制限は入れない(v6-158 で入れたが不要だった)
+      near(G.nodes[t],6).forEach(({n,d})=>add(t,n.n,{d:d*1.15,tr:1,tag:'IAF→航空路(仮)'}));
     }
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
     add(k,t,{d:distNM(ap,G.nodes[t]),tr:1,tag:'IAF',proc:x});linked++;
@@ -5195,11 +5195,29 @@ document.getElementById('ifrPlan').onclick=async function(){
     // ⚠ 代替へ向かうのは**進入復行(ミスドアプローチ)の待機点から**。目的地の選んだ進入方式の
     //   "…to XXXX and hold" を起点にする(取れなければ飛行場から)。R を出した後に辺を足す(往路に使わせない)
     const mh=selIac&&selIac.p.mah, mn=mh&&(G.nodes[mh]||(FIX&&FIX._ix[mh]));
-    if(mn&&!G.nodes[mh]){G.nodes[mh]={n:mh,lat:mn.lat,lng:mn.lng,id:mn.id};
-      const nr=Object.values(G.nodes).filter(n=>!n.ap&&n.n!==mh).map(n=>({n,d:distNM(G.nodes[mh],n)})).sort((x,y)=>x.d-y.d).slice(0,6);
-      nr.forEach(({n,d})=>{(G.adj[mh]=G.adj[mh]||[]).push({to:n.n,d:d*1.15,tr:1,tag:'ミスド→航空路(仮)'});(G.adj[n.n]=G.adj[n.n]||[]).push({to:mh,d:d*1.15,tr:1,tag:'ミスド→航空路(仮)'})}); }
-    if(mn){(G.adj[kt]=G.adj[kt]||[]).push({to:mh,d:distNM(dst,G.nodes[mh]),tr:1,tag:'ミスドアプローチ',proc:selIac});}
-    const ka=ifrLinkAp(G,alt,'STAR',starA,ac,iacA);RA=ifrRoute(G,kt,ka,[]);if(RA.err){RA=null}
+    if(mn&&!G.nodes[mh]){
+      G.nodes[mh]={n:mh,lat:mn.lat,lng:mn.lng,id:mn.id};
+      const lk=(t,tag)=>{const n=G.nodes[t];if(!n||n.ap)return false;const d=distNM(G.nodes[mh],n);
+        (G.adj[mh]=G.adj[mh]||[]).push({to:t,d:d*1.15,tr:1,tag});(G.adj[t]=G.adj[t]||[]).push({to:mh,d:d*1.15,tr:1,tag});return true};
+      // ⚠ 待機点は進入専用の点で航空路に乗っていない。最寄りのFIXへ直線で出すと**飛べない経路**になる
+      //   (立川の ANOBU→DAIBU。実際は ANOBU→TNT→EDARR で、EDARR から先が公示経路)。
+      //   ミスド後は出発方式に乗るので、**その飛行場の SID の到達点**へ繋ぐ
+      let n2=0;
+      procList(dst.icao,'SID',ac).filter(x=>x.ok===1).forEach(x=>procEnd(G,dst,x).forEach(t=>{
+        if(lk(t,x.p.n+' SID(ミスド後)'))n2++;
+      }));
+      if(!n2)Object.values(G.nodes).filter(n=>!n.ap&&n.n!==mh).map(n=>({n,d:distNM(G.nodes[mh],n)}))
+        .sort((x,y)=>x.d-y.d).slice(0,6).forEach(({n})=>lk(n.n,'ミスド→航空路(仮)'));
+    }
+    const ka=ifrLinkAp(G,alt,'STAR',starA,ac,iacA);
+    // ⚠ 待機点があるときは**そこを必ず通す**。飛行場に他の仮リンク(最寄りFIX)があると
+    //   そちらが短くて待機点を素通りしてしまうので、待機点から探索して先頭に1レグ足す
+    if(mn){
+      RA=ifrRoute(G,mh,ka,[]);
+      if(!RA.err)RA={legs:[{from:kt,to:mh,e:{d:distNM(dst,G.nodes[mh]),tr:1,tag:'ミスドアプローチ',proc:selIac}}].concat(RA.legs),
+                     d:RA.d+distNM(dst,G.nodes[mh])};
+    }else RA=ifrRoute(G,kt,ka,[]);
+    if(RA.err){RA=null}
   }
   const CA=cruiseAlt(R.legs,ac,G);
   const tas=num('tas')||100,ff=num('ff')||0,fob=num('fob')||0;
