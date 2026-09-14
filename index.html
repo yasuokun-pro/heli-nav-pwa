@@ -877,7 +877,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-155';
+const VER_TAG='v6-156';
 const BUILD='2026-09-14';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -5079,6 +5079,16 @@ function wxJudge(icao,needVis,needCig){
   const ok=okV!==false&&okC;
   return {cls:ok?'ifrOk':'ifrNg',txt:`${ok?'✓':'✗'} 視程${v.vis===null?'?':v.vis>=9999?'10km+':v.vis+'m'} 雲高${v.cig===null?'なし':v.cig+'ft'}(${obsHM(m.obs)}) 必要: 視程${needVis}m${needCig?' 雲高'+needCig+'ft':''}`};
 }
+let IACMIN=null;
+async function loadIacMin(){if(IACMIN)return IACMIN;try{const r=await fetch('iacmin.json?v='+VER_TAG);IACMIN=await r.json()}catch(e){IACMIN={f:{}}}return IACMIN}
+/* 選んだ進入方式のミニマ表(IAC図の原文)。proc の並び順 n 番目 = 図の AD2.24-IAC-n */
+function iacMinHtml(icao,sel){
+  if(!sel)return '';
+  const list=PROC.f.filter(x=>x.icao===icao&&x.k==='IAC'),n=list.indexOf(sel.p)+1;
+  const blk=IACMIN&&IACMIN.f&&IACMIN.f[icao+'|'+n];
+  return `<div style="margin-top:8px"><b style="font-size:11px;color:var(--dim)">進入ミニマ ${icao} ${sel.p.n}(AIP IAC 図の表・原文)</b>`+
+    (blk?`<pre class="tomin">${blk.replace(/</g,'&lt;')}</pre>`:'<div class="ifrNa">この図の表は読めなかった(図で確認)</div>')+'</div>';
+}
 let TOMIN=null;
 async function loadTomin(){if(TOMIN)return TOMIN;try{const r=await fetch('tomin.json?v='+VER_TAG);TOMIN=await r.json()}catch(e){TOMIN={f:{}}}return TOMIN}
 /* METAR の視程・雲高を判定せずに並べる(ミニマとの突き合わせはパイロット) */
@@ -5098,7 +5108,7 @@ document.getElementById('ifrPlan').onclick=async function(){
         dst=apOf(document.getElementById('ifrDst').value.trim().toUpperCase()),
         alt=apOf(document.getElementById('ifrAlt').value.trim().toUpperCase());
   if(!dep||!dst){out.innerHTML='<div class="ifrWarn">出発と目的の飛行場(ICAO 4文字)を入れてください</div>';return}
-  await Promise.all([loadFix(),loadAwy(),loadProc(),loadMetar(),loadTomin()]);
+  await Promise.all([loadFix(),loadAwy(),loadProc(),loadMetar(),loadTomin(),loadIacMin()]);
   document.getElementById('ifrEff').textContent=`AIP ${AWY.eff||''} 現在`;
   const cap=ac.press?0:ac.maxAlt;
   let G=ifrGraph(ac,cap),capOff=false;
@@ -5255,7 +5265,9 @@ function renderIfrOut(P){
     <div class="hint" style="margin-top:4px">METARは ${METAR&&METAR.updated?METAR.updated+' 更新(UTC)':'未取得'}。TAF・NOTAMは別途確認</div>
     <div style="margin-top:8px"><b style="font-size:11px;color:var(--dim)">離陸ミニマ ${dep.icao}(AIP AD 2.22 原文)</b>
       ${tomin?`<pre class="tomin">${tomin.replace(/</g,'&lt;')}</pre>`:'<div class="ifrNa">AIP に記載なし(自衛隊・米軍飛行場など)</div>'}</div>
-    <div class="hint">進入のミニマ(DA/MDA・RVR)は各IAC(AIPの図)を参照。図からは機械的に取れない。社内ミニマは別途</div>
+    ${iacMinHtml(dst.icao,S.iac)}
+    ${alt?iacMinHtml(alt.icao,S.iacA):''}
+    <div class="hint">ミニマ表は図の文字をそのまま並べたもの(列は分類 A/B/C/D、DA(H)/MDA(H)・RVR/CMV・VIS)。数値の読み違いを避けるため解釈はしていない。社内ミニマは別途</div>
   </div>
   <div class="ifrBox"><b class="k">燃料(FF ${ff}/h・風込み)</b>
     経路 ${Math.round(fuel)} + 代替 ${Math.round(fuelA)} + 予備30分 ${Math.round(res)} = <b style="font-family:var(--mono)">${Math.round(need)}</b> / FOB ${fob}

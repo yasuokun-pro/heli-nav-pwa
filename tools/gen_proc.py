@@ -53,6 +53,7 @@ def known_points():
     return names
 
 KNOWN = None
+MINIMA = {}
 IAF_RE = re.compile(r'([A-Z]{2,7})\s*\(IAF[^)]{0,10}\)')
 
 def iaf_by_page(txt):
@@ -73,6 +74,75 @@ def iaf_by_page(txt):
         if names: res.setdefault(n, [])
         for nm in names:
             if nm not in res[n]: res[n].append(nm)
+    return res
+
+
+def _shift(s):
+    """埋め込みフォントの文字コードは一律 29 小さい('&LUFOLQJ'→'Circling'、\x03→空白、\x14→'1')"""
+    return ''.join(chr(ord(c) + 29) if 0x03 <= ord(c) <= 0x5e else c for c in s)
+
+
+KW = ('CAT', 'LOC', 'CIRCLING', 'MINIMA', 'RVR', 'VIS', 'MDA', 'DA(H)', 'ILS', 'RNP', 'VOR', 'TACAN',
+      'NDB', 'RWY', 'APCH', 'Circling', 'not', 'gradient', 'authorized', 'established')
+
+
+def _shifted(seg, ctl=True):
+    """この断片が化けているか。制御文字を含む、または(その塊に化けがある時だけ)29足すと表の語になる。
+    ⚠ 語だけで判定すると、化けていない表の数字まで変換しうる。ctl で塊ごとに歯止めを掛ける"""
+    if any(0x01 <= ord(c) <= 0x1c for c in seg): return True
+    if not ctl or len(seg) < 3: return False
+    sh = _shift(seg)
+    return any(k in sh for k in KW) and not any(k in seg for k in KW)
+
+
+def dec(s):
+    """図の文字化けを戻す。
+    ⚠ **1行がまるごと化けているとは限らない**(羽田 IAC-10 の注記は末尾の " 34L." だけ生のまま)。
+      化けた文字列は空白を \x03 で持つので、**本物の空白(0x20)で区切った断片ごと**に判定して戻す。
+      断片ごとにしないと、生の部分まで 29 ずれて "RWY=PQiK" のような文字列になる
+      (行全体を戻していた時、空白の並びが '====' になっていたのも同じ原因)。
+    ⚠ 合字・別フォントの化け: 䱶/䊠=I 䱷=II 䱸=III 凬=: 䯍=– 䤑=°"""
+    ctl = any(0x01 <= ord(c) <= 0x1c for c in s if c != '\n' and c != '\t')
+    out = []
+    for line in s.split('\n'):
+        parts = re.split(r'( +)', line)
+        line = ''.join(p if p.strip() == '' or not _shifted(p, ctl) else _shift(p) for p in parts)
+        for x, y in (('䱸', 'III'), ('䱷', 'II'), ('䱶', 'I'), ('䊠', 'I'), ('凬', ':'), ('䯍', '–'), ('䤑', '°')):
+            line = line.replace(x, y)
+        # もう一つの化け方: CJK面 0x4883〜0x4901 は **ord-0x4882 がそのままASCII**(䢲='0' 䣇='E' 䢢=空白)
+        out.append(''.join(chr(ord(c) - 0x4882) if 0x4883 <= ord(c) <= 0x4901 else
+                           ('?' if 0x3400 <= ord(c) <= 0x9fff else c) for c in line))
+    return '\n'.join(out)
+
+
+def minima_by_page(txt):
+    """各 IAC ページの MINIMA 表(DA(H)/MDA(H)/RVR/VIS を分類 A〜D ごとに書いた表)を**原文のまま**集める。
+    セルが結合された表で機械的な解釈が危ないので、数値には直さず <pre> で見せる。
+    ⚠ 以前「本文レイヤから取れない」と判断したのは数字が \x13… に化けていたため。dec() で戻せる"""
+    res = {}
+    for pg in txt.split('\f'):
+        m = re.search(r'AD\s?2\.24-IAC-(\d+)', pg)
+        if not m: continue
+        L = dec(pg).split('\n')
+        # ⚠ "MINIMA" は CHANGE 行(改正内容の要約)や表の下の注記にも出る。
+        #   表の見出しは "MINIMA … THR elev." の行。無ければ直後に CAT 行が続くものを採る
+        cand = [i for i, l in enumerate(L) if re.search(r'\bMINIMA\b', l) and 'CHANGE' not in l]
+        st = next((i for i in cand if 'elev' in L[i]), None)
+        if st is None:
+            st = next((i for i in cand if any(re.search(r'\bCAT\b', x) for x in L[i+1:i+6])), None)
+        if st is None: continue
+        blk = []
+        # ⚠ CHANGE 行(改正内容)が**見出しと表の行の間に挟まる**ことがある(成田 IAC-11)。
+        #   そこで切ると表が丸ごと落ちるので、CHANGE 行は飛ばすだけにして、切るのは脚注だけにする
+        for l in L[st:st+40]:
+            if re.search(r'Civil Aviation Bureau|AIP Japan', l): break
+            if re.search(r'CHANGE\s*:', l): continue
+            blk.append(l.rstrip())
+        while blk and not blk[-1].strip(): blk.pop()
+        blk = [l for k, l in enumerate(blk) if l.strip() or (k and blk[k-1].strip())]
+        # 共通の左余白を落とす(幅を節約。列の相対位置は保つ)
+        ind = min((len(l) - len(l.lstrip()) for l in blk if l.strip()), default=0)
+        res[int(m.group(1))] = '\n'.join(l[ind:] for l in blk)
     return res
 
 
@@ -125,6 +195,9 @@ def parse_one(pdf):
     iacs = [r for r in out if r['k'] == 'IAC']
     for n, names in iaf.items():
         if 1 <= n <= len(iacs): iacs[n-1]['iaf'] = names
+    # ミニマ表(原文)は別ファイル(iacmin.json)。proc.json 側には「あり」の印だけ
+    for n, blk in minima_by_page(txt).items():
+        if 1 <= n <= len(iacs): iacs[n-1]['mn'] = 1; MINIMA[f"{icao}|{n}"] = blk
     return out
 
 
@@ -137,6 +210,10 @@ def main():
     dst = os.path.join(HERE, '..', 'proc.json')
     json.dump({'eff': eff, 'src': 'AIP Japan AD 2.24 索引', 'f': out},
               open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
+    dst2 = os.path.join(HERE, '..', 'iacmin.json')
+    json.dump({'eff': eff, 'src': 'AIP Japan AD 2.24 IAC MINIMA(原文抜粋)', 'f': MINIMA},
+              open(dst2, 'w'), ensure_ascii=False, separators=(',', ':'))
+    print(f"  ミニマ表 {len(MINIMA)} 図 → iacmin.json ({os.path.getsize(dst2)/1024:.0f}KB)")
     ap = len(set(x['icao'] for x in out))
     c = {k: sum(1 for x in out if x['k'] == k) for _, k in KIND}
     ni = sum(1 for x in out if x.get('iaf'))
