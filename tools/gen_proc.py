@@ -37,6 +37,45 @@ def pdfs():
     return []
 
 
+def known_points():
+    """IAF ラベルの検証用: FIX名(fix.json)と navaid ID(navaids.gen.js)。無ければ検証なし"""
+    names = set()
+    try:
+        for f in json.load(open(os.path.join(HERE, '..', 'fix.json')))['f']:
+            names.add(f['n'])
+            if f.get('id'): names.add(f['id'])
+    except FileNotFoundError: pass
+    try:
+        js = open(os.path.join(HERE, 'navaids.gen.js'), encoding='utf-8').read()
+        for a in json.loads(js[js.index('['):js.rindex(']')+1]):
+            if a.get('id'): names.add(a['id'])
+    except (FileNotFoundError, ValueError): pass
+    return names
+
+KNOWN = None
+IAF_RE = re.compile(r'([A-Z]{2,7})\s*\(IAF[^)]{0,10}\)')
+
+def iaf_by_page(txt):
+    """各 IAC ページの "TOHNE(IAF)" ラベルを集める → {IAC番号: [FIX名…]}
+    ⚠ ページ番号は脚注の "RJTL AD2.24-IAC-2" から。索引の IAC の並び順と同じ番号(n番目)
+    ⚠ 図の文字化け(数字が \x13… に化ける)は名前には及ばない。ただし "KIAS" "RNAV1" のような語も
+      "(IAF)" の前に来ることがあるので、FIX名か navaid ID として実在するものだけ採る"""
+    global KNOWN
+    if KNOWN is None: KNOWN = known_points()
+    res = {}
+    for pg in txt.split('\f'):
+        m = re.search(r'AD\s?2\.24-IAC-(\d+)', pg)
+        if not m: continue
+        n = int(m.group(1))
+        names = []
+        for nm in IAF_RE.findall(pg):
+            if (not KNOWN or nm in KNOWN) and nm not in names: names.append(nm)
+        if names: res.setdefault(n, [])
+        for nm in names:
+            if nm not in res[n]: res[n].append(nm)
+    return res
+
+
 def parse_one(pdf):
     txt = subprocess.run(['pdftotext', '-layout', pdf, '-'], capture_output=True, text=True).stdout
     icao = os.path.basename(pdf)[:4]
@@ -81,6 +120,11 @@ def parse_one(pdf):
                     if 'CAT II' in name or 'CAT III' in name: rec['cat'] = 'II/III'
                     if 'HELI' in name.upper() or 'COPTER' in name.upper(): rec['heli'] = 1
                 out.append(rec)
+    # 進入図の IAF を、索引の IAC の n 番目に対応づける(AD2.24-IAC-n)
+    iaf = iaf_by_page(txt)
+    iacs = [r for r in out if r['k'] == 'IAC']
+    for n, names in iaf.items():
+        if 1 <= n <= len(iacs): iacs[n-1]['iaf'] = names
     return out
 
 
@@ -95,7 +139,8 @@ def main():
               open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
     ap = len(set(x['icao'] for x in out))
     c = {k: sum(1 for x in out if x['k'] == k) for _, k in KIND}
-    print(f"{ap} 空港 SID {c['SID']} / STAR {c['STAR']} / IAC {c['IAC']} → proc.json ({os.path.getsize(dst)/1024:.0f}KB) AIRAC:{eff}")
+    ni = sum(1 for x in out if x.get('iaf'))
+    print(f"{ap} 空港 SID {c['SID']} / STAR {c['STAR']} / IAC {c['IAC']}(IAF付き {ni}) → proc.json ({os.path.getsize(dst)/1024:.0f}KB) AIRAC:{eff}")
 
 
 if __name__ == '__main__':

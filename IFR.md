@@ -132,7 +132,7 @@ awy.json  { eff, src, f:[ {n:"Y10"|"WKE-MVE"(直行経路は端点のID/FIX名),
                       up:"UNL", mea:"FL200"|7000, moca:3000|"FL150",
                       odd:"↑", even:"↓"      … その方向に飛ぶときの奇数/偶数高度(矢印は表の向き),
                       rmk:"DME required…", inh:["mea","mag"] … 前の区間から継いだ属性(3.1のみ) } ] } ] }
-proc.json { eff, src, f:[ {icao:"RJTT", k:"SID"|"STAR"|"IAC", n:"VAMOS-RNAV",
+proc.json { eff, src, f:[ {icao:"RJTT", k:"SID"|"STAR"|"IAC", n:"VAMOS-RNAV", iaf:["TOHNE"](IACのみ・図にラベルがあるもの),
               rnav:1, typ:"ILS"|"LOC"|"LDA"|"VOR"|"VOR/DME"|"TACAN"|"NDB"|"RNP"|"RNAV"|"RNAV(GPS)"|"GLS"|"HI-ILS"|…,
               rwy:"34L", cat:"II/III", heli:1,
               nn:1  … 索引に名前が無い(自衛隊系。n は "#1" のような枚数。図参照) } ] }

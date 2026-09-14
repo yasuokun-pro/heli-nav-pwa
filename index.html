@@ -877,7 +877,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-153';
+const VER_TAG='v6-154';
 const BUILD='2026-09-14';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4969,7 +4969,7 @@ function procTokens(n){
    無ければ最寄りのFIXへ仮の直行線(30NMから広げて最低3点・8点まで、距離1.15倍で航空路を優先)。
    ⚠ 以前は最寄り優先だったので立川→八丈島で DAIBU を選び、EDARR SID を無視していた
    ⚠ RNAV専用の点(navaid評定なし)は GNSS も RNAV装置も無い機体では使わない */
-function ifrLinkAp(G,ap,tag,procs,ac){
+function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   const k='AP:'+ap.icao;G.nodes[k]={n:k,lat:ap.lat,lng:ap.lng,ap};G.adj[k]=G.adj[k]||[];
   const canRnav=ac.gnss||ac.rnav;
   const usable=n=>{const f=FIX&&FIX._ix[n];return canRnav||!f||!fixRnavOnly(f)};
@@ -4987,6 +4987,14 @@ function ifrLinkAp(G,ap,tag,procs,ac){
     }
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
     add(k,t,{d:distNM(ap,G.nodes[t]),tr:1,tag,proc:x});linked++;
+  }));
+  // 進入方式の IAF(進入図の "TOHNE(IAF)" から拾ったもの)。下総のように STAR が無い飛行場でも
+  //   最寄りの点ではなく IAF へ向かう経路になる(立川→下総は OMIYA から直接ではなく TOHNE 経由)
+  (iacs||[]).filter(x=>x.ok===1&&x.p.iaf).forEach(x=>x.p.iaf.forEach(t=>{
+    if(!G.nodes[t]){const f=FIX&&FIX._ix[t];if(!f||!usable(t))return;
+      G.nodes[t]={n:t,lat:f.lat,lng:f.lng,id:f.id};near(G.nodes[t],5).forEach(({n,d})=>add(t,n.n,{d:d*1.15,tr:1,tag:'IAF→航空路(仮)'}))}
+    if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
+    add(k,t,{d:distNM(ap,G.nodes[t]),tr:1,tag:'IAF',proc:x});linked++;
   }));
   if(!linked)near(ap,8).forEach(({n,d})=>add(k,n.n,{d:d*1.15,tr:1,tag:tag+'区間(仮)'}));
   return k;
@@ -5099,17 +5107,19 @@ document.getElementById('ifrPlan').onclick=async function(){
   if(badVia.length){out.innerHTML=`<div class="ifrWarn">経由FIXが航空路上に無い: ${badVia.join(' ')}(航空路に乗っていない点は経由に使えない)</div>`;return}
   const sid=procList(dep.icao,'SID',ac),star=procList(dst.icao,'STAR',ac),iac=procList(dst.icao,'IAC',ac),iacA=alt?procList(alt.icao,'IAC',ac):[];
   const starA=alt?procList(alt.icao,'STAR',ac):[];
-  let kd=ifrLinkAp(G,dep,'SID',sid,ac),kt=ifrLinkAp(G,dst,'STAR',star,ac);
+  let kd=ifrLinkAp(G,dep,'SID',sid,ac),kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);
   let R=ifrRoute(G,kd,kt,vias);
   if(R.err&&cap){          // 上限内では繋がらない → 上限を外してもう一度(高度の警告で知らせる)
-    G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac);R=ifrRoute(G,kd,kt,vias);
+    G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
   }
   if(R.err){out.innerHTML=`<div class="ifrWarn">${R.err}</div>`;return}
   let RA=null;
-  if(alt){const ka=ifrLinkAp(G,alt,'STAR',starA,ac);RA=ifrRoute(G,kt,ka,[]);if(RA.err){RA=null}}
+  if(alt){const ka=ifrLinkAp(G,alt,'STAR',starA,ac,iacA);RA=ifrRoute(G,kt,ka,[]);if(RA.err){RA=null}}
   const CA=cruiseAlt(R.legs,ac,G);
   const tas=num('tas')||100,ff=num('ff')||0,fob=num('fob')||0;
-  const selIac=bestIac(iac),selIacA=bestIac(iacA);
+  // 経路の最後が IAF ならその進入方式を選ぶ(そうでなければ ILS>RNP>… の優先順)
+  const lastP=l=>l&&l.e.proc&&l.e.proc.p.k==='IAC'?l.e.proc:null;
+  const selIac=lastP(R.legs[R.legs.length-1])||bestIac(iac),selIacA=(RA&&lastP(RA.legs[RA.legs.length-1]))||bestIac(iacA);
   // レグごとの風: 既定は全部「＝前」(共通の風を継ぐ)。共通の風は前回値か飛行ログ側の風
   const wb=store.get('hnav.ifrWind')||{d:num('wDir')||0,s:num('wSpd')||0};
   const wind={base:{d:wb.d||0,s:wb.s||0},main:R.legs.map(()=>({same:true})),alt:RA?RA.legs.map(()=>({same:true})):[]};
@@ -5121,7 +5131,7 @@ document.getElementById('ifrPlan').onclick=async function(){
   const sidTrack=sidSel?sidTrackOf(dep.icao,sidSel.p.n,rwySel,ac):null;
   const sv=(store.get('hnav.sidDist')||{})[dep.icao+':'+(sidSel?sidSel.p.n:'-')]||{};
   ifrPlanRes={dep,dst,alt,legs:R.legs,legsA:RA?RA.legs:null,G,CA,wind,asg:sv.asg||0,sidD:sv.sidD||0,sidTrack,rwy:rwySel,sel:{sid:sidSel,
-    star:pr(R.legs[R.legs.length-1])||star.find(x=>x.ok===1)||null,iac:selIac,iacA:selIacA}};
+    star:(pr(R.legs[R.legs.length-1])&&pr(R.legs[R.legs.length-1]).p.k==='STAR')?pr(R.legs[R.legs.length-1]):(star.find(x=>x.ok===1)||null),iac:selIac,iacA:selIacA}};
   renderIfrOut({ac,mn,dep,dst,alt,R,RA,CA,ff,fob,tas,sid,star,iac,iacA});
   document.getElementById('ifrToMap').disabled=false;
 };
@@ -5183,7 +5193,7 @@ function ifrTable(rows,key,warr,ac,dep,cruise,depAp){
   rows.forEach((r,i)=>{
     const l=r.l,b=r.b,e=l.e;
     if(rca&&rca.i===i)h+=`<tr class="rca"><td>(RCA ${asg.toLocaleString()}ft)</td><td>上昇 ${ac.roc}ft/min・${ac.vcl||80}kt・GS${Math.round(rca.gs)}</td><td colspan="6"></td><td class="r">(${rca.dist.toFixed(1)})</td><td class="r">(${fmtHM(rca.time)})</td><td class="r"></td><td colspan="2">${rca.ok?'SID区間の内数(SID '+rca.len.toFixed(1)+'NM)':'<span class="ifrNg">⚠ SID終点('+rca.len.toFixed(1)+'NM)までに届かない。必要上昇率 '+Math.round(rca.reqRoc)+'ft/min</span>'}</td></tr>`;
-    const rn=e.tr?(e.proc?`<span style="color:var(--cyn)">${e.proc.p.n} ${e.tag}</span>`:`<i style="color:var(--dim)">${e.tag}</i>`):`<span style="color:${AWY_COL[e.r.k]}">${e.r.n}</span>`;
+    const rn=e.tr?(e.proc?`<span style="color:var(--cyn)">${e.tag==='IAF'?(b.ap?'IAF→ '+e.proc.p.n+' 進入':e.proc.p.n+' の IAF'):e.proc.p.n+' '+e.tag}</span>`:`<i style="color:var(--dim)">${e.tag}</i>`):`<span style="color:${AWY_COL[e.r.k]}">${e.r.n}</span>`;
     const fx=FIX&&FIX._ix[b.n];
     const ev=b.ap?'':(fixBrg(b.n)||(fx&&fixRnavOnly(fx)?'<span style="color:#6fc3ff">RNAV専用</span>':''));
     const w=warr[i]||{same:true};
