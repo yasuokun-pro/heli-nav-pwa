@@ -303,12 +303,17 @@ def parse_35(L):
             p = {'n': f['n'], 'lat': f['lat'], 'lng': f['lng']}
             if f.get('id'): p['id'] = f['id']
             return p
-        return {'n': f"{t['v']} {t['d']}DME" + ('/' + t['alias'] if t.get('alias') else ''), 'dme': [t['v'], t['d']]}
+        # 2表記の点は表記順を揃える(往路と復路で "MZE 40DME/TGE 40DME" と "TGE 40DME/MZE 40DME" に割れて2本になった)
+        nm = '/'.join(sorted([f"{t['v']} {t['d']}DME"] + ([t['alias']] if t.get('alias') else [])))
+        return {'n': nm, 'dme': [t['v'], t['d']]}
     def nums(l, pat):
         return [(m.group(1), m.start()) for m in re.finditer(pat, l)]
     for i, l in enumerate(L):
         # ⚠ is_header() は行末の VOR/DME を見出し扱いするのでここでは使えない(行の大半が navaid で終わる)
         if '°' not in l or 'Bearing' in l or 'LEGEND' in l: continue
+        # ⚠ 起点が FIX の経路は行頭に "(OSE VOR/DME 018° 42nm) DAIBU 018° …" と FIX の定義が括弧で付く(13行)。
+        #   括弧を備考と見なすと行ごと捨ててしまい、DAIBU-KOSKA のような**SIDと航空路をつなぐ経路**が丸ごと落ちた
+        l = re.sub(r'^\s*\([A-Z]{3}\s+' + NAV_T + r'[^)]*\)', lambda m: ' '*len(m.group(0)), l)
         toks = []
         for m in TOK35.finditer(l):
             k = 'dme' if m.group('dme') else m.lastgroup   # ⚠ lastgroup は dmen(数字側)になるので dme を先に見る
@@ -317,7 +322,7 @@ def parse_35(L):
             elif k == 'dme':
                 # ⚠ "MZE 40DME / TGE 40DME" は同じ1点の2表記(宮崎-種子島)。'/' で繋がっていたら前の点に併合
                 if toks and toks[-1]['t'] == 'dme' and '/' in l[toks[-1]['e']:m.start()]:
-                    toks[-1]['alias'] = f"{m.group('dme')} {m.group('dmen')}DME"; continue
+                    toks[-1]['alias'] = f"{m.group('dme')} {m.group('dmen')}DME"; toks[-1]['e'] = m.end(); continue   # ⚠ e を進めないと次の点まで併合する
                 toks.append({'t': 'dme', 'v': m.group('dme'), 'd': int(m.group('dmen')), 'c': m.start(), 'e': m.end()})
             elif k == 'nav': toks.append({'t': 'nav', 'v': m.group('nav'), 'c': m.start()})
             elif k == 'fix': toks.append({'t': 'fix', 'v': m.group('fix'), 'c': m.start()})
