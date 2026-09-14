@@ -435,7 +435,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 
 ## 8. AIP空域データの取り扱い(2026-07確立・重要)
 
-**関東の空域ポリゴン化は完了**(AIRAC 2026-07-09基準)。以下は恒久ノウハウ。
+**関東の空域ポリゴン化は完了**(AIRAC 2026-07-09基準、2026-09-03で差分なしを確認)。以下は恒久ノウハウ。
 
 ### データソース(旧AIS Japanは廃止済み)
 - **AIS Japanは2025年に廃止** → 現在は **SWIMポータル**(https://top.swim.mlit.go.jp/swim/、
@@ -454,12 +454,25 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 - PDF処理: `pdftotext -layout`(brew poppler)。チャート図の区分読解は
   `pdftoppm -png -r 300` で画像化 → 座標プロットとの重ね合わせで検証する手法が確立済み
 
-### AIRAC更新手順(28日ごと・半自動)
-1. ユーザーが新AIRACのAIP一式をSWIMからDL
-2. 関東各飛行場のAD 2.17とPCAチャートの差分を確認
-3. 変更があれば `tools/gen_asp.py` のSPECを修正 →
-   `python3 tools/gen_asp.py --splice` で index.html を更新
-4. `sw.js` の VER をインクリメントしてコミット
+### AIRAC更新手順(28日ごと・半自動)　※2026-09-14 に 20260903 で実施した実手順
+1. ユーザーが新AIRACのAIP一式をSWIMからDL。**zip は暗号化されていない**(2026-09 版で確認)ので
+   `unzip -q -o "AIP File Download Service (1).zip" -d ~/Downloads` で既存の
+   `~/Downloads/AIP File Download Service/1_AIP (PDF)/<日付>/` に日付フォルダが増える形で展開できる
+2. **生成器を順に回す**(全部 `sorted()[-1]` で最新の日付フォルダを見る):
+   `gen_fix → gen_navaids --splice → gen_awy`(⚠ awy は navaids.gen.js を読むので **navaids を先に**。
+   順を誤ると改名した navaid(2026-09: 高知 KRE→NAE)の直行経路が落ちる)
+   `→ gen_proc → gen_tomin → gen_ad → gen_freq --splice → gen_magvar`(出た MAGV_C を index.html に貼る)
+   `→ gen_res → gen_nuke → gen_tra → gen_civ → gen_hp → gen_natl_ctr → gen_asp --splice → gen_sup`
+   ⚠ `gen_proc`/`gen_tomin` は日付フォルダをまたいで glob していて**2サイクル分が混ざった**。最新フォルダだけに直した
+   ⚠ `gen_aca`(aca.json)と `gen_tca` は図の読み取り結果を固定で持っているので回さない。
+     AD 2.17 の**添付図**が変わったかは目視で確認する(本文の差分は下の方法で機械的に出せる)
+3. 差分の確認: 旧/新の各 AD2 を `pdftotext -layout` して AD 2.17〜2.18 の区間を difflib で比べる
+   (2026-09: 改正40空港のうち AD 2.17 に差があったのは10空港、**全部空白の違いだけ**で空域は不変)。
+   JSON は `git show HEAD:xxx.json` と突き合わせて追加/削除を出す(FIX 追加10/削除6、方式は高知・伊丹・石垣・宮古が改編)
+4. 関東の PCA/ACA に差があれば `tools/gen_asp.py` の SPEC / `gen_aca.py` を直す
+5. index.html の「AIP 2026-09-03現在」の文言、`sw.js` の VER / `VER_TAG` / `BUILD` を上げてコミット
+6. 置き場は `~/Downloads/AIP File Download Service/` のまま(生成器がそこを見る)。**古い日付フォルダは1つ前だけ残して消してよい**
+   (差分確認に使う)。`~/Downloads/1_AIP (PDF)` と `1_AIP (PDF).zip` は 20260709 の重複コピー
 
 ### 全国データ(2026-07追加)
 - **飛行場マスタ**: `tools/gen_ad.py` → `ad.json`(**134件**)。AIP各飛行場の
@@ -1012,7 +1025,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 
 - 飛行ログのOFF/ONは手動ボタン(自動検出なし)。離陸ボタン押し忘れ対策は未実装
 - ETE合計は各レグの風補正GSの積算。実GS連動時は現在GSを全レグに適用する簡易方式
-- **関東の空域ポリゴンはAIP 2026-07-09現在の正式形状**(凡例に基準日を表示)。
+- **関東の空域ポリゴンはAIP 2026-09-03現在の正式形状**(凡例に基準日を表示)。
   **関東以外の空域円は開発用サンプルのまま**(「※概略円」表記を消さないこと)。
   飛行場ポップアップの標高・滑走路は関東の一部を除きサンプル値
 - localStorage依存のため、ブラウザのサイトデータ削除でログが消える(README記載済み、CSV書出で退避)

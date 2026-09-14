@@ -42,7 +42,7 @@
 要望にあった動画プレイリスト(YouTube)は**Claudeからは見られない**。出発方式・着陸方式の
 根拠はすべてAIP(AD 2.22 / AD 2.24 / ENR 3 / ENR 4.3)から取る。
 
-## 2. データの棚卸し(2026-09-13 に実測。AIRAC 20260709)
+## 2. データの棚卸し(2026-09-13 に実測。AIRAC 20260709 → 2026-09-14 に 20260903 へ更新済み)
 
 置き場: `~/Downloads/AIP File Download Service/1_AIP (PDF)/20260709/`
 `enr.txt` は `pdftotext -layout ENR_20260709.pdf` の出力(4.5MB)。行番号はその中の位置。
@@ -120,7 +120,7 @@ IACを `pdftotext -layout` に出すと数字が文字化け混じりで、表�
 ## 5. データモデル(Stage 1 で確定した実物)
 
 ```
-fix.json  { eff:"20260709", src, f:[ {n:"ABASA", lat, lng,
+fix.json  { eff:"20260903", src, f:[ {n:"ABASA", lat, lng,
               c:1(▲義務)|0(△任意)  … 無ければ記号なし,
               id:"WKE"             … navaid名の点だけ(略号欄のID),
               rt:["N884","Y531"]   … ATSルート列(無い点もある),

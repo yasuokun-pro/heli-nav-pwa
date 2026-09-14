@@ -12,7 +12,7 @@ OVERRIDE で正確な形状に補正する(natl_ctr.json は素材データ)。
 """
 import re, glob, os, json, subprocess, sys
 
-A = os.path.expanduser('~/Downloads/1_AIP (PDF)')
+A = next((os.path.expanduser(x) for x in ('~/Downloads/AIP File Download Service/1_AIP (PDF)','~/Downloads/1_AIP (PDF)') if os.path.isdir(os.path.expanduser(x))), os.path.expanduser('~/Downloads/1_AIP (PDF)'))
 KANTO = {'RJTT','RJAA','RJAH','RJTA','RJTC','RJTJ','RJTY','RJTK','RJTL','RJTE','RJTU','RJTO'}
 # ICAO→和名(AD2から機械抽出できないものを補う)
 JP = {'RJNS':'静岡','RJNY':'静浜','RJSU':'霞目','RJFZ':'築城','RJFA':'芦屋','RJNG':'岐阜',

@@ -18,8 +18,10 @@ AIRAC更新時: 新PDFで ENR 4.1 を pdftotext -layout し、下の PDF/範囲�
 import re, json, sys, os, subprocess, glob
 
 def find_pdf():
-    base=os.path.expanduser('~/Downloads/1_AIP (PDF)')
-    cands=sorted(glob.glob(base+'/*/ENR_*.pdf'))
+    cands=[]
+    for base in ('~/Downloads/AIP File Download Service/1_AIP (PDF)','~/Downloads/1_AIP (PDF)'):
+        cands+=sorted(glob.glob(os.path.expanduser(base)+'/*/ENR_*.pdf'))
+    cands=sorted(cands,key=os.path.basename)
     return cands[-1] if cands else None
 
 def dms(v):

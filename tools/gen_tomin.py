@@ -17,7 +17,10 @@ def pdfs():
     for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/*.pdf',
                 '~/Downloads/1_AIP (PDF)/*/AD2_Combine/*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
-        if f: return f
+        if f:
+            # ⚠ 日付フォルダが複数あると全AIRACのPDFが混ざる(2026-09 に踏んだ)。最新の日付フォルダだけ
+            latest = max(os.path.basename(os.path.dirname(os.path.dirname(x))) for x in f)
+            return [x for x in f if os.path.basename(os.path.dirname(os.path.dirname(x))) == latest]
     return []
 
 def extract(txt):
