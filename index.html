@@ -421,9 +421,15 @@
   table.ifrLog td.r{text-align:right}
   table.ifrLog td.brg{font-size:10px;color:var(--dim);line-height:1.25;white-space:nowrap}
   table.ifrLog tr.rca td{color:var(--amb);font-style:italic}
-  /* AIPの表を原文のまま出すブロック。等幅なので ch 単位で縦罫を引ける(ruledPre) */
-  pre.tomin{--ln:rgba(130,170,225,.22);font-family:var(--mono);font-size:9.5px;line-height:15px;background:var(--bg);
-    border:1px solid var(--line);border-radius:6px;padding:6px 8px;overflow:auto;max-height:280px;margin:4px 0;white-space:pre}
+  /* AIPの表(原文の並びのまま本物の表にしたもの) */
+  pre.tomin{font-family:var(--mono);font-size:10px;line-height:1.35;background:var(--bg);border:1px solid var(--line);
+    border-radius:6px;padding:6px 8px;overflow:auto;max-height:280px;margin:4px 0;white-space:pre}
+  .aipWrap{overflow:auto;max-height:300px;border:1px solid var(--line);border-radius:6px;margin:4px 0;background:var(--bg)}
+  table.aipTbl{border-collapse:collapse;font-family:var(--mono);font-size:10px;width:100%}
+  table.aipTbl th,table.aipTbl td{border:1px solid rgba(130,170,225,.28);padding:2px 6px;white-space:nowrap;text-align:center}
+  table.aipTbl th{color:var(--dim);font-weight:500;background:rgba(130,170,225,.08);position:sticky;top:0}
+  table.aipTbl td:empty{background:rgba(130,170,225,.03)}
+  .aipNote{font-size:10px;color:var(--dim);line-height:1.5;margin:2px 0 4px}
   table.ifrLog .wIn{white-space:nowrap;font-size:11px}
   table.ifrLog .wIn input[type=number]{width:52px;padding:2px 3px;font-size:11px}
   table.ifrLog .wIn input[type=checkbox]{width:14px;height:14px;vertical-align:middle;accent-color:var(--grn)}
@@ -883,7 +889,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-157';
+const VER_TAG='v6-159';
 const BUILD='2026-09-14';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4985,7 +4991,12 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
     let R=30,pick=[];while(R<=120){pick=all.filter(x=>x.d<=R).slice(0,limit);if(pick.length>=3)break;R+=30}return pick;
   };
   let linked=0;
-  (procs||[]).filter(x=>x.ok===1).forEach(x=>procTokens(x.p.n).forEach(t=>{
+  // 図から取れた到達点(chart)を優先し、無ければ方式名の語。⚠ 飛行場自身の navaid("to SHT TACAN")は捨てる
+  const endOf=x=>{
+    const ch=(x.p.to||[]).filter(t=>{const n=G.nodes[t]||(FIX&&FIX._ix[t]);return n&&distNM(ap,n)>8});
+    return ch.length?[ch[ch.length-1]]:procTokens(x.p.n);
+  };
+  (procs||[]).filter(x=>x.ok===1).forEach(x=>endOf(x).forEach(t=>{
     if(!G.nodes[t]){   // 航空路に乗っていない方式の終点(羽田 OPPAR/ISOGO、小牧 IBUKI 等)は FIX 表から点を足して最寄りへつなぐ
       const f=FIX&&FIX._ix[t];if(!f||!usable(t))return;
       G.nodes[t]={n:t,lat:f.lat,lng:f.lng,id:f.id};
@@ -4998,7 +5009,12 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   //   最寄りの点ではなく IAF へ向かう経路になる(立川→下総は OMIYA から直接ではなく TOHNE 経由)
   (iacs||[]).filter(x=>x.ok===1&&x.p.iaf).forEach(x=>x.p.iaf.forEach(t=>{
     if(!G.nodes[t]){const f=FIX&&FIX._ix[t];if(!f||!usable(t))return;
-      G.nodes[t]={n:t,lat:f.lat,lng:f.lng,id:f.id};near(G.nodes[t],5).forEach(({n,d})=>add(t,n.n,{d:d*1.15,tr:1,tag:'IAF→航空路(仮)'}))}
+      G.nodes[t]={n:t,lat:f.lat,lng:f.lng,id:f.id};
+      // ⚠ 進入は**外側から**入る。IAFより飛行場に近い点と仮線で結ぶと、飛行場の上を通ってから
+      //   IAFへ戻る経路になる(館山で TATEYAMA→SAPIM→RJTE になった)。遠い側だけに繋ぐ
+      const dI=distNM(ap,G.nodes[t]);
+      near(G.nodes[t],6).filter(({n})=>distNM(ap,n)>dI).forEach(({n,d})=>add(t,n.n,{d:d*1.15,tr:1,tag:'IAF→航空路(仮)'}));
+    }
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
     add(k,t,{d:distNM(ap,G.nodes[t]),tr:1,tag:'IAF',proc:x});linked++;
   }));
@@ -5088,27 +5104,32 @@ function wxJudge(icao,needVis,needCig){
 let IACMIN=null;
 async function loadIacMin(){if(IACMIN)return IACMIN;try{const r=await fetch('iacmin.json?v='+VER_TAG);IACMIN=await r.json()}catch(e){IACMIN={f:{}}}return IACMIN}
 /* 選んだ進入方式のミニマ表(IAC図の原文)。proc の並び順 n 番目 = 図の AD2.24-IAC-n */
-/* 原文の表に薄い罫線を敷く。⚠ 等幅フォント前提: 縦線は「全行が空白の列」の真ん中に 1ch 単位で置く。
-   横線は line-height(PRE_LH)ごと。背景のグラデーションなので選択・コピーの邪魔にならない */
-const PRE_LH=15;
-function ruledPre(txt,cls){
+/* AIPの表(原文)を**本物の表**にして罫線を出す。
+   ⚠ 等幅で出力された表なので「**全行が空白の列**」が列の区切り。そこで切れば値が分断されない。
+   ⚠ 表の下の英文の注記は横いっぱいに伸びるので、列の判定から外して表の下に文として出す
+   ⚠ セルが縦結合された表なので空セルが多く出るが、**数値は動かさない**(解釈しない方針) */
+function aipTable(txt){
   const lines=String(txt).replace(/\t/g,'    ').split('\n');
-  const w=Math.max(...lines.map(l=>l.length),1);
-  // ⚠ 表の下の注記(英文)は横いっぱいに伸びるので、縦線の判定からは外す(残すと区切りが1本も出ない)
-  const tbl=lines.filter(l=>!/[a-z]{5,}/.test(l));
-  const base=tbl.length>2?tbl:lines;
-  const blank=[];for(let c=0;c<w;c++)blank[c]=base.every(l=>(l[c]||' ')===' ');
-  const cols=[];let st=-1;
+  const isNote=l=>/[a-z]{5,}/.test(l);
+  const tbl=lines.filter(l=>l.trim()&&!isNote(l)), note=lines.filter(l=>l.trim()&&isNote(l));
+  if(tbl.length<2)return `<pre class="tomin">${lines.join('\n').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>`;
+  const w=Math.max(...tbl.map(l=>l.length));
+  const blank=[];for(let c=0;c<w;c++)blank[c]=tbl.every(l=>(l[c]||' ')===' ');
+  const cut=[];let st=-1;
   for(let c=0;c<=w;c++){
     if(c<w&&blank[c]){if(st<0)st=c}
-    else{if(st>0&&c-st>=4&&c<w)cols.push((st+c)/2);st=-1}
+    else{if(st>0&&c-st>=3)cut.push(Math.round((st+c)/2));st=-1}
   }
-  const H=lines.length*PRE_LH;
-  const lay=cols.map(c=>`linear-gradient(var(--ln),var(--ln)) ${c.toFixed(1)}ch 0/1px ${H}px no-repeat`);
-  lay.push(`repeating-linear-gradient(transparent 0 ${PRE_LH-1}px,var(--ln) ${PRE_LH-1}px ${PRE_LH}px) 0 0/100% ${H}px no-repeat`);
-  lay.push('var(--bg)');
-  const esc=lines.map(l=>l.replace(/&/g,'&amp;').replace(/</g,'&lt;')).join('\n');
-  return `<pre class="tomin ${cls||''}" style="background:${lay.join(',')}">${esc}</pre>`;
+  const rows=tbl.map(l=>{const cs=[];let pv=0;cut.forEach(c=>{cs.push(l.slice(pv,c).trim());pv=c});cs.push(l.slice(pv).trim());return cs});
+  const nc=Math.max(...rows.map(r=>r.length));
+  const keep=[];for(let i=0;i<nc;i++)if(rows.some(r=>(r[i]||'').trim()))keep.push(i);
+  const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  // 列に割れなかった(区切りが見つからない)ものは、表にすると桁が崩れるので原文のまま出す
+  if(keep.length<2)return `<pre class="tomin">${lines.map(l=>esc(l)).join('\n')}</pre>`;
+  const body=rows.filter(r=>keep.some(i=>(r[i]||'').trim()))
+    .map((r,k)=>`<tr>${keep.map(i=>`<${k===0?'th':'td'}>${esc(r[i]||'')}</${k===0?'th':'td'}>`).join('')}</tr>`).join('');
+  return `<div class="aipWrap"><table class="aipTbl">${body}</table></div>`+
+    (note.length?`<div class="aipNote">${note.map(l=>esc(l.trim())).join('<br>')}</div>`:'');
 }
 /* 代替飛行場としての最低気象条件(AIP AD 1.1.6.10.1.6)。使える進入方式の種類で足す量が変わる */
 function altMinRule(sel){
@@ -5130,7 +5151,7 @@ function iacMinHtml(icao,sel){
   const list=PROC.f.filter(x=>x.icao===icao&&x.k==='IAC'),n=list.indexOf(sel.p)+1;
   const blk=IACMIN&&IACMIN.f&&IACMIN.f[icao+'|'+n];
   return `<div style="margin-top:8px"><b style="font-size:11px;color:var(--dim)">進入ミニマ ${icao} ${sel.p.n}(AIP IAC 図の表・原文)</b>`+
-    (blk?ruledPre(blk):'<div class="ifrNa">この図の表は読めなかった(図で確認)</div>')+'</div>';
+    (blk?aipTable(blk):'<div class="ifrNa">この図の表は読めなかった(図で確認)</div>')+'</div>';
 }
 let TOMIN=null;
 async function loadTomin(){if(TOMIN)return TOMIN;try{const r=await fetch('tomin.json?v='+VER_TAG);TOMIN=await r.json()}catch(e){TOMIN={f:{}}}return TOMIN}
@@ -5166,13 +5187,23 @@ document.getElementById('ifrPlan').onclick=async function(){
     G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
   }
   if(R.err){out.innerHTML=`<div class="ifrWarn">${R.err}</div>`;return}
+  // 経路の最後が IAF ならその進入方式を選ぶ(そうでなければ ILS>RNP>… の優先順)。代替の起点に使うので先に決める
+  const lastP=l=>l&&l.e.proc&&l.e.proc.p.k==='IAC'?l.e.proc:null;
+  const selIac=lastP(R.legs[R.legs.length-1])||bestIac(iac);
   let RA=null;
-  if(alt){const ka=ifrLinkAp(G,alt,'STAR',starA,ac,iacA);RA=ifrRoute(G,kt,ka,[]);if(RA.err){RA=null}}
+  if(alt){
+    // ⚠ 代替へ向かうのは**進入復行(ミスドアプローチ)の待機点から**。目的地の選んだ進入方式の
+    //   "…to XXXX and hold" を起点にする(取れなければ飛行場から)。R を出した後に辺を足す(往路に使わせない)
+    const mh=selIac&&selIac.p.mah, mn=mh&&(G.nodes[mh]||(FIX&&FIX._ix[mh]));
+    if(mn&&!G.nodes[mh]){G.nodes[mh]={n:mh,lat:mn.lat,lng:mn.lng,id:mn.id};
+      const nr=Object.values(G.nodes).filter(n=>!n.ap&&n.n!==mh).map(n=>({n,d:distNM(G.nodes[mh],n)})).sort((x,y)=>x.d-y.d).slice(0,6);
+      nr.forEach(({n,d})=>{(G.adj[mh]=G.adj[mh]||[]).push({to:n.n,d:d*1.15,tr:1,tag:'ミスド→航空路(仮)'});(G.adj[n.n]=G.adj[n.n]||[]).push({to:mh,d:d*1.15,tr:1,tag:'ミスド→航空路(仮)'})}); }
+    if(mn){(G.adj[kt]=G.adj[kt]||[]).push({to:mh,d:distNM(dst,G.nodes[mh]),tr:1,tag:'ミスドアプローチ',proc:selIac});}
+    const ka=ifrLinkAp(G,alt,'STAR',starA,ac,iacA);RA=ifrRoute(G,kt,ka,[]);if(RA.err){RA=null}
+  }
   const CA=cruiseAlt(R.legs,ac,G);
   const tas=num('tas')||100,ff=num('ff')||0,fob=num('fob')||0;
-  // 経路の最後が IAF ならその進入方式を選ぶ(そうでなければ ILS>RNP>… の優先順)
-  const lastP=l=>l&&l.e.proc&&l.e.proc.p.k==='IAC'?l.e.proc:null;
-  const selIac=lastP(R.legs[R.legs.length-1])||bestIac(iac),selIacA=(RA&&lastP(RA.legs[RA.legs.length-1]))||bestIac(iacA);
+  const selIacA=(RA&&lastP(RA.legs[RA.legs.length-1]))||bestIac(iacA);
   // レグごとの風: 既定は全部「＝前」(共通の風を継ぐ)。共通の風は前回値か飛行ログ側の風
   const wb=store.get('hnav.ifrWind')||{d:num('wDir')||0,s:num('wSpd')||0};
   const wind={base:{d:wb.d||0,s:wb.s||0},main:R.legs.map(()=>({same:true})),alt:RA?RA.legs.map(()=>({same:true})):[]};
@@ -5307,7 +5338,7 @@ function renderIfrOut(P){
     ${alt?`<div>代替 ${alt.icao}: ${wxLine(alt.icao)}</div>`:''}
     <div class="hint" style="margin-top:4px">METARは ${METAR&&METAR.updated?METAR.updated+' 更新(UTC)':'未取得'}。TAF・NOTAMは別途確認</div>
     <div style="margin-top:8px"><b style="font-size:11px;color:var(--dim)">離陸ミニマ ${dep.icao}(AIP AD 2.22 原文)</b>
-      ${tomin?ruledPre(tomin):'<div class="ifrNa">AIP に記載なし(自衛隊・米軍飛行場など)</div>'}</div>
+      ${tomin?aipTable(tomin):'<div class="ifrNa">AIP に記載なし(自衛隊・米軍飛行場など)</div>'}</div>
     ${iacMinHtml(dst.icao,S.iac)}
     ${alt?iacMinHtml(alt.icao,S.iacA)+altMinRule(S.iacA):''}
     <div class="hint">ミニマ表は図の文字をそのまま並べたもの(列は分類 A/B/C/D、DA(H)/MDA(H)・RVR/CMV・VIS)。数値の読み違いを避けるため解釈はしていない。社内ミニマは別途</div>

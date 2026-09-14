@@ -146,6 +146,52 @@ def minima_by_page(txt):
     return res
 
 
+END_RE = re.compile(r'\bto\s+([A-Z][A-Z0-9]{2,6})\b')
+# ⚠ "…to ANOBU and" と "hold." の間に**別の欄の数字が挟まる**(立川 IAC-1 の "35")。
+#   小文字を含まない範囲なら間に何か入っていても続きとみなす
+MAH_RE = re.compile(r'((?:[A-Z0-9][A-Z0-9./]*\s+){0,3}[A-Z][A-Z0-9]{2,6})\s+and\s+[A-Z0-9°./\s]{0,60}?hold\b')
+MAH_GEN = {'DME', 'VOR', 'VORTAC', 'TACAN', 'NDB', 'VDP', 'SDF', 'MAPT', 'FAF', 'IF', 'THE', 'AND', 'FIX', 'ARC'}
+
+
+def narr_by_page(txt, kind):
+    """SID/STAR の図の説明文から "…via SHT R297 to OMIYA." の **到達点の並び**を拾う。
+    ⚠ 索引の方式名は地名や方角のことがある(下総の "WEST" は OMIYA 行き)。名前だけでは経路に繋げない。
+    ⚠ 出発飛行場自身の navaid も "to SHT TACAN" の形で混ざるので、**使う側で近すぎる点を捨てる**"""
+    global KNOWN
+    if KNOWN is None: KNOWN = known_points()
+    res = {}
+    for pg in txt.split('\f'):
+        m = re.search(r'AD\s?2\.24-' + kind + r'-(\d+)', pg)
+        if not m: continue
+        L = [dec(l) for l in pg.split('\n')]
+        nar = ' '.join(l.strip() for l in L if re.search(r'RWY\d+\s*:|proceed|intercept|via |Cross ', l))
+        seen = []
+        for x in END_RE.findall(nar):
+            if (not KNOWN or x in KNOWN) and x not in seen: seen.append(x)
+        if seen: res[int(m.group(1))] = seen
+    return res
+
+
+def mah_by_page(txt):
+    """進入図の "SHT R346 to TOHNE and hold." = ミスドアプローチの待機点"""
+    global KNOWN
+    if KNOWN is None: KNOWN = known_points()
+    res = {}
+    for pg in txt.split('\f'):
+        m = re.search(r'AD\s?2\.24-IAC-(\d+)', pg)
+        if not m: continue
+        nar = ' '.join(dec(l).strip() for l in pg.split('\n'))
+        # ⚠ 待機点は ENR 4.3 に無い進入固有の点のこともある(館山の LULKU)。名前は拾って持ち、
+        #   地図に置けるかは使う側で判断する
+        x = MAH_RE.search(nar)
+        if not x: continue
+        ph = re.sub(r'\s+', ' ', x.group(1)).strip()
+        last = ph.split()[-1]
+        # 地図に置ける点(FIX/navaid)なら name、置けない書き方("TET 15 DME" 等)は文字だけ残す
+        res[int(m.group(1))] = (last, ph) if (last not in MAH_GEN and (not KNOWN or last in KNOWN)) else (None, ph)
+    return res
+
+
 def parse_one(pdf):
     txt = subprocess.run(['pdftotext', '-layout', pdf, '-'], capture_output=True, text=True).stdout
     icao = os.path.basename(pdf)[:4]
@@ -198,6 +244,15 @@ def parse_one(pdf):
     # ミニマ表(原文)は別ファイル(iacmin.json)。proc.json 側には「あり」の印だけ
     for n, blk in minima_by_page(txt).items():
         if 1 <= n <= len(iacs): iacs[n-1]['mn'] = 1; MINIMA[f"{icao}|{n}"] = blk
+    for n, (nm, ph) in mah_by_page(txt).items():
+        if 1 <= n <= len(iacs):
+            if nm: iacs[n-1]['mah'] = nm
+            iacs[n-1]['mahT'] = ph
+    # SID/STAR の図の到達点(索引の名前が地名・方角でも経路に繋げるように)
+    for kind in ('SID', 'STAR'):
+        ks = [r for r in out if r['k'] == kind]
+        for n, names in narr_by_page(txt, kind).items():
+            if 1 <= n <= len(ks): ks[n-1]['to'] = names
     return out
 
 
@@ -216,8 +271,8 @@ def main():
     print(f"  ミニマ表 {len(MINIMA)} 図 → iacmin.json ({os.path.getsize(dst2)/1024:.0f}KB)")
     ap = len(set(x['icao'] for x in out))
     c = {k: sum(1 for x in out if x['k'] == k) for _, k in KIND}
-    ni = sum(1 for x in out if x.get('iaf'))
-    print(f"{ap} 空港 SID {c['SID']} / STAR {c['STAR']} / IAC {c['IAC']}(IAF付き {ni}) → proc.json ({os.path.getsize(dst)/1024:.0f}KB) AIRAC:{eff}")
+    ni = sum(1 for x in out if x.get('iaf')); nt = sum(1 for x in out if x.get('to')); nm = sum(1 for x in out if x.get('mah'))
+    print(f"{ap} 空港 SID {c['SID']} / STAR {c['STAR']} / IAC {c['IAC']}(IAF {ni} / ミスド待機 {nm}) ・ 図の到達点 {nt} → proc.json ({os.path.getsize(dst)/1024:.0f}KB) AIRAC:{eff}")
 
 
 if __name__ == '__main__':
