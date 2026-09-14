@@ -26,7 +26,7 @@ heli-nav-pwa/            … 場所: ~/Claudeディレクトリ/heli-nav-pwa (gi
 ├─ sw.js         … Service Worker(オフラインキャッシュ)
 ├─ manifest.json … PWAマニフェスト
 ├─ IFR.md                    … IFRモードの設計メモ(Stage 1 完了・再開はここから)
-├─ fix.json / awy.json / proc.json … IFR用データ(FIX・航空路・方式索引)。tools/gen_fix.py, gen_awy.py, gen_proc.py が生成
+├─ fix.json / awy.json / proc.json / tomin.json … IFR用データ(FIX・航空路・方式索引・離陸ミニマ原文)。tools/gen_fix.py, gen_awy.py, gen_proc.py, gen_tomin.py が生成
 ├─ icon-192.png / icon-512.png … アプリアイコン(男の子+プロペラ)
 ├─ icon-512-maskable.png … Android用。⚠ OSが円/角丸に切り抜くので**中央80%に収める**
 ├─ favicon.ico / icon-y-180.png … タブのアイコン。⚠ 16pxだと顔が潰れるので**「y」マーク**
@@ -310,6 +310,10 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 - **飛行ログ表の見出し2段目の sticky top は実測**(`fixLogHead()`・v6-148)。CSS の 26px 固定だと
   iPhone ではフォントの都合で1段目の高さが違い、2段目が食い込む/隙間が空く(「タイトル行の段ズレ」)。
   ResizeObserver で1段目の高さが変わるたびに追従する(display:none→表示、フォント読込)
+- **他機(ADS-B)は airplanes.live が 2026-09 から要連絡制(403)**になり常に DEMO になっていた(ユーザー指摘)。
+  `TFC_SRC` で airplanes.live → adsb.lol → adsb.fi を順に試し、状態欄に理由を出す。⚠ adsb.lol / adsb.fi は
+  curl では 200 だが **CORS ヘッダを返さない**ので、ブラウザから取れるかは実機で確認が要る(プレビュー窓は
+  cross-origin fetch が全部失敗するので検証できない)。確実なのは airplanes.live に連絡して許可をもらうこと
 - **飛行ログ表のFIX列は `position:sticky;left:0`**(v6-145)。実機で表が横に数十px流れると
   名前の先頭が隠れて「2行目だけずれて見える」不具合があった(番号の行は≡の余白で気づかない)。
   ⚠ 固定列は背景を不透明にしないと下の列が透ける。`nextwp`/`dctOnRow` の半透明ハイライトは
@@ -944,6 +948,19 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     飛行ログ側は**名前が "(…)" のポイントを注記点**(`isSubWp`)として扱い、区間を割らずに直前の実ポイントからの
     距離/時間/燃料を**括弧の内数**で出す(合計・残り・レグ計算・ETA積算には数えない。行は斜体アンバー `subRow`)。
     印刷は表のクローンなのでそのまま載る。⚠ 内数の時間は飛行ログ側のTAS/風で出るので、IFR画面(上昇速度)と数分ずれる
+  - **SIDの形(Stage 3)** = `SID_DEF`(index.html)。図の文章を手で写した手順(climbTo / turn R|L hdg / intercept)から
+    `sidTrackOf()` が上昇率・上昇速度で折れ線を組む。標準旋回3°/sの半径=TAS/188.5NM。会合はラジアル(真方位)との
+    交点(`lineRadialX`・局所平面)。当面は**立川 EDARR ONE / OMIYA ONE**(RWY01/19)だけ。
+    ⚠ 図で "turn right..." と会合針路が省略されているものは30°会合と仮定(`assumed:1`・画面に表示)。
+    ⚠ 滑走路の真方位は AD 2.12 が "To be issued" なので OSM から(01/19=000.2°T)。TNT は AD 2.19
+    - 形があれば RCA は折れ線に沿って(`rcaOnTrack`)、「SID実距離」の既定値も折れ線の長さ。手入力があればそちら優先
+    - 「地図に反映」で SID線(水色破線 `sidLayer`)を描き、SID終点の区間距離を経路長で上書き(`w.dOv`・ログでは `15.6*`)。
+      ⚠ SID線は `loadRouteObj`(→`clearAllWp` が sidLayer も消す)の**後**に描く
+  - **区間距離の上書き `w.dOv`**: routeObj の wp 配列の4つ目、undo のスナップショットにも入れる。マーカーを動かしたら消す
+  - **ILS カテゴリ**(装備 `ilsCat` 1/2/3): 索引名に (CAT II & III) が付く図は CAT II/III 専用で、CAT I の機体では✗。CAT I の図は別にある
+  - **最低気象条件の目安の表は廃止**(ユーザー: 社内ミニマは自分で把握、AIPにあるものだけ出す)。
+    出発の**離陸ミニマは AD 2.22 の原文**を `tools/gen_tomin.py` → `tomin.json`(105空港・126KB)から `<pre>` で出す。
+    表の構造(RWY×ACFT CAT×灯火、LVP時の*)が複雑なので**数値に解釈しない**。進入ミニマは図(取れない)
   - 降下(TOD)は未実装
   - 地図の FIX は **2ボタン**: `FIX`(navaid評定あり・紫▲△)と `RNAV点`(RNAV専用・水色◇)。同じ `fixLayer` を
     2つのフラグ(`fixOn`/`fixrOn`)で描き分ける。両方OFFになったときだけレイヤーを外す

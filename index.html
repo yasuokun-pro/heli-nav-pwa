@@ -388,7 +388,7 @@
   .libRow input.sel{width:17px;height:17px;accent-color:var(--grn);margin-right:2px}
   .libRow{display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px}
   /* IFR計画(別画面)。libModal と同じ作法の全画面シート */
-  .tabs button.ifrTab{flex:0 0 auto;color:var(--cyn);border-bottom-color:transparent;padding:10px 12px;font-family:var(--mono);font-weight:700;letter-spacing:.08em}
+  .tabs button.ifrTab{flex:1;color:var(--cyn);border-bottom-color:transparent;padding:10px 4px;font-family:var(--mono);font-weight:700;letter-spacing:.08em}   /* 他のタブと同じ幅(5等分) */
   #ifrModal{position:fixed;inset:0;z-index:2000;background:rgba(4,10,18,.85);display:none;align-items:stretch;justify-content:center}
   #ifrModal .sheet{background:var(--panel);border:1px solid var(--line);width:100%;max-width:760px;height:100%;overflow:auto;padding:14px 16px 40px}
   #ifrModal .ifrHd{display:flex;align-items:center;gap:10px;position:sticky;top:-14px;background:var(--panel);padding:8px 0;z-index:2;border-bottom:1px solid var(--line)}
@@ -417,6 +417,7 @@
   table.ifrLog td.r{text-align:right}
   table.ifrLog td.brg{font-size:10px;color:var(--dim);line-height:1.25;white-space:nowrap}
   table.ifrLog tr.rca td{color:var(--amb);font-style:italic}
+  pre.tomin{font-family:var(--mono);font-size:9.5px;line-height:1.3;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;overflow:auto;max-height:260px;margin:4px 0;white-space:pre}
   table.ifrLog .wIn{white-space:nowrap;font-size:11px}
   table.ifrLog .wIn input[type=number]{width:52px;padding:2px 3px;font-size:11px}
   table.ifrLog .wIn input[type=checkbox]{width:14px;height:14px;vertical-align:middle;accent-color:var(--grn)}
@@ -676,7 +677,7 @@
   <div class="tabbody" id="tab-wp">
     <div class="btnrow">
       <button class="btn sh" id="btnPrint">🖨 ログ印刷 (A4横 2面)</button>
-      <span class="hint" style="align-self:center;margin:0">切り取るとA5×2枚(ニーボード用)。名前が (…) のポイントは注記点(RCA等)で、区間の内数として括弧で出る</span>
+      <span class="hint" style="align-self:center;margin:0">切り取るとA5×2枚(ニーボード用)。名前が (…) のポイントは注記点(RCA等)で、区間の内数として括弧で出る。距離の * は SID の経路長(直線でない)</span>
     </div>
     <div class="logwrap">
     <table class="fltlog">
@@ -827,6 +828,7 @@
     <label><input type="checkbox" id="acVor"> VOR</label>
     <label><input type="checkbox" id="acDme"> DME</label>
     <label><input type="checkbox" id="acIls"> ILS/LOC</label>
+    <label>ILS <select id="acIlsCat"><option value="1">CAT I</option><option value="2">CAT II</option><option value="3">CAT III</option></select></label>
     <label><input type="checkbox" id="acNdb"> ADF(NDB)</label>
     <label><input type="checkbox" id="acTacan"> TACAN</label>
     <label><input type="checkbox" id="acPress"> 与圧</label>
@@ -845,11 +847,9 @@
     <label>目的 <span class="apWrap"><input type="text" id="ifrDst" class="ap" placeholder="RJNA" autocomplete="off" autocapitalize="characters"><div class="apDrop"></div></span><span class="nm" id="ifrDstN"></span></label>
     <label>代替 <span class="apWrap"><input type="text" id="ifrAlt" class="ap" placeholder="RJGG" autocomplete="off" autocapitalize="characters"><div class="apDrop"></div></span><span class="nm" id="ifrAltN"></span></label>
     <label>経由(任意) <input type="text" id="ifrVia" style="width:200px" placeholder="FIX名 空白区切り" autocapitalize="characters"></label>
+    <label id="ifrRwyL" style="display:none">出発RWY <select id="ifrRwy"></select></label>
   </div>
 
-  <h4>3. 最低気象条件の目安(編集可)</h4>
-  <table class="ifrMin"><tbody id="ifrMinBody"></tbody></table>
-  <div class="hint">既定値は一般的な目安。実際の値は各IACのミニマ欄・AD 2.22(離陸)・社内規程で確認すること</div>
 
   <div class="btnrow" style="margin-top:14px">
     <button class="btn go" id="ifrPlan">計画を作る</button>
@@ -877,7 +877,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-151';
+const VER_TAG='v6-152';
 const BUILD='2026-09-14';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3387,7 +3387,7 @@ function syncWpIcons(){wps.forEach((w,k)=>{
 /* ── 元に戻す(ルート操作の履歴) ── */
 const undoStack=[];
 function pushUndo(){ // 変更前のルートを退避(追加/削除/移動/改名/並べ替え/読込/クリアの直前に呼ぶ)
-  const snap={wp:wps.map(w=>[w.lat,w.lng,w.name]),seq:wpSeq};
+  const snap={wp:wps.map(w=>w.dOv?[w.lat,w.lng,w.name,w.dOv]:[w.lat,w.lng,w.name]),seq:wpSeq};
   const top=undoStack[undoStack.length-1];
   // 変化が無いものは積まない(名称欄にフォーカスしただけ等で空振りが溜まる)
   if(top&&top.seq===snap.seq&&JSON.stringify(top.wp)===JSON.stringify(snap.wp))return;
@@ -3399,7 +3399,7 @@ function doUndo(){
   if(!undoStack.length)return;
   const s=undoStack.pop();
   clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.length=0;
-  s.wp.forEach(w=>addWp(w[0],w[1],w[2]));
+  s.wp.forEach(w=>{addWp(w[0],w[1],w[2]);if(w[3])wps[wps.length-1].dOv=+w[3]});
   wpSeq=s.seq;nextIdx=0;redraw();
   const b=document.getElementById('btnUndo');if(b)b.disabled=!undoStack.length;
 }
@@ -3428,7 +3428,7 @@ function addWp(lat,lng,name,at){ // at を渡すとその位置へ挿入、省�
   });
   marker.on('drag',ev=>{
     if(!w.armed){marker.setLatLng([w.lat,w.lng]);return}   // 未解錠なら動かさない
-    w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;redraw();
+    w.lat=ev.latlng.lat;w.lng=ev.latlng.lng;delete w.dOv;redraw();   // 動かしたら経路長の上書きは無効
   });
   marker.on('dragend',()=>{w.dragging=false;disarmWp(w);redraw()});
   marker.bindPopup(()=>{ // タップで名称+操作(D→/★/削除)。長押しはドラッグ移動専用
@@ -3463,7 +3463,7 @@ function addWp(lat,lng,name,at){ // at を渡すとその位置へ挿入、省�
   }
   return w;
 }
-function clearAllWp(){clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.length=0;wpSeq=0}
+function clearAllWp(){clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.length=0;wpSeq=0;if(typeof sidLayer!=='undefined')sidLayer.clearLayers()}
 
 /* ── 経路の途中へWP挿入 ── */
 function nearestLeg(latlng){ // クリック位置に最も近い区間の番号(手前側WPのindex)
@@ -3595,10 +3595,15 @@ function redraw(){
   wps.forEach((w,i)=>{
     if(i===0){legs.push(null);return}
     const from=wps[lastReal];
-    const d=distNM(from,w);
+    const sub=isSubWp(w);
+    // 注記点は名前に "12.3NM" があればそれを距離にする(SIDの経路長など、直線距離と違うとき)。
+    // "(RCA …" は上昇速度(装備欄)で時間を出して IFR計画の表と揃える
+    const mnm=sub&&/([\d.]+)NM/.exec(w.name);
+    const d=mnm?parseFloat(mnm[1]):(w.dOv||distNM(from,w));   // dOv=SIDの経路長など(直線でない区間)
     const tc=trueBrg(from,w);
-    const tri=windTri(tc);
-    const L={d,mc:magOf(tc),bad:true,sub:isSubWp(w)};
+    const vcl=sub&&/^\(RCA/.test(w.name)?+((store.get('hnav.acft')||{}).vcl||0):0;
+    const tri=vcl?windTriN(tc,vcl,num('wDir'),num('wSpd')):windTri(tc);
+    const L={d,mc:magOf(tc),bad:true,sub};
     if(tri&&!tri.bad){
       L.bad=false;
       L.mh=magOf(tri.th);L.wca=tri.wca;
@@ -3625,7 +3630,7 @@ function redraw(){
   wps.forEach((w,i)=>{
     const L=legs[i]||null;                       // このFIXへ到達する区間
     const sub=!!(L&&L.sub),par=x=>sub&&x!==''?'('+x+')':x;   // 注記点は括弧つき(内数)
-    const leg=L?par(L.d.toFixed(1)):'';
+    const leg=L?par(L.d.toFixed(1))+(w.dOv&&!sub?'*':''):'';   // * = 経路長の上書き(SID)
     const mc=L?fmt3(L.mc)+'°':'';
     const gs=(L&&!L.bad)?Math.round(L.gs):(L?'不可':'');
     const ete=(L&&!L.bad)?par(fmtHM(L.h)):(L?'—':'');
@@ -4134,14 +4139,15 @@ rebuildDrawLayer(); // 起動時: 表示ONのレイヤーを地図へ
 function routeObj(){
   return {v:1,
     set:{tas:num('tas'),wDir:num('wDir'),wSpd:num('wSpd'),varW:num('varW'),ff:num('ff'),fob:num('fob')},
-    wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name])};
+    // 4つ目は区間距離の上書き(SIDの経路長など。IFR計画の「地図に反映」が入れる)。無ければ直線距離
+    wp:wps.map(w=>w.dOv?[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name,+w.dOv.toFixed(1)]:[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name])};
 }
 function saveState(){store.set('hnav.route',routeObj())}
 function loadRouteObj(o,fit){
   if(!o||!Array.isArray(o.wp))throw new Error('bad');
   if(wps.length)pushUndo();
   clearAllWp();
-  o.wp.forEach(w=>addWp(w[0],w[1],w[2]));
+  o.wp.forEach(w=>{addWp(w[0],w[1],w[2]);if(w[3])wps[wps.length-1].dOv=+w[3]});
   if(o.set){['tas','wDir','wSpd','varW','ff','fob'].forEach(k=>{
     if(k==='varW'&&varAuto)return; // AUTO時は保存値を使わずルート位置から推定する
     if(o.set[k]!==undefined)document.getElementById(k).value=o.set[k]})}
@@ -4732,14 +4738,28 @@ function showTraffic(list,demo){
   });
   renderAlert(list);
   document.getElementById('tfcStatus').innerHTML=demo
-    ?'API未接続のためデモ表示<span class="tag">DEMO</span>'
-    :'airplanes.live 受信データ(ADS-B/MLAT搭載機のみ・15s自動更新)';
+    ?`API未接続のためデモ表示<span class="tag">DEMO</span> <span style="color:var(--dim)">${tfcErr}${/403/.test(tfcErr)?'(airplanes.live は運営への連絡が要る)':''}</span>`
+    :`${tfcSrcName} 受信データ(ADS-B/MLAT搭載機のみ・15s自動更新)`;
 }
+/* ⚠ airplanes.live は 2026-09 から「運営へ連絡した利用者だけ」になり 403 を返す(→DEMO表示になっていた)。
+   同じ readsb 形式の adsb.lol / adsb.fi を順に試す。全部だめならデモ+理由を表示 */
+const TFC_SRC=[
+  {n:'airplanes.live',u:c=>`https://api.airplanes.live/v2/point/${c.lat.toFixed(4)}/${c.lng.toFixed(4)}/50`,k:'ac'},
+  {n:'adsb.lol',u:c=>`https://api.adsb.lol/v2/point/${c.lat.toFixed(4)}/${c.lng.toFixed(4)}/50`,k:'ac'},
+  {n:'adsb.fi',u:c=>`https://opendata.adsb.fi/api/v2/lat/${c.lat.toFixed(4)}/lon/${c.lng.toFixed(4)}/dist/50`,k:'aircraft'},
+];
+let tfcSrcName='',tfcErr='';
 async function fetchTraffic(){
   const c=ownPos||map.getCenter(); // GPS中は自機中心、なければ地図中心
   try{
-    const r=await fetch(`https://api.airplanes.live/v2/point/${c.lat.toFixed(4)}/${c.lng.toFixed(4)}/50`);
-    const j=await r.json();
+    let j=null;const errs=[];
+    for(const S of TFC_SRC){
+      try{const r=await fetch(S.u(c));if(!r.ok){errs.push(`${S.n} ${r.status}`);continue}
+        const o=await r.json();j={ac:o[S.k]||[]};tfcSrcName=S.n;break}
+      catch(e){errs.push(`${S.n} 取得不可`)}
+    }
+    tfcErr=errs.join(' / ');
+    if(!j)throw new Error(tfcErr);
     const ac=(j.ac||[]).filter(a=>a.lat&&a.lon).map(a=>({
       cs:(a.flight||'').trim()||a.r||a.hex,
       lat:a.lat,lng:a.lon,
@@ -4795,7 +4815,7 @@ document.querySelectorAll('.tabs button[data-tab]').forEach(btn=>{   // ⚠ IFR 
 /* ───────── IFR計画(別画面・IFR.md Stage 2) ─────────
    機体の装備で使える経路・方式を絞り、出発→目的(→代替)の最短経路を fix.json/awy.json のグラフで探し、
    巡航高度(MEA・奇偶・与圧上限)と方式候補(proc.json)・気象の目安を出す。「地図に反映」で既存のルートに落とす */
-const ACFT_DEF={gnss:1,rnav:0,vor:1,dme:1,ils:1,ndb:0,tacan:0,press:0,maxAlt:10000,vhf:1,uhf:0,roc:500,vcl:80,dev:''};
+const ACFT_DEF={gnss:1,rnav:0,vor:1,dme:1,ils:1,ilsCat:1,ndb:0,tacan:0,press:0,maxAlt:10000,vhf:1,uhf:0,roc:500,vcl:80,dev:''};
 const IFR_MIN_DEF=[   // [key, 表示, 値, 単位]
   ['toVis','離陸 視程',1600,'m'],
   ['precDa','精密進入(ILS) DH',200,'ft'],['precVis','精密進入 RVR/視程',550,'m'],
@@ -4807,43 +4827,40 @@ const IFR_MIN_DEF=[   // [key, 表示, 値, 単位]
 let ifrPlanRes=null;
 function acftGet(){
   const g=id=>document.getElementById(id);
-  return {gnss:+g('acGnss').checked,rnav:+g('acRnav').checked,vor:+g('acVor').checked,dme:+g('acDme').checked,ils:+g('acIls').checked,
+  return {gnss:+g('acGnss').checked,rnav:+g('acRnav').checked,vor:+g('acVor').checked,dme:+g('acDme').checked,ils:+g('acIls').checked,ilsCat:+g('acIlsCat').value||1,
     ndb:+g('acNdb').checked,tacan:+g('acTacan').checked,press:+g('acPress').checked,
     maxAlt:parseFloat(g('acMaxAlt').value)||10000,vhf:+g('acVhf').checked,uhf:+g('acUhf').checked,
     roc:parseFloat(g('acRoc').value)||0,vcl:parseFloat(g('acVcl').value)||0,dev:g('acDev').value.trim()};
 }
 function acftSet(a){
   const g=id=>document.getElementById(id);
-  g('acGnss').checked=!!a.gnss;g('acRnav').checked=!!a.rnav;g('acVor').checked=!!a.vor;g('acDme').checked=!!a.dme;g('acIls').checked=!!a.ils;
+  g('acGnss').checked=!!a.gnss;g('acRnav').checked=!!a.rnav;g('acVor').checked=!!a.vor;g('acDme').checked=!!a.dme;g('acIls').checked=!!a.ils;g('acIlsCat').value=a.ilsCat||1;
   g('acNdb').checked=!!a.ndb;g('acTacan').checked=!!a.tacan;g('acPress').checked=!!a.press;g('acMaxAlt').value=a.maxAlt||10000;
   g('acVhf').checked=!!a.vhf;g('acUhf').checked=!!a.uhf;
   g('acRoc').value=a.roc!=null?a.roc:500;g('acVcl').value=a.vcl!=null?a.vcl:80;g('acDev').value=a.dev||'';
 }
-function ifrMinGet(){const o={};IFR_MIN_DEF.forEach(([k])=>{o[k]=parseFloat(document.getElementById('min_'+k).value)||0});return o}
+function ifrMinGet(){return {}}   // 目安の表は廃止(2026-09-14)。ミニマは AIP(離陸=AD 2.22 原文) と社内規程で
 function ifrSaveInputs(){
   store.set('hnav.acft',acftGet());
-  store.set('hnav.ifrMin',ifrMinGet());
   store.set('hnav.ifr',{dep:document.getElementById('ifrDep').value.trim().toUpperCase(),
     dst:document.getElementById('ifrDst').value.trim().toUpperCase(),alt:document.getElementById('ifrAlt').value.trim().toUpperCase(),
-    via:document.getElementById('ifrVia').value.trim().toUpperCase(),withAlt:document.getElementById('ifrWithAlt').checked});
+    via:document.getElementById('ifrVia').value.trim().toUpperCase(),withAlt:document.getElementById('ifrWithAlt').checked,rwy:document.getElementById('ifrRwy').value});
 }
 function apOf(icao){return icao?ASP.find(a=>a.icao===icao):null}
 function ifrApName(id,nid){const a=apOf(document.getElementById(id).value.trim().toUpperCase());document.getElementById(nid).textContent=a?a.n:''}
 async function openIfr(){
   const m=document.getElementById('ifrModal');m.style.display='flex';
   await loadAd();
-  const mb=document.getElementById('ifrMinBody');
-  if(!mb.children.length){
-    const sv=store.get('hnav.ifrMin')||{};
-    IFR_MIN_DEF.forEach(([k,lab,v,u])=>{const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${lab}</td><td><input type="number" id="min_${k}" class="n5" value="${sv[k]!==undefined?sv[k]:v}"> ${u}</td>`;mb.appendChild(tr)});
+  if(!document.getElementById('ifrDep').dataset.init){
+    document.getElementById('ifrDep').dataset.init='1';
     acftSet(Object.assign({},ACFT_DEF,store.get('hnav.acft')||{}));
     const f=store.get('hnav.ifr')||{};
     document.getElementById('ifrDep').value=f.dep||'';document.getElementById('ifrDst').value=f.dst||'';
     document.getElementById('ifrAlt').value=f.alt||'';document.getElementById('ifrVia').value=f.via||'';
     document.getElementById('ifrWithAlt').checked=!!f.withAlt;
+    document.getElementById('ifrRwy').dataset.want=f.rwy||'';
   }
-  ifrApName('ifrDep','ifrDepN');ifrApName('ifrDst','ifrDstN');ifrApName('ifrAlt','ifrAltN');
+  ifrApName('ifrDep','ifrDepN');ifrApName('ifrDst','ifrDstN');ifrApName('ifrAlt','ifrAltN');ifrRwyList();
   document.getElementById('ifrPerf').textContent=`TAS ${num('tas')}kt / FF ${num('ff')} / FOB ${num('fob')} は飛行ログ側の値を使う`;
   loadMetar();
 }
@@ -4875,7 +4892,7 @@ function apPicker(id){
       el.onpointerup=e=>{if(el._p&&Math.hypot(e.clientX-el._p[0],e.clientY-el._p[1])<8&&items[i])pick(items[i]);el._p=null};
     });
   }
-  function pick(a){inp.value=a.icao;drop.style.display='none';ifrApName(id,id+'N');inp.blur()}
+  function pick(a){inp.value=a.icao;drop.style.display='none';ifrApName(id,id+'N');if(id==='ifrDep')ifrRwyList();inp.blur()}
   inp.onfocus=render;inp.oninput=()=>{ifrApName(id,id+'N');render()};
   // 閉じるのは「一覧の外をタップ」か確定・Escape。blur で閉じると一覧のスクロール中に消える
   document.addEventListener('pointerdown',e=>{if(!inp.parentElement.contains(e.target))drop.style.display='none'});
@@ -4888,6 +4905,15 @@ function apPicker(id){
   };
 }
 ['ifrDep','ifrDst','ifrAlt'].forEach(apPicker);
+/* 出発空港に SID の形の定義があれば RWY の選択を出す */
+function ifrRwyList(){
+  const icao=document.getElementById('ifrDep').value.trim().toUpperCase(),sel=document.getElementById('ifrRwy'),lab=document.getElementById('ifrRwyL');
+  const A=SID_DEF[icao];if(!A){lab.style.display='none';return}
+  const want=sel.value||sel.dataset.want||'';
+  sel.innerHTML=Object.keys(A.rwy).map(r=>`<option value="${r}">${r}</option>`).join('');
+  if(want&&A.rwy[want])sel.value=want;lab.style.display='';
+}
+document.getElementById('ifrDep').addEventListener('input',ifrRwyList);
 
 /* 装備でその経路が使えるか。使えなければ理由(文字列)を返す */
 function awyBlock(r,ac){
@@ -5011,7 +5037,12 @@ function procOk(p,ac){
   if(p.k!=='IAC'){ if(p.rnav)return ac.gnss?{ok:1}:{ok:0,why:'RNAV方式'};
     return (ac.vor||ac.gnss||ac.tacan)?{ok:1}:{ok:0,why:'VORかTACANが要る'} }
   const t=p.typ||'';
-  if(/ILS|LOC|LDA/.test(t))return ac.ils?{ok:1,prec:/ILS/.test(t)}:{ok:0,why:'ILS受信機'};
+  if(/ILS|LOC|LDA/.test(t)){
+    if(!ac.ils)return {ok:0,why:'ILS受信機'};
+    // 索引名に (CAT II & III) が付く図は CAT II/III 専用。CAT I の機体では使えない(CAT I の図は別にある)
+    if(p.cat&&(ac.ilsCat||1)<2)return {ok:0,why:'CAT II/IIIの図(機体はCAT I)'};
+    return {ok:1,prec:/ILS/.test(t),cat:p.cat?(ac.ilsCat>=3?'CAT III':'CAT II'):'CAT I'};
+  }
   if(/^GLS/.test(t))return {ok:0,why:'GLS'};
   if(/RNP|RNAV/.test(t))return ac.gnss?{ok:1,rnp:1}:{ok:0,why:'GNSS'};
   if(/TACAN/.test(t))return ac.tacan?{ok:1}:{ok:0,why:'TACAN'};
@@ -5040,6 +5071,14 @@ function wxJudge(icao,needVis,needCig){
   const ok=okV!==false&&okC;
   return {cls:ok?'ifrOk':'ifrNg',txt:`${ok?'✓':'✗'} 視程${v.vis===null?'?':v.vis>=9999?'10km+':v.vis+'m'} 雲高${v.cig===null?'なし':v.cig+'ft'}(${obsHM(m.obs)}) 必要: 視程${needVis}m${needCig?' 雲高'+needCig+'ft':''}`};
 }
+let TOMIN=null;
+async function loadTomin(){if(TOMIN)return TOMIN;try{const r=await fetch('tomin.json?v='+VER_TAG);TOMIN=await r.json()}catch(e){TOMIN={f:{}}}return TOMIN}
+/* METAR の視程・雲高を判定せずに並べる(ミニマとの突き合わせはパイロット) */
+function wxLine(icao){
+  const m=METAR&&METAR.m&&METAR.m[icao];if(!m)return '<span class="ifrNa">METARなし(IMOC等で確認)</span>';
+  const v=metarVisCig(m.raw);
+  return `<span class="${catCls(m.cat)}">${m.cat||''}</span> 視程 <b>${v.vis===null?'?':v.vis>=9999?'10km+':v.vis+'m'}</b> 雲高 <b>${v.cig===null?'なし':v.cig+'ft'}</b> <span style="color:var(--dim)">(${obsHM(m.obs)}) ${m.raw.replace(/^METAR /,'')}</span>`;
+}
 let PROC=null;
 async function loadProc(){if(PROC)return PROC;try{const r=await fetch('proc.json?v='+VER_TAG);PROC=await r.json()}catch(e){PROC={f:[]}}return PROC}
 
@@ -5051,7 +5090,7 @@ document.getElementById('ifrPlan').onclick=async function(){
         dst=apOf(document.getElementById('ifrDst').value.trim().toUpperCase()),
         alt=apOf(document.getElementById('ifrAlt').value.trim().toUpperCase());
   if(!dep||!dst){out.innerHTML='<div class="ifrWarn">出発と目的の飛行場(ICAO 4文字)を入れてください</div>';return}
-  await Promise.all([loadFix(),loadAwy(),loadProc(),loadMetar()]);
+  await Promise.all([loadFix(),loadAwy(),loadProc(),loadMetar(),loadTomin()]);
   document.getElementById('ifrEff').textContent=`AIP ${AWY.eff||''} 現在`;
   const cap=ac.press?0:ac.maxAlt;
   let G=ifrGraph(ac,cap),capOff=false;
@@ -5078,8 +5117,10 @@ document.getElementById('ifrPlan').onclick=async function(){
   // 経路が通った SID/STAR をそのまま選択にする(通らなければ使える最初のもの)
   const pr=l=>l&&l.e.proc?l.e.proc:null;
   const sidSel=pr(R.legs[0])||sid.find(x=>x.ok===1)||null;
+  const rwySel=document.getElementById('ifrRwy').value||'';
+  const sidTrack=sidSel?sidTrackOf(dep.icao,sidSel.p.n,rwySel,ac):null;
   const sv=(store.get('hnav.sidDist')||{})[dep.icao+':'+(sidSel?sidSel.p.n:'-')]||{};
-  ifrPlanRes={dep,dst,alt,legs:R.legs,legsA:RA?RA.legs:null,G,CA,wind,asg:sv.asg||0,sidD:sv.sidD||0,sel:{sid:sidSel,
+  ifrPlanRes={dep,dst,alt,legs:R.legs,legsA:RA?RA.legs:null,G,CA,wind,asg:sv.asg||0,sidD:sv.sidD||0,sidTrack,rwy:rwySel,sel:{sid:sidSel,
     star:pr(R.legs[R.legs.length-1])||star.find(x=>x.ok===1)||null,iac:selIac,iacA:selIacA}};
   renderIfrOut({ac,mn,dep,dst,alt,R,RA,CA,ff,fob,tas,sid,star,iac,iacA});
   document.getElementById('ifrToMap').disabled=false;
@@ -5132,8 +5173,9 @@ function ifrRca(rows,ac,dep,asg,sidD){
 }
 const IFR_COLS=13;
 function ifrTable(rows,key,warr,ac,dep,cruise,depAp){
-  const asg=ifrPlanRes.asg||cruise,sidD=ifrPlanRes.sidD||0;
-  const rca=depAp?ifrRca(rows,ac,depAp,asg,sidD):null;
+  const asg=ifrPlanRes.asg||cruise,sidD=ifrPlanRes.sidD||0,T=ifrPlanRes.sidTrack;
+  // SIDの形があれば折れ線に沿って(実距離の手入力より優先しない: 手入力があればそちらの長さで直線計算)
+  const rca=!depAp?null:(T&&!sidD)?rcaOnTrack(T,ac,depAp,asg,rows[0].w):ifrRca(rows,ac,depAp,asg,sidD);
   const f1=x=>x==null?'—':x.toFixed(1),f0=x=>x==null?'—':Math.round(x);
   const fw=x=>x==null?'—':(x>0?'+':'')+Math.round(x);
   let h=`<tr><th>TO</th><th>経路</th><th>MC</th><th>風(°T/kt)</th><th>WCA</th><th>MH</th><th>CH</th><th>GS</th><th>NM</th><th>ETE</th><th>累計</th><th>MEA</th><th>評定</th></tr>`;
@@ -5169,18 +5211,14 @@ function renderIfrOut(P){
   const bad=rows.some(r=>r.bad)||(rowsA||[]).some(r=>r.bad);
   const fuel=rows.length?rows[rows.length-1].fuel:0,fuelA=rowsA&&rowsA.length?rowsA[rowsA.length-1].fuel:0,res=ff*0.5;
   const need=fuel+fuelA+res;
-  // 気象
-  const iacT=S.iac?(S.iac.prec?'prec':S.iac.rnp?'rnp':'np'):null;
-  const wxDep=wxJudge(dep.icao,mn.toVis,0);
-  const wxDst=iacT?wxJudge(dst.icao,mn[iacT+'Vis'],0):{cls:'ifrNa',txt:'使える進入方式が無い'};
-  const altPrec=S.iacA&&S.iacA.prec;
-  const wxAlt=alt?(S.iacA?wxJudge(alt.icao,altPrec?mn.altPrecVis:mn.altNpVis,altPrec?mn.altPrecCig:mn.altNpCig):{cls:'ifrNg',txt:'代替に使える進入方式が無い'}):{cls:'ifrNa',txt:'代替なし'};
-  const mnTxt=iacT==='prec'?`DH ${mn.precDa}ft / RVR ${mn.precVis}m`:iacT==='rnp'?`DA ${mn.rnpDa}ft / 視程 ${mn.rnpVis}m`:iacT==='np'?`MDH ${mn.npMda}ft / 視程 ${mn.npVis}m`:'—';
+  // 気象: METAR を並べ、AIP にある離陸ミニマ(AD 2.22)は原文のまま。判断はパイロット(社内ミニマは各自)
+  const tomin=TOMIN&&TOMIN.f&&TOMIN.f[dep.icao];
   document.getElementById('ifrOut').innerHTML=`
   <div class="ifrBox"><b class="k">経路 ${dep.icao} → ${dst.icao}  ${R.d.toFixed(1)}NM  ETE ${fmtHM(ete)}(TAS ${tas}kt・風込み)</b>
     <div style="margin:4px 0 6px;font-size:12px">共通の風 <input type="number" id="ifrWd" class="n5" style="width:60px" value="${W.base.d}" min="0" max="360">°T / <input type="number" id="ifrWs" class="n5" style="width:54px" value="${W.base.s}" min="0">kt
       　アサインドALT <input type="number" id="ifrAsg" class="n5" step="500" value="${ifrPlanRes.asg||CA.alt}" title="SID終点までに到達する高度(初期上昇の指示高度)。空なら巡航高度">ft
-      　SID実距離 <input type="number" id="ifrSidD" class="n5" step="0.1" value="${ifrPlanRes.sidD||''}" placeholder="${R.legs[0].e.d.toFixed(1)}" title="図から読んだSIDの経路長。空なら飛行場→終点の直線">NM
+      　SID実距離 <input type="number" id="ifrSidD" class="n5" step="0.1" value="${ifrPlanRes.sidD||''}" placeholder="${ifrPlanRes.sidTrack?ifrPlanRes.sidTrack.len.toFixed(1):R.legs[0].e.d.toFixed(1)}" title="図から読んだSIDの経路長。空なら${ifrPlanRes.sidTrack?'SIDの形から算出':'飛行場→終点の直線'}">NM
+      ${ifrPlanRes.sidTrack?`<span style="color:var(--cyn)">SIDの形: ${ifrPlanRes.sidTrack.name} RWY${ifrPlanRes.sidTrack.rwy} ${ifrPlanRes.sidTrack.len.toFixed(1)}NM${ifrPlanRes.sidTrack.assumed?'(会合針路は30°会合と仮定)':''}</span>`:''}
       <span class="hint" style="display:inline;margin-left:8px">レグごとに変えるときは行の「＝前」を外して入力。以後のレグは「＝前」でそれを継ぐ</span></div>
     <div style="overflow:auto"><table class="ifrLog">${ifrTable(rows,'main',W.main,ac,dep,CA.alt,dep)}</table></div>
     <div class="hint">MC/MH は区間中点の偏差(AUTO)。CH は機体の自差表(装備欄)。評定 = ENR 4.3 のnavaid方位/距離(磁方位)、<span style="color:#6fc3ff">RNAV専用</span>の点は navaid では評定できない。(RCA) は出発標高→巡航高度の上昇に要る距離/時間で、そのレグの内数</div>
@@ -5200,11 +5238,14 @@ function renderIfrOut(P){
     <div>進入 ${dst.icao}: ${procChips(iac,S.iac,'iac')}</div>
     ${alt?`<div>進入(代替) ${alt.icao}: ${procChips(iacA,S.iacA,'iacA')}</div>`:''}
   </div>
-  <div class="ifrBox"><b class="k">気象(METAR との突き合わせ・目安)</b>
-    <div>離陸 ${dep.icao}: <span class="${wxDep.cls}">${wxDep.txt}</span></div>
-    <div>目的 ${dst.icao}(${S.iac?S.iac.p.n:'—'} ${mnTxt}): <span class="${wxDst.cls}">${wxDst.txt}</span></div>
-    <div>代替 ${alt?alt.icao:''}: <span class="${wxAlt.cls}">${wxAlt.txt}</span></div>
-    <div class="hint" style="margin-top:4px">TAF・NOTAMは別途確認。METARは ${METAR&&METAR.updated?METAR.updated+' 更新(UTC)':'未取得'}</div>
+  <div class="ifrBox"><b class="k">気象(METAR)と AIP のミニマ</b>
+    <div>出発 ${dep.icao}: ${wxLine(dep.icao)}</div>
+    <div>目的 ${dst.icao}: ${wxLine(dst.icao)}</div>
+    ${alt?`<div>代替 ${alt.icao}: ${wxLine(alt.icao)}</div>`:''}
+    <div class="hint" style="margin-top:4px">METARは ${METAR&&METAR.updated?METAR.updated+' 更新(UTC)':'未取得'}。TAF・NOTAMは別途確認</div>
+    <div style="margin-top:8px"><b style="font-size:11px;color:var(--dim)">離陸ミニマ ${dep.icao}(AIP AD 2.22 原文)</b>
+      ${tomin?`<pre class="tomin">${tomin.replace(/</g,'&lt;')}</pre>`:'<div class="ifrNa">AIP に記載なし(自衛隊・米軍飛行場など)</div>'}</div>
+    <div class="hint">進入のミニマ(DA/MDA・RVR)は各IAC(AIPの図)を参照。図からは機械的に取れない。社内ミニマは別途</div>
   </div>
   <div class="ifrBox"><b class="k">燃料(FF ${ff}/h・風込み)</b>
     経路 ${Math.round(fuel)} + 代替 ${Math.round(fuelA)} + 予備30分 ${Math.round(res)} = <b style="font-family:var(--mono)">${Math.round(need)}</b> / FOB ${fob}
@@ -5213,7 +5254,9 @@ function renderIfrOut(P){
   </div>`;
   document.querySelectorAll('#ifrOut .ifrProc span').forEach(sp=>{sp.onclick=()=>{
     const k=sp.dataset.k,i=+sp.dataset.i,list={sid,star,iac,iacA}[k][i];
-    if(list.ok!==1)return;ifrPlanRes.sel[k]=list;renderIfrOut(P);
+    if(list.ok!==1)return;ifrPlanRes.sel[k]=list;
+    if(k==='sid')ifrPlanRes.sidTrack=sidTrackOf(P.dep.icao,list.p.n,ifrPlanRes.rwy,ac);   // SIDを変えたら形も組み直す
+    renderIfrOut(P);
   }});
   // 風の入力: change で確定して表を作り直す(input だと1文字ごとに作り直してフォーカスが切れる)
   const rerender=()=>{ifrSaveWind();renderIfrOut(P)};
@@ -5229,6 +5272,76 @@ function renderIfrOut(P){
 /* アサインドALT と SID実距離は 出発空港+SID名 ごとに覚える(同じSIDなら次回も使える) */
 function ifrSidKey(){const P=ifrPlanRes;return P.dep.icao+':'+(P.sel.sid?P.sel.sid.p.n:'-')}
 function ifrSaveSid(){const m=store.get('hnav.sidDist')||{};m[ifrSidKey()]={asg:ifrPlanRes.asg||0,sidD:ifrPlanRes.sidD||0};store.set('hnav.sidDist',m)}
+/* ── SIDの形(Stage 3・当面は立川だけ) ──
+   図の文章("Climb RWY HDG to 800FT, turn right HDG197° … to intercept and proceed via TNT R152 to EDARR")を
+   手で写した定義から、上昇率・上昇速度(装備欄)で経路の折れ線を組み立てる。標準旋回(3°/s)の半径 = TAS/188.5 NM。
+   ⚠ 図で "turn right..." と会合針路が省略されているものは **30°会合** と仮定した(EDARR RWY19=122°、OMIYA RWY01=076°)。
+   ⚠ 滑走路の真方位・両端は OSM(01/19 = 000.2°T)。AD 2.12 は "To be issued"。TNT は AD 2.19、VAR 8°W(2025) */
+const SID_DEF={
+  RJTC:{
+    rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
+    nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
+    sids:{
+      EDARR:{fix:'EDARR',nav:'TNT',rad:152,dme:11.8,name:'EDARR ONE',
+        '01':[{climbTo:800},{turn:'R',hdg:197},{intercept:1}],
+        '19':[{climbTo:900},{turn:'L',hdg:122,assumed:1},{intercept:1}]},
+      OMIYA:{fix:'OMIYA',nav:'TNT',rad:46,dme:15.5,name:'OMIYA ONE',
+        '01':[{climbTo:800},{turn:'R',hdg:76,assumed:1},{intercept:1}],
+        '19':[{climbTo:900},{turn:'L',hdg:1},{intercept:1}]},
+    }
+  }
+};
+function lineRadialX(p,hdg,nav,radT){   // 現在地からの針路の直線と nav からのラジアル(真方位)の交点(局所平面NM)。前方に無ければ null
+  const k=Math.cos(nav.lat*D);
+  const px=(p.lng-nav.lng)*60*k,py=(p.lat-nav.lat)*60;
+  const ux=Math.sin(hdg*D),uy=Math.cos(hdg*D),vx=Math.sin(radT*D),vy=Math.cos(radT*D);
+  const den=ux*vy-uy*vx;if(Math.abs(den)<1e-6)return null;
+  const t=(vx*py-vy*px)/den,sv=(ux*py-uy*px)/den;
+  if(t<0||sv<0)return null;
+  return {lat:nav.lat+(py+t*uy)/60,lng:nav.lng+(px+t*ux)/(60*k)};
+}
+function sidTrackOf(icao,sidName,rwy,ac){
+  const A=SID_DEF[icao];if(!A||!sidName)return null;
+  const key=Object.keys(A.sids).find(k=>sidName.toUpperCase().startsWith(k));if(!key)return null;
+  const S=A.sids[key];if(!A.rwy[rwy])rwy=Object.keys(A.rwy)[0];
+  const R=A.rwy[rwy],steps=S[rwy];if(!steps)return null;
+  const nav=A.nav[S.nav],vr=nav.var||0,vcl=ac.vcl||80,roc=ac.roc||500,rad=vcl/188.5;
+  let p={lat:R.end[0],lng:R.end[1]},hdg=R.brgT,alt=R.elev,assumed=false;const pts=[p];
+  const go=nm=>{if(nm<=0)return;p=destLL(p.lat,p.lng,hdg,nm);pts.push(p)};
+  for(const st of steps){
+    if(st.climbTo!=null){go(Math.max(0,(st.climbTo-alt)/roc)*vcl/60);alt=st.climbTo}
+    else if(st.turn){
+      if(st.assumed)assumed=true;
+      const tgt=(st.hdg-vr+360)%360;
+      const diff=st.turn==='R'?((tgt-hdg+360)%360):-((hdg-tgt+360)%360);
+      const n=Math.max(1,Math.round(Math.abs(diff)/10));
+      for(let i=0;i<n;i++){hdg=(hdg+diff/n+360)%360;go(2*rad*Math.sin(Math.abs(diff/n)*D/2))}
+    }else if(st.intercept){
+      const radT=(S.rad-vr+360)%360,q=lineRadialX(p,hdg,nav,radT);
+      if(q){p=q;pts.push(p)}
+      hdg=radT;
+    }
+  }
+  const fx=FIX&&FIX._ix[S.fix];
+  const end=fx?{lat:fx.lat,lng:fx.lng}:destLL(nav.lat,nav.lng,(S.rad-vr+360)%360,S.dme);
+  pts.push(end);
+  let len=0;for(let i=1;i<pts.length;i++)len+=distNM(pts[i-1],pts[i]);
+  return {pts,len,sid:key,name:S.name,rwy,end,fix:S.fix,assumed};
+}
+/* SIDの折れ線に沿った RCA: 区間ごとの針路で風込みの上昇GSを出し、上昇時間に達した位置 */
+function rcaOnTrack(track,ac,dep,asg,w){
+  const need=Math.max(0,asg-(dep.elev||0));if(!ac.roc)return null;
+  const th=need/ac.roc/60;let rem=th,cum=0,gsAvg=0;
+  for(let i=1;i<track.pts.length;i++){
+    const a=track.pts[i-1],b=track.pts[i],d=distNM(a,b);if(d<=0)continue;
+    const g=windTriN(trueBrg(a,b),ac.vcl||80,w.d,w.s),gs=g.bad?(ac.vcl||80):g.gs,tl=d/gs;gsAvg=gs;
+    if(tl>=rem){const f=rem/tl;const q={lat:a.lat+(b.lat-a.lat)*f,lng:a.lng+(b.lng-a.lng)*f};
+      return {i:0,dist:cum+d*f,time:th,len:track.len,ok:true,reqRoc:0,gs:gs,pt:q}}
+    rem-=tl;cum+=d;
+  }
+  return {i:0,dist:track.len,time:th,len:track.len,ok:false,reqRoc:need/(track.len/(gsAvg||ac.vcl||80)*60),gs:gsAvg,pt:track.end};
+}
+const sidLayer=L.layerGroup().addTo(map);
 function ifrSaveWind(){store.set('hnav.ifrWind',ifrPlanRes&&ifrPlanRes.wind?ifrPlanRes.wind.base:null)}
 document.getElementById('ifrToMap').onclick=()=>{
   const P=ifrPlanRes;if(!P)return;
@@ -5238,13 +5351,24 @@ document.getElementById('ifrToMap').onclick=()=>{
   const ac=acftGet(),W=P.wind;
   const rows=ifrCalc(P.legs,W.main,W.base,ac,G,num('tas')||100,0);
   const rca=ifrRca(rows,ac,P.dep,P.asg||P.CA.alt,P.sidD||0);
+  const T=P.sidTrack&&!P.sidD?P.sidTrack:null;
+  const rcaT=T?rcaOnTrack(T,ac,P.dep,P.asg||P.CA.alt,ifrWindOf(W.main,0,W.base)):rca;
   P.legs.forEach((l,i)=>{
-    if(i===0&&rca&&rca.ok){const b=G.nodes[l.to],q=destLL(P.dep.lat,P.dep.lng,trueBrg(P.dep,b),Math.min(rca.dist,l.e.d*0.98));
-      wp.push([+q.lat.toFixed(5),+q.lng.toFixed(5),`(RCA ${(P.asg||P.CA.alt).toLocaleString()}ft)`])}
+    if(i===0&&rcaT&&rcaT.ok){
+      const b=G.nodes[l.to],q=T?rcaT.pt:destLL(P.dep.lat,P.dep.lng,trueBrg(P.dep,b),Math.min(rcaT.dist,l.e.d*0.98));
+      wp.push([+q.lat.toFixed(5),+q.lng.toFixed(5),`(RCA ${(P.asg||P.CA.alt).toLocaleString()}ft ${rcaT.dist.toFixed(1)}NM)`]);   // 名前のNMが飛行ログ側の距離になる
+    }
     push(l);
+    if(i===0&&(T||P.sidD))wp[wp.length-1].push(+(T?T.len:P.sidD).toFixed(1));   // SID終点までの距離を経路長で上書き
   });
   if(document.getElementById('ifrWithAlt').checked&&P.legsA)P.legsA.forEach(push);
+  // 飛行ログ側の風を IFR の共通の風に揃える(時間を合わせるため。レグ別の風は飛行ログには持てない)
+  document.getElementById('wDir').value=W.base.d;document.getElementById('wSpd').value=W.base.s;
   loadRouteObj({v:1,wp},true);
+  // ⚠ SID線は loadRouteObj(→clearAllWp が sidLayer も消す)の**後**に描く
+  sidLayer.clearLayers();
+  if(T)L.polyline(T.pts.map(q=>[q.lat,q.lng]),{renderer:ovRenderer,color:'#3df5ff',weight:2,dashArray:'5 4',opacity:.9})
+    .bindTooltip(`${T.name} RWY${T.rwy} ${T.len.toFixed(1)}NM(SIDの形・上昇率${ac.roc}ft/min ${ac.vcl}kt で算出)`,{sticky:true}).addTo(sidLayer);
   document.getElementById('ifrModal').style.display='none';
   document.querySelector('.tabs button[data-tab="wp"]').click();
 };
