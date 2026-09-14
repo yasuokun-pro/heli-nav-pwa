@@ -877,7 +877,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-154';
+const VER_TAG='v6-155';
 const BUILD='2026-09-14';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -5171,7 +5171,7 @@ function ifrCalc(legs,warr,base,ac,G,tas,ff){
 }
 /* RCA(巡航高度到達点): 出発飛行場の標高から巡航高度まで、上昇率と上昇速度(風込みのGS)で
    何NM・何分かかるかを出し、それがどのレグの中に落ちるかを返す(そのレグの内数) */
-/* RCA = SID の終点までにアサインドALT(初期上昇高度)へ到達する点。SID区間(先頭レグ)の中だけで見る。
+/* RCA = SID の終点までにAssigned ALT(初期上昇高度)へ到達する点。SID区間(先頭レグ)の中だけで見る。
    ⚠ SID区間は飛行場→終点FIXの直線で持っているので、実際の経路長は図の値(SID実距離)を入れてもらう。
    届かないときは、SID終点で届くのに要る上昇率を出す */
 function ifrRca(rows,ac,dep,asg,sidD){
@@ -5226,7 +5226,7 @@ function renderIfrOut(P){
   document.getElementById('ifrOut').innerHTML=`
   <div class="ifrBox"><b class="k">経路 ${dep.icao} → ${dst.icao}  ${R.d.toFixed(1)}NM  ETE ${fmtHM(ete)}(TAS ${tas}kt・風込み)</b>
     <div style="margin:4px 0 6px;font-size:12px">共通の風 <input type="number" id="ifrWd" class="n5" style="width:60px" value="${W.base.d}" min="0" max="360">°T / <input type="number" id="ifrWs" class="n5" style="width:54px" value="${W.base.s}" min="0">kt
-      　アサインドALT <input type="number" id="ifrAsg" class="n5" step="500" value="${ifrPlanRes.asg||CA.alt}" title="SID終点までに到達する高度(初期上昇の指示高度)。空なら巡航高度">ft
+      　Assigned ALT <input type="number" id="ifrAsg" class="n5" step="500" value="${ifrPlanRes.asg||CA.alt}" title="SID終点までに到達する高度(初期上昇の指示高度)。空なら巡航高度">ft
       　SID実距離 <input type="number" id="ifrSidD" class="n5" step="0.1" value="${ifrPlanRes.sidD||''}" placeholder="${ifrPlanRes.sidTrack?ifrPlanRes.sidTrack.len.toFixed(1):R.legs[0].e.d.toFixed(1)}" title="図から読んだSIDの経路長。空なら${ifrPlanRes.sidTrack?'SIDの形から算出':'飛行場→終点の直線'}">NM
       ${ifrPlanRes.sidTrack?`<span style="color:var(--cyn)">SIDの形: ${ifrPlanRes.sidTrack.name} RWY${ifrPlanRes.sidTrack.rwy} ${ifrPlanRes.sidTrack.len.toFixed(1)}NM${ifrPlanRes.sidTrack.assumed?'(会合針路は30°会合と仮定)':''}</span>`:''}
       <span class="hint" style="display:inline;margin-left:8px">レグごとに変えるときは行の「＝前」を外して入力。以後のレグは「＝前」でそれを継ぐ</span></div>
@@ -5279,7 +5279,7 @@ function renderIfrOut(P){
   document.querySelectorAll('#ifrOut .wd,#ifrOut .ws').forEach(inp=>inp.onchange=()=>{const w=W[inp.dataset.k][+inp.dataset.i];
     w[inp.classList.contains('wd')?'d':'s']=parseFloat(inp.value)||0;w.same=false;rerender()});
 }
-/* アサインドALT と SID実距離は 出発空港+SID名 ごとに覚える(同じSIDなら次回も使える) */
+/* Assigned ALT と SID実距離は 出発空港+SID名 ごとに覚える(同じSIDなら次回も使える) */
 function ifrSidKey(){const P=ifrPlanRes;return P.dep.icao+':'+(P.sel.sid?P.sel.sid.p.n:'-')}
 function ifrSaveSid(){const m=store.get('hnav.sidDist')||{};m[ifrSidKey()]={asg:ifrPlanRes.asg||0,sidD:ifrPlanRes.sidD||0};store.set('hnav.sidDist',m)}
 /* ── SIDの形(Stage 3・当面は立川だけ) ──
