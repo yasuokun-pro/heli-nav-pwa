@@ -15,7 +15,8 @@
 | Stage 2 | ✅ 第1版(v6-143) | **別画面**(タブ列の `IFR` ボタン → `#ifrModal`)。機体プロファイル(`hnav.acft`)・出発/目的/代替・経由FIX・経路探索(Dijkstra)・巡航高度・方式候補・METAR突合・燃料・「地図に反映」まで動く。残りは下の「Stage 2 の未了」 |
 
 ### Stage 2 の未了(次にやること)
-- [ ] **風**: 計画画面は無風。「地図に反映」後は飛行ログ側が風三角で計算するのでそちらで見る
+- [x] **風**: レグごとに入力(共通の風+「＝前」で継ぐ)。WCA/MH/CH/GS/ETE を表に出す(v6-150)
+- [x] **RCA**(巡航高度到達点)を上昇率・上昇速度から内数で表示(v6-150)。TOD(降下開始点)は未実装
 - [ ] **TAF** との突合(今は METAR のみ。TAF は metar.json に無い → Actions で取るか要判断)
 - [x] SID/STAR の**終点/始点のFIX**に経路を繋ぐ → 方式名がFIX名のものは繋いだ(v6-148)。名前が地名等のもの(18空港)は最寄りFIXへ仮の直行線のまま
 - [ ] 方式ごとの**実ミニマ**(図からは取れない。手で表を持つなら空港ごと)
@@ -132,7 +133,8 @@ proc.json { eff, src, f:[ {icao:"RJTT", k:"SID"|"STAR"|"IAC", n:"VAMOS-RNAV",
               rwy:"34L", cat:"II/III", heli:1,
               nn:1  … 索引に名前が無い(自衛隊系。n は "#1" のような枚数。図参照) } ] }
 hnav.acft { gnss, rnav(FMS等のRNAV装置・DME/DME/INS), vor, dme, ils, ndb, tacan, press,
-            maxAlt:10000, vhf, uhf }   … 燃料・TASは飛行ログ側の値を使う
+            maxAlt:10000, vhf, uhf, roc(上昇率ft/min), vcl(上昇TAS kt), dev(自差表 12値) }
+hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行ログ側の値を使う
 ```
 
 グラフ化の勘所(Stage 2-3): `awy.json` の `pts` の名前は `fix.json` の `n` と一致する
