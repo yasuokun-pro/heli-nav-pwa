@@ -411,6 +411,7 @@
   table.ifrLog{font-family:var(--mono);font-size:12px}
   table.ifrLog td{padding:4px 5px;border-bottom:1px solid var(--line);white-space:nowrap}
   table.ifrLog td.r{text-align:right}
+  table.ifrLog td.brg{font-size:10px;color:var(--dim);line-height:1.25;white-space:nowrap}
   table.ifrLog tr.ap td{color:var(--cyn)}
   .ifrBox{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:13px}
   .ifrBox b.k{color:var(--dim);font-weight:500;font-size:11px;letter-spacing:.08em;display:block;margin-bottom:4px}
@@ -813,6 +814,7 @@
   <h4>1. 機体(装備)</h4>
   <div class="ifrGrid" id="ifrAcft">
     <label><input type="checkbox" id="acGnss"> GNSS(RNAV/RNP)</label>
+    <label title="FMS等のRNAV装置でDME/DMEやINSを使うもの。素のDME受信機では不可"><input type="checkbox" id="acRnav"> RNAV装置(DME/DME・INS)</label>
     <label><input type="checkbox" id="acVor"> VOR</label>
     <label><input type="checkbox" id="acDme"> DME</label>
     <label><input type="checkbox" id="acIls"> ILS/LOC</label>
@@ -863,7 +865,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-146';
+const VER_TAG='v6-147';
 const BUILD='2026-09-13';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4763,7 +4765,7 @@ document.querySelectorAll('.tabs button[data-tab]').forEach(btn=>{   // ⚠ IFR 
 /* ───────── IFR計画(別画面・IFR.md Stage 2) ─────────
    機体の装備で使える経路・方式を絞り、出発→目的(→代替)の最短経路を fix.json/awy.json のグラフで探し、
    巡航高度(MEA・奇偶・与圧上限)と方式候補(proc.json)・気象の目安を出す。「地図に反映」で既存のルートに落とす */
-const ACFT_DEF={gnss:1,vor:1,dme:1,ils:1,ndb:0,tacan:0,press:0,maxAlt:10000,vhf:1,uhf:0};
+const ACFT_DEF={gnss:1,rnav:0,vor:1,dme:1,ils:1,ndb:0,tacan:0,press:0,maxAlt:10000,vhf:1,uhf:0};
 const IFR_MIN_DEF=[   // [key, 表示, 値, 単位]
   ['toVis','離陸 視程',1600,'m'],
   ['precDa','精密進入(ILS) DH',200,'ft'],['precVis','精密進入 RVR/視程',550,'m'],
@@ -4775,13 +4777,13 @@ const IFR_MIN_DEF=[   // [key, 表示, 値, 単位]
 let ifrPlanRes=null;
 function acftGet(){
   const g=id=>document.getElementById(id);
-  return {gnss:+g('acGnss').checked,vor:+g('acVor').checked,dme:+g('acDme').checked,ils:+g('acIls').checked,
+  return {gnss:+g('acGnss').checked,rnav:+g('acRnav').checked,vor:+g('acVor').checked,dme:+g('acDme').checked,ils:+g('acIls').checked,
     ndb:+g('acNdb').checked,tacan:+g('acTacan').checked,press:+g('acPress').checked,
     maxAlt:parseFloat(g('acMaxAlt').value)||10000,vhf:+g('acVhf').checked,uhf:+g('acUhf').checked};
 }
 function acftSet(a){
   const g=id=>document.getElementById(id);
-  g('acGnss').checked=!!a.gnss;g('acVor').checked=!!a.vor;g('acDme').checked=!!a.dme;g('acIls').checked=!!a.ils;
+  g('acGnss').checked=!!a.gnss;g('acRnav').checked=!!a.rnav;g('acVor').checked=!!a.vor;g('acDme').checked=!!a.dme;g('acIls').checked=!!a.ils;
   g('acNdb').checked=!!a.ndb;g('acTacan').checked=!!a.tacan;g('acPress').checked=!!a.press;g('acMaxAlt').value=a.maxAlt||10000;
   g('acVhf').checked=!!a.vhf;g('acUhf').checked=!!a.uhf;
 }
@@ -4860,11 +4862,14 @@ function awyBlock(r,ac){
   if(r.k==='RNAV'){
     const spec=(r.spec||'').toUpperCase();
     if(ac.gnss)return null;
-    if(/RNAV5/.test(spec)&&ac.dme&&(r.sens||[]).includes('DME/DME'))return null;   // RNAV5はDME/DMEでも可
-    return 'RNAV経路: GNSS'+( /RNAV5/.test(spec)?'かDME/DME':'')+'が要る';
+    // ⚠ RNAV5 は DME/DME・INS の RNAV装置でも飛べるが、**素のDME受信機では飛べない**。
+    //   以前は DME があれば通していて、GNSS無しの機体に Y588/Y821 を勧めてしまった
+    if(/RNAV5/.test(spec)&&ac.rnav)return null;
+    return 'RNAV経路: GNSS'+( /RNAV5/.test(spec)?'かRNAV装置':'')+'が要る';
   }
   if(r.k==='LOW'){ if(ac.vor||ac.gnss)return null; return '航空路: VORが要る' }
-  if(r.k==='DCT'){ if(ac.vor||ac.gnss)return null; return '直行経路: VORが要る' }
+  // 直行経路は TACAN の radial/DME で定義されているものが多い(DAIBU-KOSKA は YLT TACAN R-174)ので TACAN でも可
+  if(r.k==='DCT'){ if(ac.vor||ac.gnss||ac.tacan)return null; return '直行経路: VORかTACANが要る' }
   return null;
 }
 function segBlock(r,sg,a,b,ac,cap){
@@ -4950,7 +4955,7 @@ function cruiseAlt(legs,ac,G){
 function procOk(p,ac){
   if(p.nn)return {ok:null,why:'索引に方式名が無い(図参照)'};
   if(p.k!=='IAC'){ if(p.rnav)return ac.gnss?{ok:1}:{ok:0,why:'RNAV方式'};
-    return (ac.vor||ac.gnss)?{ok:1}:{ok:0,why:'VORが要る'} }
+    return (ac.vor||ac.gnss||ac.tacan)?{ok:1}:{ok:0,why:'VORかTACANが要る'} }
   const t=p.typ||'';
   if(/ILS|LOC|LDA/.test(t))return ac.ils?{ok:1,prec:/ILS/.test(t)}:{ok:0,why:'ILS受信機'};
   if(/^GLS/.test(t))return {ok:0,why:'GLS'};
@@ -5017,12 +5022,13 @@ document.getElementById('ifrPlan').onclick=async function(){
   renderIfrOut({ac,mn,dep,dst,alt,R,RA,CA,ete,eteA,ff,fob,tas,sid,star,iac,iacA});
   document.getElementById('ifrToMap').disabled=false;
 };
+function fixBrg(n){const f=FIX&&FIX.f.find(x=>x.n===n);return f&&f.brg?f.brg.replace(/, /g,'<br>'):''}
 function legRow(l,G){
   const a=G.nodes[l.from],b=G.nodes[l.to];
   const mc=l.e.sg&&(l.e.fwd?l.e.sg.mag:l.e.sg.rmag);
   const mcs=mc!=null?fmt3(mc):fmt3(magOf(trueBrg(a,b)));
   const rn=l.e.tr?`<i style="color:var(--dim)">${l.e.tag}区間(仮)</i>`:`<span style="color:${AWY_COL[l.e.r.k]}">${l.e.r.n}</span>`;
-  return `<tr${l.e.tr?' class="ap"':''}><td>${b.ap?b.ap.icao+' '+b.ap.n:b.n}</td><td>${rn}</td><td class="r">${mcs}°</td><td class="r">${l.e.d.toFixed(1)}</td><td class="r">${l.e.mea!=null?l.e.mea:'—'}</td></tr>`;
+  return `<tr${l.e.tr?' class="ap"':''}><td>${b.ap?b.ap.icao+' '+b.ap.n:b.n}</td><td>${rn}</td><td class="r">${mcs}°</td><td class="r">${l.e.d.toFixed(1)}</td><td class="r">${l.e.mea!=null?l.e.mea:'—'}</td><td class="brg">${b.ap?'':fixBrg(b.n)}</td></tr>`;
 }
 function procChips(list,sel,key){
   if(!list.length)return '<span class="ifrNa">索引に無し</span>';
@@ -5047,10 +5053,11 @@ function renderIfrOut(P){
   const mnTxt=iacT==='prec'?`DH ${mn.precDa}ft / RVR ${mn.precVis}m`:iacT==='rnp'?`DA ${mn.rnpDa}ft / 視程 ${mn.rnpVis}m`:iacT==='np'?`MDH ${mn.npMda}ft / 視程 ${mn.npVis}m`:'—';
   document.getElementById('ifrOut').innerHTML=`
   <div class="ifrBox"><b class="k">経路 ${dep.icao} → ${dst.icao}  ${R.d.toFixed(1)}NM  ETE ${fmtHM(ete)}(TAS ${tas}kt・無風)</b>
-    <div style="overflow:auto"><table class="ifrLog"><tr><th>TO</th><th>経路</th><th>MC</th><th>NM</th><th>MEA</th></tr>
-    <tr class="ap"><td>${dep.icao} ${dep.n}</td><td></td><td></td><td></td><td></td></tr>${rows}</table></div>
+    <div style="overflow:auto"><table class="ifrLog"><tr><th>TO</th><th>経路</th><th>MC</th><th>NM</th><th>MEA</th><th>評定</th></tr>
+    <tr class="ap"><td>${dep.icao} ${dep.n}</td><td></td><td></td><td></td><td></td><td></td></tr>${rows}</table></div>
+    <div class="hint">評定 = ENR 4.3 のnavaid方位/距離(磁方位)。GNSSが無いときはこれで位置を出す</div>
     ${RA?`<b class="k" style="margin-top:8px">代替 ${dst.icao} → ${alt.icao}  ${RA.d.toFixed(1)}NM  ETE ${fmtHM(eteA)}</b>
-    <div style="overflow:auto"><table class="ifrLog"><tr><th>TO</th><th>経路</th><th>MC</th><th>NM</th><th>MEA</th></tr>${rowsA}</table></div>`:(alt?'<div class="ifrWarn">代替までの経路が見つからない</div>':'')}
+    <div style="overflow:auto"><table class="ifrLog"><tr><th>TO</th><th>経路</th><th>MC</th><th>NM</th><th>MEA</th><th>評定</th></tr>${rowsA}</table></div>`:(alt?'<div class="ifrWarn">代替までの経路が見つからない</div>':'')}
   </div>
   <div class="ifrBox"><b class="k">巡航高度</b>
     <span style="font-family:var(--mono);font-size:18px;color:${CA.over?'var(--red)':'var(--grn)'}">${CA.alt>=18000?'FL'+CA.alt/100:CA.alt.toLocaleString()+'ft'}</span>

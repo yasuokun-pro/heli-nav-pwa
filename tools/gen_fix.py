@@ -120,8 +120,12 @@ def parse(L):
                     rest = w[58+m.end():].strip()
                     if rest and ('°' in rest or 'NM' in rest): brg.append(rest)
                     continue
-            tail = w[74:].strip()
-            if tail and ('°' in tail or 'NM' in tail) and not LAT_RE.search(w) and not LON_RE.search(w):
+            # ⚠ 方位/距離の開始桁は揺れる(KOSKA は桁71から)。桁で切らず "ddd°/" の最初の位置から取る
+            mb = re.search(r'\d{3}°/\d', w[50:])
+            tail = w[50+mb.start():].strip() if mb else ''
+            # ⚠ 方位/距離は座標と同じ行に乗ることがある(KOSKA: "351520.97N   021°/33.7NM XAC, 332°/21.1NM TET…")。
+            #   行全体に座標があるからと捨てると、そういう点の評定がまるごと落ちる。桁74以降だけを見る
+            if tail and ('°' in tail or 'NM' in tail) and not LAT_RE.search(tail) and not LON_RE.search(tail):
                 brg.append(tail)
         rec = dict(n=nm, lat=dms(la, False), lng=dms(lo, True))
         if comp is not None: rec['c'] = comp

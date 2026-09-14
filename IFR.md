@@ -131,8 +131,8 @@ proc.json { eff, src, f:[ {icao:"RJTT", k:"SID"|"STAR"|"IAC", n:"VAMOS-RNAV",
               rnav:1, typ:"ILS"|"LOC"|"LDA"|"VOR"|"VOR/DME"|"TACAN"|"NDB"|"RNP"|"RNAV"|"RNAV(GPS)"|"GLS"|"HI-ILS"|…,
               rwy:"34L", cat:"II/III", heli:1,
               nn:1  … 索引に名前が無い(自衛隊系。n は "#1" のような枚数。図参照) } ] }
-hnav.acft { gnss:true, ils:true, vor:true, dme:true, ndb:false, press:false,
-            maxAlt:10000, fuelKg, burnKgH, vhf:true, uhf:false }   … Stage 2 で
+hnav.acft { gnss, rnav(FMS等のRNAV装置・DME/DME/INS), vor, dme, ils, ndb, tacan, press,
+            maxAlt:10000, vhf, uhf }   … 燃料・TASは飛行ログ側の値を使う
 ```
 
 グラフ化の勘所(Stage 2-3): `awy.json` の `pts` の名前は `fix.json` の `n` と一致する
