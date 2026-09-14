@@ -243,7 +243,7 @@
   table.fltlog thead th{position:sticky;top:0;z-index:3;background:var(--panel2);color:var(--dim);
     font-size:9.5px;font-weight:500;letter-spacing:.03em;line-height:1.15}
   table.fltlog thead tr:first-child th{top:0}
-  table.fltlog thead tr:nth-child(2) th{top:26px}
+  table.fltlog thead tr:nth-child(2) th{top:26px}   /* ⚠ 実際の高さは端末のフォントで変わるので fixLogHead() が上書きする */
   table.fltlog td{font-family:var(--mono)}
   table.fltlog td.fixName{font-family:var(--sans);text-align:left}
   table.fltlog td.fixNo{text-align:left;color:var(--dim);font-style:italic;font-size:11px}
@@ -330,6 +330,7 @@
   .obst-ico i{font-style:normal;font-size:12px}
   .fix-ico{font-family:var(--mono);font-size:9px;color:#c9a7ff;text-shadow:0 1px 3px #000;white-space:nowrap;line-height:1}
   .fix-ico i{font-style:normal;font-size:10px;margin-right:1px}
+  .fix-ico.rnav{color:#6fc3ff}   /* RNAV専用(navaid評定なし)は色と記号を変える */
   .awy-lab{display:inline-block;background:rgba(13,26,41,.8);border:1px solid rgba(224,176,96,.6);border-radius:3px;
     color:#e0b060;font-family:var(--mono);font-size:9px;padding:0 3px;line-height:14px;white-space:nowrap}
   .awy-lab.rnav{color:#6fc3ff;border-color:rgba(111,195,255,.6)}
@@ -622,7 +623,7 @@
       <div class="mtSub">
         <button id="btnAp">飛行場</button>
         <button id="btnNav">NAV</button>
-        <button id="btnFix" title="重要地点(AIP ENR 4.3)。▲義務位置通報点 △任意">FIX</button>
+        <button id="btnFix" title="重要地点(AIP ENR 4.3)。紫▲義務/△任意=navaidで評定できる点、水色◇=RNAV専用">FIX</button>
         <button id="btnAwy" title="航空路(AIP ENR 3.1 下層ATSルート / ENR 3.3 RNAV経路)">航空路</button>
         <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AD 1.4)と滑空場(ENR 5.5.1)">ヘリ場</button>
         <button id="btnObst">障害物</button>
@@ -865,7 +866,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-147';
+const VER_TAG='v6-148';
 const BUILD='2026-09-13';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2057,12 +2058,14 @@ const fixLayer=L.layerGroup();
 async function loadFix(){
   if(FIX)return FIX;
   try{const r=await fetch('fix.json?v='+VER_TAG);FIX=await r.json()}catch(e){FIX={f:[]}}
+  FIX._ix={};FIX.f.forEach(p=>{if(!(p.n in FIX._ix))FIX._ix[p.n]=p});
   return FIX;
 }
 function fixPop(p,mk){
   const el=document.createElement('div');el.className='apPop';
-  el.innerHTML=`<h5 style="color:#c9a7ff">${p.c===1?'▲':'△'} ${p.n}${p.ja?' <span style="font-size:10px;color:#8a9bb3">'+p.ja+'</span>':''}</h5>
-    <dl><dt>種別</dt><dd>${p.c===1?'義務位置通報点':p.c===0?'任意位置通報点':'—'}${p.id?' / '+p.id:''}</dd>
+  const ro=fixRnavOnly(p);
+  el.innerHTML=`<h5 style="color:${ro?'#6fc3ff':'#c9a7ff'}">${ro?'◇':p.c===1?'▲':'△'} ${p.n}${p.ja?' <span style="font-size:10px;color:#8a9bb3">'+p.ja+'</span>':''}</h5>
+    <dl><dt>種別</dt><dd>${p.c===1?'義務位置通報点':p.c===0?'任意位置通報点':'—'}${p.id?' / '+p.id:''}${ro?'<br><span style="color:#6fc3ff">RNAV専用</span>(navaidでの評定なし)':''}</dd>
       ${p.rt?'<dt>経路</dt><dd style="white-space:normal">'+p.rt.join(' ')+'</dd>':''}
       ${p.brg?'<dt>方位距離</dt><dd style="white-space:normal">'+p.brg+'</dd>':''}
       <dt>位置</dt><dd>${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}</dd></dl>
@@ -2072,6 +2075,8 @@ function fixPop(p,mk){
   el.querySelector('.add').onclick=()=>{pushUndo();addWp(p.lat,p.lng,p.n);redraw();mk.closePopup()};
   return el;
 }
+/* RNAV専用の点 = ENR 4.3 に navaid の方位/距離が無い点(GNSS/RNAV装置が無いと評定できない)。navaid名の点は従来点 */
+function fixRnavOnly(p){return !p.brg&&!p.id}
 function drawFix(){
   fixLayer.clearLayers();
   if(!fixOn||!FIX)return;
@@ -2086,7 +2091,7 @@ function drawFix(){
   if(z<10)inview=inview.filter(p=>p.c===1||p.id);
   inview.slice(0,300).forEach(p=>{
     const mk=L.marker([p.lat,p.lng],{bubblingMouseEvents:false,
-      icon:L.divIcon({className:'',html:`<div class="fix-ico"><i>${p.c===1?'▲':'△'}</i>${p.n}</div>`,iconAnchor:[5,5]})});
+      icon:L.divIcon({className:'',html:`<div class="fix-ico${fixRnavOnly(p)?' rnav':''}"><i>${fixRnavOnly(p)?'◇':p.c===1?'▲':'△'}</i>${p.n}</div>`,iconAnchor:[5,5]})});
     mk.bindPopup(()=>fixPop(p,mk));mk.addTo(fixLayer);
   });
 }
@@ -4901,14 +4906,36 @@ function ifrGraph(ac,cap){
   return {nodes,adj};
 }
 /* 飛行場を最寄りのFIXに仮の直行線で結ぶ(SID/STARの区間の代わり)。半径を広げて最低3点 */
-function ifrLinkAp(G,ap,tag){
-  const k='AP:'+ap.icao;G.nodes[k]={n:k,lat:ap.lat,lng:ap.lng,ap};
-  G.adj[k]=G.adj[k]||[];
-  const all=Object.values(G.nodes).filter(n=>!n.ap).map(n=>({n,d:distNM(ap,n)})).sort((x,y)=>x.d-y.d);
-  let R=30,pick=[];
-  while(R<=120){pick=all.filter(x=>x.d<=R).slice(0,8);if(pick.length>=3)break;R+=30}
-  pick.forEach(({n,d})=>{const e={d:d*1.15,tr:1,tag};   // 少し割高にして、航空路で行けるならそちらを選ばせる
-    G.adj[k].push(Object.assign({to:n.n},e));(G.adj[n.n]=G.adj[n.n]||[]).push(Object.assign({to:k},e))});
+/* 方式名から FIX/navaid 名を拾う。日本の SID/STAR は終点/始点の FIX 名で呼ぶものが多い
+   ("EDARR", "OSHIMA-1A/1K/2C-RNAV", "SULPU-1S/1D, OLRAT-1A/1B", "TATEYAMA REVERSAL") */
+function procTokens(n){
+  return n.toUpperCase().split(/[\s,\/()]+/).map(t=>t.replace(/-?RNAV$/,'').replace(/-\d[A-Z]?$/,'').replace(/-[A-Z]$/,''))
+    .filter(t=>/^[A-Z]{3,}$/.test(t));
+}
+/* 飛行場を経路網につなぐ。使える SID/STAR の名前が FIX に一致すればそこへ(=方式の終点/始点)、
+   無ければ最寄りのFIXへ仮の直行線(30NMから広げて最低3点・8点まで、距離1.15倍で航空路を優先)。
+   ⚠ 以前は最寄り優先だったので立川→八丈島で DAIBU を選び、EDARR SID を無視していた
+   ⚠ RNAV専用の点(navaid評定なし)は GNSS も RNAV装置も無い機体では使わない */
+function ifrLinkAp(G,ap,tag,procs,ac){
+  const k='AP:'+ap.icao;G.nodes[k]={n:k,lat:ap.lat,lng:ap.lng,ap};G.adj[k]=G.adj[k]||[];
+  const canRnav=ac.gnss||ac.rnav;
+  const usable=n=>{const f=FIX&&FIX._ix[n];return canRnav||!f||!fixRnavOnly(f)};
+  const add=(a,b,e)=>{(G.adj[a]=G.adj[a]||[]).push(Object.assign({to:b},e));(G.adj[b]=G.adj[b]||[]).push(Object.assign({to:a},e))};
+  const near=(from,limit)=>{
+    const all=Object.values(G.nodes).filter(n=>!n.ap&&n.n!==from.n&&usable(n.n)).map(n=>({n,d:distNM(from,n)})).sort((x,y)=>x.d-y.d);
+    let R=30,pick=[];while(R<=120){pick=all.filter(x=>x.d<=R).slice(0,limit);if(pick.length>=3)break;R+=30}return pick;
+  };
+  let linked=0;
+  (procs||[]).filter(x=>x.ok===1).forEach(x=>procTokens(x.p.n).forEach(t=>{
+    if(!G.nodes[t]){   // 航空路に乗っていない方式の終点(羽田 OPPAR/ISOGO、小牧 IBUKI 等)は FIX 表から点を足して最寄りへつなぐ
+      const f=FIX&&FIX._ix[t];if(!f||!usable(t))return;
+      G.nodes[t]={n:t,lat:f.lat,lng:f.lng,id:f.id};
+      near(G.nodes[t],5).forEach(({n,d})=>add(t,n.n,{d:d*1.15,tr:1,tag:tag+'→航空路(仮)'}));
+    }
+    if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
+    add(k,t,{d:distNM(ap,G.nodes[t]),tr:1,tag,proc:x});linked++;
+  }));
+  if(!linked)near(ap,8).forEach(({n,d})=>add(k,n.n,{d:d*1.15,tr:1,tag:tag+'区間(仮)'}));
   return k;
 }
 function dijkstra(G,src,dst){
@@ -5004,21 +5031,25 @@ document.getElementById('ifrPlan').onclick=async function(){
   const vias=document.getElementById('ifrVia').value.trim().toUpperCase().split(/\s+/).filter(Boolean);
   const badVia=vias.filter(v=>!G.nodes[v]);
   if(badVia.length){out.innerHTML=`<div class="ifrWarn">経由FIXが航空路上に無い: ${badVia.join(' ')}(航空路に乗っていない点は経由に使えない)</div>`;return}
-  let kd=ifrLinkAp(G,dep,'SID'),kt=ifrLinkAp(G,dst,'STAR');
+  const sid=procList(dep.icao,'SID',ac),star=procList(dst.icao,'STAR',ac),iac=procList(dst.icao,'IAC',ac),iacA=alt?procList(alt.icao,'IAC',ac):[];
+  const starA=alt?procList(alt.icao,'STAR',ac):[];
+  let kd=ifrLinkAp(G,dep,'SID',sid,ac),kt=ifrLinkAp(G,dst,'STAR',star,ac);
   let R=ifrRoute(G,kd,kt,vias);
   if(R.err&&cap){          // 上限内では繋がらない → 上限を外してもう一度(高度の警告で知らせる)
-    G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID');kt=ifrLinkAp(G,dst,'STAR');R=ifrRoute(G,kd,kt,vias);
+    G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac);R=ifrRoute(G,kd,kt,vias);
   }
   if(R.err){out.innerHTML=`<div class="ifrWarn">${R.err}</div>`;return}
   let RA=null;
-  if(alt){const ka=ifrLinkAp(G,alt,'ALT');RA=ifrRoute(G,kt,ka,[]);if(RA.err){RA=null}}
+  if(alt){const ka=ifrLinkAp(G,alt,'STAR',starA,ac);RA=ifrRoute(G,kt,ka,[]);if(RA.err){RA=null}}
   const CA=cruiseAlt(R.legs,ac,G);
   const tas=num('tas')||100,ff=num('ff')||0,fob=num('fob')||0;
   const ete=R.d/tas,eteA=RA?RA.d/tas:0;
-  const sid=procList(dep.icao,'SID',ac),star=procList(dst.icao,'STAR',ac),iac=procList(dst.icao,'IAC',ac),iacA=alt?procList(alt.icao,'IAC',ac):[];
   const selIac=bestIac(iac),selIacA=bestIac(iacA);
   CA.capOff=capOff;
-  ifrPlanRes={dep,dst,alt,legs:R.legs,legsA:RA?RA.legs:null,G,CA,sel:{sid:sid.find(x=>x.ok===1)||null,star:star.find(x=>x.ok===1)||null,iac:selIac,iacA:selIacA}};
+  // 経路が通った SID/STAR をそのまま選択にする(通らなければ使える最初のもの)
+  const pr=l=>l&&l.e.proc?l.e.proc:null;
+  ifrPlanRes={dep,dst,alt,legs:R.legs,legsA:RA?RA.legs:null,G,CA,sel:{sid:pr(R.legs[0])||sid.find(x=>x.ok===1)||null,
+    star:pr(R.legs[R.legs.length-1])||star.find(x=>x.ok===1)||null,iac:selIac,iacA:selIacA}};
   renderIfrOut({ac,mn,dep,dst,alt,R,RA,CA,ete,eteA,ff,fob,tas,sid,star,iac,iacA});
   document.getElementById('ifrToMap').disabled=false;
 };
@@ -5027,8 +5058,10 @@ function legRow(l,G){
   const a=G.nodes[l.from],b=G.nodes[l.to];
   const mc=l.e.sg&&(l.e.fwd?l.e.sg.mag:l.e.sg.rmag);
   const mcs=mc!=null?fmt3(mc):fmt3(magOf(trueBrg(a,b)));
-  const rn=l.e.tr?`<i style="color:var(--dim)">${l.e.tag}区間(仮)</i>`:`<span style="color:${AWY_COL[l.e.r.k]}">${l.e.r.n}</span>`;
-  return `<tr${l.e.tr?' class="ap"':''}><td>${b.ap?b.ap.icao+' '+b.ap.n:b.n}</td><td>${rn}</td><td class="r">${mcs}°</td><td class="r">${l.e.d.toFixed(1)}</td><td class="r">${l.e.mea!=null?l.e.mea:'—'}</td><td class="brg">${b.ap?'':fixBrg(b.n)}</td></tr>`;
+  const rn=l.e.tr?(l.e.proc?`<span style="color:var(--cyn)">${l.e.proc.p.n} ${l.e.tag}</span>`:`<i style="color:var(--dim)">${l.e.tag}</i>`):`<span style="color:${AWY_COL[l.e.r.k]}">${l.e.r.n}</span>`;
+  const fx=FIX&&FIX._ix[b.n];
+  const ev=b.ap?'':(fixBrg(b.n)||(fx&&fixRnavOnly(fx)?'<span style="color:#6fc3ff">RNAV専用</span>':''));
+  return `<tr${l.e.tr?' class="ap"':''}><td>${b.ap?b.ap.icao+' '+b.ap.n:b.n}</td><td>${rn}</td><td class="r">${mcs}°</td><td class="r">${l.e.d.toFixed(1)}</td><td class="r">${l.e.mea!=null?l.e.mea:'—'}</td><td class="brg">${ev}</td></tr>`;
 }
 function procChips(list,sel,key){
   if(!list.length)return '<span class="ifrNa">索引に無し</span>';
@@ -5055,7 +5088,7 @@ function renderIfrOut(P){
   <div class="ifrBox"><b class="k">経路 ${dep.icao} → ${dst.icao}  ${R.d.toFixed(1)}NM  ETE ${fmtHM(ete)}(TAS ${tas}kt・無風)</b>
     <div style="overflow:auto"><table class="ifrLog"><tr><th>TO</th><th>経路</th><th>MC</th><th>NM</th><th>MEA</th><th>評定</th></tr>
     <tr class="ap"><td>${dep.icao} ${dep.n}</td><td></td><td></td><td></td><td></td><td></td></tr>${rows}</table></div>
-    <div class="hint">評定 = ENR 4.3 のnavaid方位/距離(磁方位)。GNSSが無いときはこれで位置を出す</div>
+    <div class="hint">評定 = ENR 4.3 のnavaid方位/距離(磁方位)。<span style="color:#6fc3ff">RNAV専用</span>の点は navaid では評定できない。SID/STAR は名前がFIXと一致するものへつないでいる(形は図で確認)</div>
     ${RA?`<b class="k" style="margin-top:8px">代替 ${dst.icao} → ${alt.icao}  ${RA.d.toFixed(1)}NM  ETE ${fmtHM(eteA)}</b>
     <div style="overflow:auto"><table class="ifrLog"><tr><th>TO</th><th>経路</th><th>MC</th><th>NM</th><th>MEA</th><th>評定</th></tr>${rowsA}</table></div>`:(alt?'<div class="ifrWarn">代替までの経路が見つからない</div>':'')}
   </div>
@@ -5097,6 +5130,21 @@ document.getElementById('ifrToMap').onclick=()=>{
   document.getElementById('ifrModal').style.display='none';
   document.querySelector('.tabs button[data-tab="wp"]').click();
 };
+
+/* 飛行ログ表の見出しは2段とも sticky。2段目の top を CSS の 26px 固定にしていると、
+   iPhone ではフォントの都合で1段目の高さが違い、**2段目が1段目に食い込むか隙間が空く**(段ズレ)。
+   1段目の実測の高さを 2段目の top に入れる。表示が切り替わって高さが変わる(display:none→表示、フォント読込)たびに ResizeObserver で追従 */
+function fixLogHead(){
+  const t=document.querySelector('table.fltlog thead');if(!t||t.rows.length<2)return;
+  const h=t.rows[0].getBoundingClientRect().height;if(!h)return;
+  [...t.rows[1].cells].forEach(c=>c.style.top=h+'px');
+}
+(function(){
+  const r=document.querySelector('table.fltlog thead tr');if(!r)return;
+  if(window.ResizeObserver)new ResizeObserver(fixLogHead).observe(r);
+  window.addEventListener('load',fixLogHead);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fixLogHead);
+})();
 
 /* ───────── 起動時復元 ───────── */
 (function init(){
