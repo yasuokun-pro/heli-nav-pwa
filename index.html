@@ -332,6 +332,11 @@
   .nk-pin span{font-size:10px;color:#ffd24d;text-shadow:0 0 3px #000,0 1px 3px #000;font-family:var(--sans)}
   .obst-ico{font-family:var(--mono);font-size:9px;font-weight:700;color:#ffd24d;text-shadow:0 1px 3px #000;white-space:nowrap}
   .obst-ico i{font-style:normal;font-size:12px}
+  /* 場外・緊急離着陸場(国土数値情報)。数が多いので小さく */
+  .hpad-ico{font-family:var(--mono);font-size:9px;white-space:nowrap;line-height:1;text-shadow:0 1px 3px #000}
+  .hpad-ico b{display:inline-block;width:11px;height:11px;line-height:11px;text-align:center;font-size:8px;
+    border:1px solid;border-radius:2px;background:rgba(13,26,41,.75)}
+  .hpad-ico span{margin-left:2px}
   .fix-ico{font-family:var(--mono);font-size:9px;color:#c9a7ff;text-shadow:0 1px 3px #000;white-space:nowrap;line-height:1}
   .fix-ico i{font-style:normal;font-size:10px;margin-right:1px}
   .fix-ico.rnav{color:#6fc3ff}   /* RNAV専用(navaid評定なし)は色と記号を変える */
@@ -647,7 +652,7 @@
         <button id="btnFix" title="重要地点(AIP ENR 4.3)のうち navaid の方位/距離で評定できる点。▲義務位置通報点 △任意">FIX</button>
         <button id="btnFixR" title="RNAV専用の重要地点(navaidでの評定なし。GNSS/RNAV装置が要る)">RNAV点</button>
         <button id="btnAwy" title="航空路(AIP ENR 3.1 下層ATSルート / ENR 3.3 RNAV経路)">航空路</button>
-        <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AD 1.4)と滑空場(ENR 5.5.1)">ヘリ場</button>
+        <button id="btnHp" title="ヘリポート・滑空場(AIP AD 1.4 / ENR 5.5.1)と、地域防災計画の場外・緊急離着陸場(国土数値情報・ズーム11以上)">ヘリ場</button>
         <button id="btnObst">障害物</button>
         <button id="btnJsdf">自衛隊</button>
       </div>
@@ -890,7 +895,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-164';
+const VER_TAG='v6-165';
 const BUILD='2026-09-14';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2702,9 +2707,61 @@ async function loadHp(){
 }
 document.getElementById('btnHp').onclick=async function(){
   hpOn=!hpOn;this.classList.toggle('on',hpOn);
-  if(hpOn){await loadHp();hpLayer.addTo(map)}else map.removeLayer(hpLayer);
+  if(hpOn){await loadHp();await loadHpad();hpLayer.addTo(map);hpadLayer.addTo(map)}
+  else {map.removeLayer(hpLayer);map.removeLayer(hpadLayer)}
+  // 国土数値情報は利用規約で出典明示が必要
+  const ac=map.attributionControl,cr='国土数値情報(ヘリポート)';
+  if(ac)hpOn?ac.addAttribution(cr):ac.removeAttribution(cr);
+  drawHpad();
   restackOverlays();
 };
+
+/* ── 場外離着陸場・緊急離着陸場(国土数値情報 N11-13・全国13,759箇所) ──
+   各県の地域防災計画に載っている学校のグラウンド・公園・河川敷など。数が多いので
+   **障害物と同じくズーム11以上かつ画面内のみ**(上限400)。
+   ⚠ 2013年のデータで更新されていない。閉鎖・移転している前提で「参考」として出す
+   ⚠ **載っていても勝手に降りてよい場所ではない**(管理者の許可・航空法79条の場外許可) */
+let HPAD=null,hpadLayer=L.layerGroup();
+async function loadHpad(){
+  if(HPAD)return HPAD;
+  try{const r=await fetch('helipad.json?v='+VER_TAG);HPAD=await r.json()}catch(e){HPAD={f:[],kinds:[],mgrs:[]}}
+  return HPAD;
+}
+const HPAD_C={'1':'#38e07b','2':'#8fd7ff','3':'#c9a7ff'};
+function drawHpad(){
+  hpadLayer.clearLayers();
+  if(!hpOn||!HPAD)return;
+  const z=map.getZoom();
+  if(z<11){
+    hpadLayer.addLayer(L.marker(map.getCenter(),{interactive:false,icon:L.divIcon({className:'',
+      html:'<div class="hp-ico" style="background:rgba(13,26,41,.9);padding:3px 7px;border-radius:4px">場外・緊急離着陸場: ズーム11以上で表示</div>',iconAnchor:[80,8]})}));
+    return;
+  }
+  const [s,n,w,e]=viewBox();
+  HPAD.f.filter(p=>p.lat>=s&&p.lat<=n&&p.lng>=w&&p.lng<=e).slice(0,400).forEach(p=>{
+    const col=HPAD_C[p.c]||'#c9a7ff';
+    L.marker([p.lat,p.lng],{icon:L.divIcon({className:'',iconSize:null,iconAnchor:[7,7],
+      html:`<div class="hpad-ico" style="color:${col}"><b style="border-color:${col}">H</b>`+
+           (z>=13?`<span>${(p.n||'').slice(0,12)}</span>`:'')+`</div>`})})
+      .bindPopup(()=>{
+        const el=document.createElement('div');el.className='apPop';
+        el.innerHTML=`<h5 style="color:${col}">H ${p.n||'(名称不明)'}</h5><dl>`+
+          (p.k!==undefined?`<dt>種別</dt><dd style="white-space:normal">${HPAD.kinds[p.k]||''}</dd>`:'')+
+          (p.a?`<dt>所在地</dt><dd style="white-space:normal">${p.a}</dd>`:'')+
+          (p.s?`<dt>規模</dt><dd>${p.s}</dd>`:'')+
+          (p.m!==undefined?`<dt>管理者</dt><dd style="white-space:normal">${HPAD.mgrs[p.m]||''}</dd>`:'')+
+          `<dt>位置</dt><dd>${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}</dd></dl>`+
+          `<div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>`+
+          `<div class="note">国土数値情報(ヘリポート) N11-13・<b>平成25年のデータ</b>。`+
+          `閉鎖・移転している場合がある。座標は施設のおおよその中心で、進入方向・障害物・使用条件は入っていない。`+
+          `<b style="color:var(--amb)">載っていても勝手に降りてよい場所ではない</b>(管理者の許可・場外許可が要る)</div>`;
+        el.querySelector('.apDct').onclick=()=>{setDct({name:p.n||'HP',lat:p.lat,lng:p.lng,isWp:false});map.closePopup()};
+        el.querySelector('.add').onclick=()=>{pushUndo();addWp(p.lat,p.lng,p.n||'HP');redraw();map.closePopup()};
+        return el;
+      }).addTo(hpadLayer);
+  });
+}
+map.on('moveend zoomend',()=>{if(hpOn&&!popupOn(hpadLayer))drawHpad()});
 
 /* 重なった場所では小さい図形を優先してタップできるよう並び順を整える
    (空域=最背面 → 臨時空域 → 障害物=最前面) */
