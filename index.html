@@ -653,6 +653,7 @@
         <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AIP AD 1.4)と滑空場(ENR 5.5.1)">ヘリポート</button>
         <button id="btnHpad" title="地域防災計画などが定める防災拠点(臨時離着陸場・緊急離着陸場・場外離着陸場)。応援機を受け入れる場所であって、緊急着陸の適地ではない。ズーム11以上">防災拠点</button>
         <button id="btnObst">障害物</button>
+        <button id="btnPwln" title="送電線(OpenStreetMap power=line)。⚠ 配電線(電柱間の低圧線)はOSMにほぼ入っていないので描かれない。線が無い=安全ではない。ズーム10以上">送電線</button>
         <button id="btnJsdf">自衛隊</button>
       </div>
     </div>
@@ -894,7 +895,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-171';
+const VER_TAG='v6-172';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2116,6 +2117,64 @@ document.getElementById('btnObst').onclick=async function(){
 };
 map.on('moveend zoomend',()=>{if(obstOn){drawObst();restackOverlays()}});
 
+/* ── 送電線(OpenStreetMap power=line・tools/gen_pwln.py → pwln.json) ──
+   AISの障害物データは**点**しか無く、鉄塔は載っていても**鉄塔間に張られた線そのもの**が入っていない。
+   実際にぶつかるのは線の方で、とくに**川を横断する送電線**は河川敷に降りるときの最大の脅威。
+   ⚠ **配電線(power=minor_line)は日本のOSMにほぼ入っていない**(千葉中央部で0本)。
+     ここに描かれるのは送電線だけ。**線が描かれていない=安全ではない**。
+   ⚠ 出典表記が要る(ODbL)。レイヤーONの間だけ attribution に OpenStreetMap を出す。
+   ⚠ データは[kV, lat0, lng0, Δlat, Δlng, ...]の**差分整数**(1e5倍)。容量を切り詰めるため。
+     画面内判定は整数のまま行い、**描く線だけ**座標に展開する(全部展開すると携帯で重い) */
+let PWLN=null,pwlnOn=false;
+const pwlnLayer=L.layerGroup(),PWLN_COL='#ff3b5c';
+async function loadPwln(){
+  if(PWLN)return PWLN;
+  try{const r=await fetch('pwln.json?v='+VER_TAG);PWLN=await r.json()}
+  catch(e){PWLN={scale:100000,l:[]}}
+  PWLN.bb=PWLN.l.map(a=>{                       // 線ごとの外接矩形を一度だけ作る
+    let la=a[1],lo=a[2],s=la,n=la,w=lo,e=lo;
+    for(let i=3;i<a.length;i+=2){
+      la+=a[i];lo+=a[i+1];
+      if(la<s)s=la;if(la>n)n=la;if(lo<w)w=lo;if(lo>e)e=lo;
+    }
+    return[s,n,w,e];
+  });
+  return PWLN;
+}
+function drawPwln(){
+  pwlnLayer.clearLayers();
+  if(!pwlnOn||!PWLN)return;
+  if(map.getZoom()<10){
+    pwlnLayer.addLayer(L.marker(map.getCenter(),{interactive:false,icon:L.divIcon({className:'',
+      html:'<div class="obst-ico" style="background:rgba(13,26,41,.9);padding:3px 7px;border-radius:4px">送電線: ズーム10以上で表示</div>',iconAnchor:[70,8]})}));
+    return;
+  }
+  const[s,n,w,e]=viewBox(),S=PWLN.scale||100000;
+  const s0=s*S,n0=n*S,w0=w*S,e0=e*S;
+  let cnt=0;
+  for(let i=0;i<PWLN.l.length&&cnt<500;i++){
+    const b=PWLN.bb[i];
+    if(b[1]<s0||b[0]>n0||b[3]<w0||b[2]>e0)continue;
+    const a=PWLN.l[i];
+    let la=a[1],lo=a[2];const pts=[[la/S,lo/S]];
+    for(let k=3;k<a.length;k+=2){la+=a[k];lo+=a[k+1];pts.push([la/S,lo/S]);}
+    const kv=a[0];
+    L.polyline(pts,{renderer:ovRenderer,color:PWLN_COL,weight:kv>=100?2.4:1.5,opacity:.95})
+      .bindTooltip(kv?('送電線 '+kv+'kV'):'送電線',{direction:'top',sticky:true})
+      .addTo(pwlnLayer);
+    cnt++;
+  }
+}
+document.getElementById('btnPwln').onclick=async function(){
+  pwlnOn=!pwlnOn;this.classList.toggle('on',pwlnOn);
+  if(pwlnOn){await loadPwln();pwlnLayer.addTo(map)}else map.removeLayer(pwlnLayer);
+  const ac=map.attributionControl,cr='送電線 &copy; OpenStreetMap contributors (ODbL)';
+  if(ac)pwlnOn?ac.addAttribution(cr):ac.removeAttribution(cr);
+  drawPwln();
+  restackOverlays();
+};
+map.on('moveend zoomend',()=>{if(pwlnOn){drawPwln();restackOverlays()}});
+
 /* ── FIXレイヤー(AIP ENR 4.3・全国2,926点・tools/gen_fix.py → fix.json) ──
    障害物と同じく画面内だけ描く。ズーム8〜9は義務位置通報点(▲)とnavaid名だけ、10以上で全部(上限300)。
    ⚠ IFRモード(IFR.md)の土台。経路探索はここの点と awy.json の区間をグラフにして行う */
@@ -2818,6 +2877,8 @@ function restackOverlays(){
     nukeLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
   if(typeof supLayer!=='undefined'&&map.hasLayer(supLayer))
     supLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
+  if(typeof pwlnLayer!=='undefined'&&map.hasLayer(pwlnLayer))
+    pwlnLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
   if(typeof obstLayer!=='undefined'&&map.hasLayer(obstLayer))
     obstLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
   if(typeof thrLayer!=='undefined'&&map.hasLayer(thrLayer))
