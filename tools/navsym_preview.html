@@ -1,7 +1,7 @@
 <!doctype html><meta charset=utf-8>
 <body style="background:#0a1420;color:#9fc0e6;font:14px system-ui;padding:24px">
 <h3 style="font-weight:500">navaid</h3><div id=o style="display:flex;gap:28px;flex-wrap:wrap"></div>
-<h3 style="font-weight:500;margin-top:40px">飛行場・ヘリポート・場着場</h3><div id=h style="display:flex;gap:28px;flex-wrap:wrap"></div>
+<h3 style="font-weight:500;margin-top:40px">飛行場・ヘリポート・防災拠点</h3><div id=h style="display:flex;gap:28px;flex-wrap:wrap"></div>
 <script>function navSvg(t){
   const c='#9fc0e6', S=22, M=S/2;
   const hex=r=>[0,1,2,3,4,5].map(k=>{const a=(k*60-90)*Math.PI/180;return (M+r*Math.cos(a)).toFixed(1)+','+(M+r*Math.sin(a)).toFixed(1)}).join(' ');
@@ -46,7 +46,7 @@ document.getElementById('o').innerHTML=T.map(t=>`<div style="text-align:center">
   <div style="transform:scale(3);transform-origin:center;height:70px;display:flex;align-items:center;justify-content:center">${navSvg(t)}</div>
   <div style="margin-top:6px">${t||'(不明)'}</div></div>`).join('');
 const H=[['A','#9fe870',false,'飛行場(略号なし)'],['H','#ff7ac8',false,'ヘリポート'],['G','#ffd24d',false,'滑空場'],
-         ['H','#38e07b',true,'場着場(公共用)'],['H','#8fd7ff',true,'場着場(非公共用)'],['H','#c9a7ff',true,'場着場(場外・緊急)']];
+         ['H','#38e07b',true,'防災拠点(公共用)'],['H','#8fd7ff',true,'防災拠点(非公共用)'],['H','#c9a7ff',true,'防災拠点(場外・緊急)']];
 document.getElementById('h').innerHTML=H.map(([k,c,d,l])=>`<div style="text-align:center">
   <div style="transform:scale(3);transform-origin:center;height:70px;display:flex;align-items:center;justify-content:center">${hpSvg(k,c,d)}</div>
   <div style="margin-top:6px;color:${c}">${l}</div></div>`).join('');

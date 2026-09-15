@@ -651,7 +651,7 @@
         <button id="btnFixR" title="RNAV専用の重要地点(navaidでの評定なし。GNSS/RNAV装置が要る)">RNAV点</button>
         <button id="btnAwy" title="航空路(AIP ENR 3.1 下層ATSルート / ENR 3.3 RNAV経路)">航空路</button>
         <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AIP AD 1.4)と滑空場(ENR 5.5.1)">ヘリポート</button>
-        <button id="btnHpad" title="地域防災計画の場外離着陸場・緊急離着陸場(国土数値情報 N11-13・ズーム11以上)">場着場</button>
+        <button id="btnHpad" title="地域防災計画などが定める防災拠点(臨時離着陸場・緊急離着陸場・場外離着陸場)。応援機を受け入れる場所であって、緊急着陸の適地ではない。ズーム11以上">防災拠点</button>
         <button id="btnObst">障害物</button>
         <button id="btnJsdf">自衛隊</button>
       </div>
@@ -894,7 +894,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-170';
+const VER_TAG='v6-171';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2719,7 +2719,10 @@ document.getElementById('btnHpad').onclick=async function(){
   restackOverlays();
 };
 
-/* ── 場着場(場外離着陸場・緊急離着陸場。国土数値情報 N11-13・全国13,759箇所) ──
+/* ── 防災拠点(臨時離着陸場・緊急離着陸場・場外離着陸場。国土数値情報 N11-13・全国13,759箇所) ──
+   ⚠ **性格は「受入れ拠点」であって「緊急着陸の適地」ではない**。資料の欄(最寄消防署からの距離・
+     管理者の連絡先・散水の要否・最大駐機数・備蓄燃料・指定避難所かどうか)が示すとおり、
+     地上で人が場所を空けて待っている前提で選ばれている。3分の1が学校の校庭。
    各県の地域防災計画に載っている学校のグラウンド・公園・河川敷など。数が多いので
    **障害物と同じくズーム11以上かつ画面内のみ**(上限400)。
    ⚠ 2013年のデータで更新されていない。閉鎖・移転している前提で「参考」として出す
@@ -2742,7 +2745,7 @@ async function loadHpad(){
 const HPAD_C={'1':'#38e07b','2':'#8fd7ff','3':'#c9a7ff'};
 /* 航空図の標準記号(ICAO Annex 4 / AIP GEN 2.3 と同じ約束事)。navSvg と同じ考え方で自作する。
    飛行場=円(滑走路の線入り) / ヘリポート=円に H / 滑空場=グライダーの記号。
-   ⚠ **場着場は航空図に載らない**ので標準の記号が無い。ヘリポートの記号を**破線の円**にして
+   ⚠ **防災拠点は航空図に載らない**ので標準の記号が無い。ヘリポートの記号を**破線の円**にして
      「公示されたヘリポートではない」ことを形で示す(色は航空法上の分類で変える) */
 function hpSvg(kind,col,dashed){
   const S=18,M=S/2,sw=dashed?'stroke-dasharray="2.2 1.8" ':'';
@@ -2762,7 +2765,7 @@ function drawHpad(){
   const z=map.getZoom();
   if(z<11){
     hpadLayer.addLayer(L.marker(map.getCenter(),{interactive:false,icon:L.divIcon({className:'',
-      html:'<div class="hp-ico" style="background:rgba(13,26,41,.9);padding:3px 7px;border-radius:4px">場着場: ズーム11以上で表示</div>',iconAnchor:[60,8]})}));
+      html:'<div class="hp-ico" style="background:rgba(13,26,41,.9);padding:3px 7px;border-radius:4px">防災拠点: ズーム11以上で表示</div>',iconAnchor:[60,8]})}));
     return;
   }
   const [s,n,w,e]=viewBox();
