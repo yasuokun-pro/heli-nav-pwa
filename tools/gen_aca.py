@@ -794,8 +794,9 @@ def main():
         g = _pg(out[i])
         if g.area <= 0: continue
         a0, b0 = _vr(out[i])
-        ov = [q for q, a1, b1, ic in kept if min(b0, b1) - max(a0, a1) > 0]
-        ov_ic = {ic for q, a1, b1, ic in kept if min(b0, b1) - max(a0, a1) > 0}
+        ovk = [(q, ic) for q, a1, b1, ic in kept if min(b0, b1) - max(a0, a1) > 0]
+        ov = [q for q, ic in ovk]
+        ov_ic = {ic for q, ic in ovk}
         if ov:
             acc = unary_union(ov)
             left = g.difference(acc)
@@ -814,12 +815,22 @@ def main():
             #   ・同じ飛行場の図の中の区画どうし(1枚の図の区画は重なってはいけない)
             #   ・AIPが「◯◯ACAを除く」と書いている図(late=1。中部ACA)
             #   ・ほとんど(60%以上)が既出と重なる = 同じ区画が2枚の図に載っている(百里7000は94%)
+            # ⚠ 「同じ飛行場」で切ってよいのは**その飛行場の区画に対してだけ**。
+            #   他の図の分まで一緒に切ると、入れ子の委任空域が削れる
             same_ap = out[i].get('icao') in ov_ic
-            may_clip = same_edge and (same_ap or out[i].get('_late') or frac >= 0.6)
+            wide = bool(out[i].get('_late')) or frac >= 0.6
+            if same_edge and same_ap and not wide:
+                acc2 = unary_union([q for q, ic in ovk if ic == out[i].get('icao')])
+                left = g.difference(acc2)
+                frac = (g.area - left.area) / g.area if g.area else 0
+            may_clip = same_edge and (same_ap or wide)
+            why = ('AIPが除外と明記' if out[i].get('_late') else
+                   (f'{frac*100:.0f}%重複' if frac >= 0.6 else '同じ図の区画どうし'))
             if may_clip and left.area < 0.05 * g.area:
+                print(f"  {out[i]['n']}: 既出と{frac*100:.0f}%重複({why}) → 除外")
                 drop += 1; continue                    # ほぼ丸ごと重複
             if may_clip and left.area < 0.999 * g.area:
-                print(f"  {out[i]['n']}: 既出と重複 {(g.area-left.area)*S0:.0f}km²({frac*100:.0f}%) を切り取り")
+                print(f"  {out[i]['n']}: 既出と重複 {(g.area-left.area)*S0:.0f}km²({frac*100:.0f}%・{why}) を切り取り")
                 g = left; clip += 1
             elif frac > 0.001:
                 print(f"  {out[i]['n']}: 既出と{frac*100:.0f}%重なるが別の図の空域なので残す")
