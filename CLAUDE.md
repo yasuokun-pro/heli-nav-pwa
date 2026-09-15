@@ -26,7 +26,7 @@ heli-nav-pwa/            … 場所: ~/Claudeディレクトリ/heli-nav-pwa (gi
 ├─ sw.js         … Service Worker(オフラインキャッシュ)
 ├─ manifest.json … PWAマニフェスト
 ├─ IFR.md                    … IFRモードの設計メモ(Stage 1 完了・再開はここから)
-├─ fix.json / awy.json / proc.json / iacmin.json / tomin.json … IFR用データ(FIX・航空路・方式索引・進入ミニマ原文・離陸ミニマ原文)。tools/gen_fix.py, gen_awy.py, gen_proc.py(proc+iacmin), gen_tomin.py が生成
+├─ fix.json / awy.json / proc.json / iacmin.json / tomin.json / adnav.json … IFR用データ(FIX・航空路・方式索引・進入ミニマ原文・離陸ミニマ原文)。tools/gen_fix.py, gen_awy.py, gen_proc.py(proc+iacmin), gen_tomin.py が生成
 ├─ icon-192.png / icon-512.png … アプリアイコン(男の子+プロペラ)
 ├─ icon-512-maskable.png … Android用。⚠ OSが円/角丸に切り抜くので**中央80%に収める**
 ├─ favicon.ico / icon-y-180.png … タブのアイコン。⚠ 16pxだと顔が潰れるので**「y」マーク**
@@ -1014,11 +1014,21 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     "…via SHT R297 to OMIYA." の並びを `to:[…]` に入れる(321図)。索引の方式名は**地名や方角のことがある**
     (下総の "WEST" は OMIYA 行き)ので、名前だけだと経路に繋げず遠回りの SID が選ばれていた(ユーザー指摘)。
     使う側は `to` の**最後の点で、飛行場から8NMより遠いもの**を採る(出発飛行場自身の navaid が混ざるため)
+  - ⚠⚠ **FIX同士を直線で結んではいけない**(v6-161・ユーザー指摘)。自分で航路を標定しながら飛ぶので、
+    通れるのは **公示ルート(航空路・RNAV経路・直行経路)** か **navaid のラジアル**だけ。
+    ENR 4.3 の評定欄("178°/5.4NM TNT")がそのラジアルなので、経路網に無い点(IAF・ミスドの待機点・
+    方式の終点)は **`linkFixVia()` で評定できる navaid 経由**に繋ぐ。navaid 側は `navNode()` が
+    「その navaid で評定できる経路網上の FIX」と結ぶ。脚の名前は "TNT R178" のように出す
+    - 立川の例: ANOBU→**TNT**(R178)→**EDARR**(TNT R152)→DAIBU(公示の直行経路)。
+      最寄りFIXへの直線だと ANOBU→DAIBU という飛べない線になっていた
+    - 方式が無い飛行場は**その飛行場の navaid**へ繋ぐ(下総→立川 は OMIYA→TNT(R046)→RJTC)
+    - 評定の無い点(RNAV専用)だけは従来どおり最寄りへの直線(「(仮)」と表示)
+  - **navaid の位置は ENR 4.1 + 各 AD 2.19**。`tools/gen_adnav.py` → `adnav.json`(**123局**)が
+    ENR 4.1 に無い飛行場の施設(立川 TNT・入間 YLT・大島空港 OSE・各ILSのLOC)を補う。
+    これで **FIX の評定欄に出る navaid 210種すべて**の位置が引ける
+    ⚠ AD 2.19 は**緯度と経度が別の行**に来る書式が多い(立川 "354807N/" + "1400035E")。次の3行まで見る
   - **代替へは進入復行(ミスドアプローチ)の待機点から**(v6-158/160)。進入図の "…to ANOBU and hold." を
     `mah`(地図に置ける点)/`mahT`(文字のみ)として持つ(276/430図)。
-    ⚠ 待機点は**進入専用の点で航空路に乗っていない**。最寄りのFIXへ直線を引くと飛べない経路になる
-      (立川の ANOBU→DAIBU)。ミスド後は出発方式に乗るので、**その飛行場の SID の到達点**へ繋ぐ
-      → ANOBU→EDARR(EDARR SID)→DAIBU(公示の直行経路) となる
     ⚠ 待機点があるときは**そこから探索して先頭に1レグ足す**。飛行場に他の仮リンク(最寄りFIX)があると
       そちらが短くて待機点を素通りする
     ⚠ "and" と "hold" の間に別の欄の数字が挟まることがある(立川 IAC-1 の "35")
