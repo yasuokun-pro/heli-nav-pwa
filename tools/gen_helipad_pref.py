@@ -22,14 +22,15 @@
 ⚠ ジオコーダは 1秒に1回まで。番地まで無い住所は市区町村の中心に落ちるので、
   **突合できた点はN11の座標を優先**する(この方針を崩さないこと)
 """
-import json, os, re, sys, time, unicodedata, urllib.request, urllib.parse
+import html, json, os, re, subprocess, sys, time, unicodedata, urllib.request, urllib.parse
+from collections import Counter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UA = {'User-Agent': 'heli-nav-pwa/1.0'}
 CACHE = '/tmp/helipad_pref'
 GSI = 'https://msearch.gsi.go.jp/address-search/AddressSearch?q='
 # 住所らしい語: 区市町村のあとに数字・丁目・字などが続くもの(施設名の「◯◯区立」を弾く)
-ADDR = re.compile(r'[一-龥ぁ-んァ-ヶー]{1,8}[区市町村](?=[^\s]*(?:[0-9０-９]|丁目|番|字|先|地内))')
+ADDR = re.compile(r'[一-龥々ヶケぁ-んァ-ヶー]{1,8}[区市町村](?=[^\s]*(?:[0-9０-９]|丁目|番|字|先|地内))')
 
 
 def cw(c): return 2 if unicodedata.east_asian_width(c) in 'WFA' else 1
@@ -61,7 +62,30 @@ def pdftext(url, name):
 
 
 # ── 表の切り出し(共通) ───────────────────────────────────────────────
-def rows_by_columns(lines, numbered=r'^\s{0,6}(\d{1,4})(?:\s|$)'):
+def rows_muni(lines, city, numbered=r'^\s{0,6}(\d{1,4})\s'):
+    """市町村ごとの小表(神奈川の(2)市町村関係型)。
+    ⚠ **住所に市町村名が入っていない**(見出しの市名が効いている)ので、住所を語で探せない。
+      欄の順(番号+名称 / 所在地 / 東西×南北 / 面積 / 管理者 / 連絡先 / 散水 / ヘリ)で読む。
+    ⚠ 面積は「70 × 70 4,900」のように寸法と混ざる。**数字の最大**を面積とみなす"""
+    num = re.compile(numbered)
+    out = []
+    for i, l in enumerate(lines):
+        m = num.match(l)
+        if not m: continue
+        f = [x for x in re.split(r'\s{2,}', l.strip()) if x]
+        if len(f) < 2: continue
+        name = re.sub(numbered, '', f[0]).strip()
+        addr = f[1]
+        nums = [int(x.replace(',', '')) for x in f[2:] if re.fullmatch(r'[\d,]{1,9}', x)]
+        area = str(max(nums)) if nums else ''
+        heli = next((x for x in reversed(f) if x in ('大', '中', '小')), '')
+        if not name or not addr: continue
+        out.append({'no': int(m.group(1)), 'n': name, 'a': city + addr, 's': area,
+                    'k': '臨時離着陸場', 'rm': ('離着陸可能なヘリ: ' + heli) if heli else ''})
+    return out
+
+
+def rows_by_columns(lines, numbered=r'^\s{0,6}(\d{1,4})(?:\s|$)', addr_first=False, pref='', head_drop=0):
     """番号付きの行を1件として、**住所欄の桁**を基準に 名称/住所/以降 に割る。
     ⚠ 名称が長いと番号行の上下に折り返す。名称の桁の範囲に収まる行だけを継ぐ"""
     num = re.compile(numbered)
@@ -82,9 +106,16 @@ def rows_by_columns(lines, numbered=r'^\s{0,6}(\d{1,4})(?:\s|$)'):
         # ⚠ 名称の切れ目は**その行の住所の位置**で切る(ページの代表桁で切ると名称に住所が食い込む)
         head = l[:a.start()]
         name = re.sub(num, '', head).strip()
+        if head_drop:   # 名称の前に別の欄がある表(埼玉の 認識番号・消防本部 など)
+            hf = [x for x in re.split(r'\s{2,}', name) if x]
+            name = ' '.join(hf[head_drop:]) if len(hf) > head_drop else ''
         rest = [x for x in re.split(r'\s{2,}', l[a.start():].strip()) if x]
         if not rest: continue
         addr, tail = rest[0], rest[1:]
+        if addr_first:
+            # 神奈川の県関係のように **住所が名称より前**に来る表
+            if not tail: continue
+            name, addr, tail = tail[0], addr, tail[1:]
         area = kind = ''
         if tail:
             mm = re.match(r'^([\d,]+)\s*(.*)$', tail[0])
@@ -101,9 +132,24 @@ def rows_by_columns(lines, numbered=r'^\s{0,6}(\d{1,4})(?:\s|$)'):
             s0 = dpos(x, len(x) - len(x.lstrip()))
             if 1 <= s0 < acol - 2 and len(re.split(r'\s{2,}', x.strip())) == 1:
                 name = (x.strip() + name) if j < i else (name + x.strip())
+        if pref and not addr.startswith(pref): addr = pref + addr
         out.append({'no': int(m.group(1)), 'n': name, 'a': addr, 's': area.replace(',', ''),
                     'k': kind, 'rm': ' '.join(tail)})
     return out
+
+
+def words(path, p0, p1):
+    """PDFの単語を**実座標つき**で取り出す(ページごとの [(xMin,yMin,xMax,yMax,語), ...])。
+    ⚠ pdftotext -layout の桁は全角混在・列の重なりでずれるので、桁で列を切れない表はこちらを使う"""
+    o = subprocess.run(['pdftotext', '-bbox-layout', '-f', str(p0), '-l', str(p1), path, '-'],
+                       capture_output=True, text=True).stdout
+    pg = []
+    for m in re.finditer(r'<page width.*?</page>', o, re.S):
+        pg.append([(float(a), float(b), float(c), float(d), html.unescape(e))
+                   for a, b, c, d, e in re.findall(
+                       r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">(.*?)</word>',
+                       m.group())])
+    return pg
 
 
 def pages(txt):
@@ -128,7 +174,160 @@ def tokyo():
                       yr='令和5年(2023)')
 
 
-PARSERS = {13: tokyo}
+def kanagawa():
+    """神奈川県地域防災計画 マニュアル資料 3-11-(3) 神奈川県内のヘリコプター臨時離着陸場一覧表(令和7年4月1日現在)
+    ⚠ 2つの表でできている。(1)県関係は**住所が名称より前**、(2)市町村関係は市ごとの小表で
+      **住所に市名が入っていない**(ページ見出しの市名を足す)"""
+    t = pdftext('https://www.pref.kanagawa.jp/documents/85490/j3-2.pdf', 'kanagawa_j3-2')
+    L = t.split('\n')
+    st = next(i for i, l in enumerate(L) if 'ヘリコプター臨時離着陸場一覧' in l)
+    # ⚠ 資料番号は全角(資料 ３－11－(4))。ハイフンも全角なので幅を持たせて探す
+    en = next(i for i in range(st+20, len(L)) if re.search(r'資料\s*[3３][-－−]\s*11\s*[-－−]\s*[(（]4', L[i]))
+    mi = next(i for i in range(st, en) if '市町村関係' in L[i])
+    rows = []
+    for pg in pages('\n'.join(L[st:mi])): rows += rows_by_columns(pg, addr_first=True)
+    # 市町村関係: 「横   浜    市」のような見出しで市が切り替わる
+    city = ''
+    cur = []
+    CITYHD = re.compile(r'^\x0c?\s*(?:[^\s]\s*){1,5}[市町村]\s*$')
+    for l in L[mi:en]:
+        if CITYHD.match(l.replace('\x0c', '')):
+            if city and cur: rows += rows_muni(cur, city)
+            city = re.sub(r'[\s\x0c]', '', l); cur = []
+        cur.append(l)
+    if city and cur: rows += rows_muni(cur, city)
+    return rows, dict(pref='神奈川県',
+                      src='神奈川県地域防災計画 資料3-11-(3) 神奈川県内のヘリコプター臨時離着陸場一覧表',
+                      yr='令和7年(2025)')
+
+
+def saitama():
+    """埼玉県地域防災計画 資料編 Ⅱ-2-4-25 埼玉県内飛行場外離着陸場一覧表(令和2年11月1日現在)
+    ⚠ 名称の前に 認識番号・消防本部 の欄がある(head_drop=2)
+    ⚠ N11 の埼玉県の点は **住所が空** なので、住所キーではなく名称キーで突合する"""
+    t = pdftext('https://www.fdma.go.jp/bousaikeikaku/kanto/saitama/items/02saitama_shiryou.pdf', 'saitama_shiryou')
+    L = t.split('\n')
+    st = next(i for i, l in enumerate(L) if '埼玉県内飛行場外離着陸場一覧表' in l)
+    en = next(i for i in range(st+20, len(L)) if re.search(r'Ⅱ-2-4-2[67]', L[i]))
+    rows = []
+    for pg in pages('\n'.join(L[st:en])): rows += rows_by_columns(pg, head_drop=2)
+    return rows, dict(pref='埼玉県', src='埼玉県地域防災計画 資料編 Ⅱ-2-4-25 埼玉県内飛行場外離着陸場一覧表',
+                      yr='令和2年(2020)')
+
+
+DMS = re.compile(r'(\d{2,3})°\s*(\d{1,2})[′\']\s*([\d.]+)[″"]\s*([NE])')
+
+
+def dms(m):
+    v = int(m.group(1)) + int(m.group(2)) / 60 + float(m.group(3)) / 3600
+    return round(v, 6)
+
+
+def chiba():
+    """千葉県地域防災計画 資料編 資料5-4 ヘリコプター臨時離発着場適地一覧表(令和6年1月1日現在)
+    ⚠ この表は **座標(度分秒)が載っている** ので突合もジオコーダも要らない(published が最優先)。
+    ⚠ 1件が複数行にまたがる。緯度行(″N)・経度行(″E)が1件に1行ずつあるので「経度行まで」で切る。
+    ⚠ 所在地の桁は **行ごとにずれる**(名称が長いと右に押され、名称と空白1個でつながる)ので
+      位置では切れない。座標列より左のトークンから「市区町村で始まる語」を得点で選ぶ。"""
+    t = pdftext('https://www.pref.chiba.lg.jp/bousai/keikaku/chiikibousai/documents/r6siryo5.pdf', 'chiba_siryo5')
+    L = t.split('\n')
+    st = next(i for i, l in enumerate(L) if 'ヘリコプター臨時離発着場適地一覧表' in l and '資料５－４' in l)
+    en = next(i for i in range(st + 50, len(L)) if re.search(r'＜資料[５5]－[５5-9]|＜資料[６6-9]', L[i]))
+    CITY = re.compile(r'^[一-龥々ヶケぁ-んァ-ヶー]{1,8}[区市町村]')
+    NUMLN = re.compile(r'^\s{0,3}(\d{1,3})(?:\s|$)')
+    rows = []
+    for pg in pages('\n'.join(L[st:en])):
+        hi = next((i for i, l in enumerate(pg) if '地名・地番' in l and '座標' in l), -1)
+        body = pg[hi + 1:]
+        # ⚠ 座標列の位置だけは安定しているので、そこから左を「番号+名称+所在地」として扱う。
+        #   住所列の開始位置は **行ごとにずれる**(名称が長いと右に押される)ので位置では切れない。
+        cs = [dpos(l, m.start()) for l in body for m in [DMS.search(l)] if m]
+        if len(cs) < 3: continue
+        ccol = Counter(cs).most_common(1)[0][0]
+        blk = []
+        for l in body:
+            blk.append(l)
+            if '″E' not in l and '"E' not in l: continue
+            txt, blk = '\n'.join(blk), []
+            mn = next((m for m in DMS.finditer(txt) if m.group(4) == 'N'), None)
+            me = next((m for m in DMS.finditer(txt) if m.group(4) == 'E'), None)
+            if not (mn and me): continue
+            toks = []          # [文字列, 得点] 得点の高いものを所在地とみなす
+            for x in txt.split('\n'):
+                nl = bool(NUMLN.match(x))
+                d0 = DMS.search(x)
+                cut = (dpos(x, d0.start()) if d0 else ccol) - 2   # ⚠ 語は途中で切らない(住所が欠ける)
+                for w in re.finditer(r'\S+', x):
+                    d, t = dpos(x, w.start()), w.group()
+                    if d >= cut: continue
+                    if nl and d < 4 and t.isdigit(): continue     # 行頭の通し番号
+                    sc = -1
+                    if CITY.match(t):
+                        sc = 1 * nl + 2 * bool(re.search(r'[0-9０-９]|丁目|番|字', t))
+                    toks.append([t, sc])
+            adi = max((i for i, t in enumerate(toks) if t[1] >= 0),
+                      key=lambda i: (toks[i][1], i), default=None)
+            if adi is None: continue
+            ad = toks[adi][0]
+            nm = ''.join(t[0] for i, t in enumerate(toks) if i != adi).strip()
+            sz = re.search(r'(\d{1,4})\s*[×xX]\s*(\d{1,4})', txt)
+            kd = re.search(r'\s(大|中|小)\s', txt)
+            if not nm or not ad: continue
+            rows.append({'n': nm, 'a': ad, 's': '', 'k': kd.group(1) if kd else '',
+                         'rm': (sz.group(1) + '×' + sz.group(2) + 'm') if sz else '',
+                         'll': (dms(mn), dms(me))})
+    return rows, dict(pref='千葉県', src='千葉県地域防災計画 資料編 資料5-4 ヘリコプター臨時離発着場適地一覧表',
+                      yr='令和6年(2024)')
+
+
+def ibaraki():
+    """茨城県地域防災計画 資料編 23-1 茨城県防災航空隊離発着場(令和7年3月・PDF p.47-63)
+    欄: No / 消防本部別 / 場外・緊急離着陸場(名称) / 市町村 / 地名地番 / 地盤面 / 種別
+    ⚠ この表は -layout の桁が当てにならない(名称と市町村の桁が行ごとに重なる)。
+      **pdftotext -bbox-layout の実座標**で列を切り、折り返し行は
+      「いちばん近い番号のy中心」に付ける(番号は行の上下中央に打たれている)。
+    ⚠ 見出しは**最初のページだけ**にあるので、1ページ目で求めた列境界を全ページで使う。
+    ⚠ 市町村欄の（旧市町村名）は現在の住所では使えないので落とす。座標は無いのでジオコーダ行き。"""
+    f = os.path.join(CACHE, 'ibaraki_shiryo18-25.pdf')
+    if not os.path.exists(f):
+        get('https://www.pref.ibaraki.jp/seikatsukankyo/bousaikiki/bousai/documents/'
+            '4_2025shiryouhen_18-25.pdf', f)
+    pg = words(f, 47, 63)
+    h = {k: next(w for w in pg[0] if w[4] == k) for k in ('消防本部別', '市町村', '地名地番', '地盤面', '種別')}
+    nmx = max(w[2] for w in pg[0] if w[4] in ('場外・緊急', '離着陸場'))
+    B = [(h['消防本部別'][2] + 200) / 2, (nmx + h['市町村'][0]) / 2,
+         (h['市町村'][2] + h['地名地番'][0]) / 2, (h['地名地番'][2] + h['地盤面'][0]) / 2,
+         (h['地盤面'][2] + h['種別'][0]) / 2]
+    rows = []
+    for pi, ws in enumerate(pg):
+        if pi == 0:      # ⚠ 章題と見出しは1ページ目にしかなく、放っておくと1件目に吸われる
+            y0 = min(w[1] for w in ws if w[2] < B[0] and re.fullmatch(r'\d{1,4}', w[4]))
+            hy = max((w[3] for w in ws if w[1] < y0 - 8), default=0)
+            ws = [w for w in ws if w[3] > hy]
+        ns = [w for w in ws if w[2] < B[0] and re.fullmatch(r'\d{1,4}', w[4])]
+        if not ns: continue
+        ns.sort(key=lambda w: w[1])
+        own = {}
+        for w in ws:
+            if w[0] < B[0] or re.search(r'－\s*\d+\s*－|ヶ所', w[4]): continue
+            c = (w[1] + w[3]) / 2
+            own.setdefault(min(range(len(ns)), key=lambda k: abs((ns[k][1] + ns[k][3]) / 2 - c)),
+                           []).append(w)
+        for k in sorted(own):
+            g = sorted(own[k], key=lambda w: (round(w[1]), w[0]))
+            def col(i, j): return ''.join(w[4] for w in g if B[i] <= w[0] < B[j])
+            nm = col(0, 1)
+            city = re.sub(r'[（(].*', '', col(1, 2))
+            ad = col(2, 3)
+            if not nm or not city or not ad: continue
+            rows.append({'n': nm, 'a': '茨城県' + re.sub(r'\s+', '', city + ad), 's': '',
+                         'k': ''.join(w[4] for w in g if w[0] >= B[4]),
+                         'rm': '地盤面: ' + col(3, 4) if col(3, 4) else ''})
+    return rows, dict(pref='茨城県', src='茨城県地域防災計画 資料編 23-1 茨城県防災航空隊離発着場',
+                      yr='令和7年(2025)')
+
+
+PARSERS = {13: tokyo, 14: kanagawa, 11: saitama, 12: chiba, 8: ibaraki}
 
 
 # ── 突合とジオコーディング ────────────────────────────────────────────
@@ -172,13 +371,15 @@ def main():
         # ⚠ 名称の書き方が資料ごとに違う(「区立麻布野球場」/「港区立麻布運動場・野球場」)。
         #   **住所の町名まで**で候補を絞ってから名称の近さで選ぶ
         import difflib
-        oi = {}
-        for x in old: oi.setdefault(akey(x.get('a')), []).append(x)
+        oi, ni = {}, {}
+        for x in old:
+            if x.get('a'): oi.setdefault(akey(x['a']), []).append(x)
+            ni.setdefault(norm(x['n']), []).append(x)   # ⚠ N11は県によって住所が空(埼玉は全件None)
         hit = miss = 0
         recs, recs_new = [], []
         for r in rows:
             if not r['n'] or not r['a']: continue
-            cand = oi.get(akey(r['a'])) or []
+            cand = oi.get(akey(r['a'])) or ni.get(norm(r['n'])) or []
             best = None
             if cand:
                 if len(cand) == 1: best = cand[0]
@@ -191,7 +392,9 @@ def main():
             if r['s']: rec['s'] = r['s'] + '㎡'
             if r['k']: rec['kt'] = r['k']
             if r['rm']: rec['rm'] = r['rm']
-            if cand:
+            if r.get('ll'):
+                rec['lat'], rec['lng'] = r['ll']; rec['c'] = 1; hit += 1   # ⚠ 資料に載っている座標が最優先
+            elif cand:
                 rec['lat'], rec['lng'] = cand[0]['lat'], cand[0]['lng']; rec['o'] = 1; hit += 1
             else:
                 miss += 1; recs_new.append(r)
