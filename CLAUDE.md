@@ -495,8 +495,14 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     括弧付きの見出しに限定すること
   - **AIPにAD2/AD3のページが無い飛行場**(滝ヶ原RJATなど。GEN 2.4にのみ載る)は
     `EXTRA` に座標直書き。`src` を持たせてポップアップの出典表示も変える
-- **nav aids**: 全国VOR/DME/TACAN/NDB 112施設。ENR 4.1から `tools/gen_navaids.py` で抽出、
-  index.htmlの `/*NAVAIDS_GEN_*/` へ埋込。◈NAVボタンで表示、タップで情報
+- **nav aids**: ENR 4.1 の経路用 129施設(`tools/gen_navaids.py` → index.html の `/*NAVAIDS_GEN_*/`)に加えて、
+  **各 AD 2.19 の飛行場の施設**(`tools/gen_adnav.py` → `adnav.json`・123局)も NAV ボタンで出す(v6-163)。
+  ⚠ ILS の LOC/GP(96局)は滑走路に重なって邪魔なので**地図には出さない**(IFRの経路計算には使う)
+  - 記号は**航空図の標準**(ICAO Annex 4 / AIP GEN 2.3 と同じ約束事)に倣って `navSvg()` で自作:
+    六角形=VOR / 六角形+四角=VOR/DME / 六角形+3つの突起=VORTAC / 破線六角形+突起=TACAN /
+    四角=DME / 点線の円=NDB。⚠ 市販の航空図(区分航空図など)の**図柄そのものを写さないこと**。
+    形の約束事は国際標準なので自作なら問題ない。確認用のページ: `tools/navsym_preview.html`
+    ⚠ 突起の角度の基準は六角形と揃える(-90°)。ずれると VORTAC がいびつになる
 - **全国空域**: 非関東は各AD2の AD 2.17 半径から概略円(外接円近似)。
   `tools/natl_ctr.json`(全AD2抽出済) → `gen_asp.py gen_natl()` で ASP_POLY に追加。
   大量ポリゴンは **Canvasレンダラ(L.canvas)** で描画(SVGだと重い)
