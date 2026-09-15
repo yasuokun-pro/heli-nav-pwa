@@ -58,6 +58,8 @@ def parse(path):
         r = {'n': g('noh'), 'lat': lat, 'lng': lng}
         c = g('ccc')
         if c in CCC: r['c'] = c
+        pr = g('prc')
+        if pr: r['p'] = int(pr)      # 都道府県コード(県ごとの最新資料で差し替えるのに要る)
         for k, t in (('a', 'ads'), ('m', 'adn'), ('s', 'sor'), ('k', 'nor')):
             v = g(t)
             if v and v != '不明': r[k] = v

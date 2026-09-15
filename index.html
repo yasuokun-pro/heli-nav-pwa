@@ -894,7 +894,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-167';
+const VER_TAG='v6-168';
 const BUILD='2026-09-14';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2725,9 +2725,18 @@ document.getElementById('btnHpad').onclick=async function(){
    ⚠ 2013年のデータで更新されていない。閉鎖・移転している前提で「参考」として出す
    ⚠ **載っていても勝手に降りてよい場所ではない**(管理者の許可・航空法79条の場外許可) */
 let HPAD=null,hpadOn=false,hpadLayer=L.layerGroup();
+/* ⚠ 国土数値情報は2013年で止まっている。**都県の現行の地域防災計画で差し替えた分**(helipad_pref.json)が
+   あればその都県は丸ごと入れ替える(古い一覧と混ざらないように) */
 async function loadHpad(){
   if(HPAD)return HPAD;
   try{const r=await fetch('helipad.json?v='+VER_TAG);HPAD=await r.json()}catch(e){HPAD={f:[],kinds:[],mgrs:[]}}
+  try{
+    const pr=await (await fetch('helipad_pref.json?v='+VER_TAG)).json();
+    const done=new Set(Object.keys(pr.p||{}).map(Number));
+    HPAD.f=HPAD.f.filter(x=>!done.has(x.p));
+    Object.entries(pr.p||{}).forEach(([k,v])=>v.f.forEach(x=>HPAD.f.push(
+      Object.assign({},x,{p:+k,c:'3',src:v.src,yr:v.yr}))));
+  }catch(e){}
   return HPAD;
 }
 const HPAD_C={'1':'#38e07b','2':'#8fd7ff','3':'#c9a7ff'};
@@ -2765,14 +2774,15 @@ function drawHpad(){
       .bindPopup(()=>{
         const el=document.createElement('div');el.className='apPop';
         el.innerHTML=`<h5 style="color:${col}">H ${p.n||'(名称不明)'}</h5><dl>`+
-          (p.k!==undefined?`<dt>種別</dt><dd style="white-space:normal">${HPAD.kinds[p.k]||''}</dd>`:'')+
+          (p.kt||p.k!==undefined?`<dt>種別</dt><dd style="white-space:normal">${p.kt||HPAD.kinds[p.k]||''}</dd>`:'')+
           (p.a?`<dt>所在地</dt><dd style="white-space:normal">${p.a}</dd>`:'')+
           (p.s?`<dt>規模</dt><dd>${p.s}</dd>`:'')+
           (p.m!==undefined?`<dt>管理者</dt><dd style="white-space:normal">${HPAD.mgrs[p.m]||''}</dd>`:'')+
-          `<dt>位置</dt><dd>${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}</dd></dl>`+
+          (p.rm?`<dt>備考</dt><dd style="white-space:normal">${p.rm}</dd>`:'')+
+          `<dt>位置</dt><dd>${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}${p.g?' <span style="color:var(--dim)">(住所から推定)</span>':''}</dd></dl>`+
           `<div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>`+
-          `<div class="note">国土数値情報(ヘリポート) N11-13・<b>平成25年のデータ</b>。`+
-          `閉鎖・移転している場合がある。座標は施設のおおよその中心で、進入方向・障害物・使用条件は入っていない。`+
+          `<div class="note">${p.src?`${p.src}(${p.yr})`:'国土数値情報(ヘリポート) N11-13・<b>平成25年のデータ</b>。閉鎖・移転している場合がある'}。`+
+          `座標は施設のおおよその中心で、進入方向・障害物・使用条件は入っていない。`+
           `<b style="color:var(--amb)">載っていても勝手に降りてよい場所ではない</b>(管理者の許可・場外許可が要る)</div>`;
         el.querySelector('.apDct').onclick=()=>{setDct({name:p.n||'HP',lat:p.lat,lng:p.lng,isWp:false});map.closePopup()};
         el.querySelector('.add').onclick=()=>{pushUndo();addWp(p.lat,p.lng,p.n||'HP');redraw();map.closePopup()};
