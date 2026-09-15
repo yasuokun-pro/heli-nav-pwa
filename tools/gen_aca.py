@@ -364,10 +364,13 @@ RJAK5 = (36.03472, 140.19278) # 霞ヶ浦ARP(5NM弧)
 SPEC['RJTU/ACA'] = dict(
    jp='宇都宮進入管制区', n='UTSUNOMIYA ACA', eff_note='図に上限の記載なし',
    ctr=(36.489722,139.863333),
-   outer=[{'arcp':(1,2)},3,4,5,{'arcp':(5,6)},7],
+   # ⚠ 外周の30NM弧は **(1)→(2)→(4) と繋がっている**(図の「30nm」の寸法線はこの弧を指す)。
+   #   (2)-(3)-(4) の V字は外周ではなく **7000/4000 の境目**。V字を外周だと読むと
+   #   北東の三日月(弧とV字の間)が丸ごと欠ける
+   outer=[{'arcp':(1,2)},{'arcp':(2,4)},5,{'arcp':(5,6)},7],
    sub=[
      dict(n='7000', lo=7000, ring=[{'arcp':(1,2)},3,8,7]),
-     dict(n='4000', lo=4000, ring=[3,4,5,{'arcp':(5,6)},7,8]),
+     dict(n='4000', lo=4000, ring=[3,2,{'arcp':(2,4)},5,{'arcp':(5,6)},7,8]),
    ])
 
 # 浜松ACA。⚠ 図の注記「30NM fm 351534N/1365459E」は**外周の弧ではない**。
@@ -786,27 +789,49 @@ def main():
         return (f['lo'] if f['lo'] is not None else 0,
                 f['up'] if f['up'] is not None else 60000)
     keep, kept, drop, clip = [], [], 0, 0
+    kept_v = set()      # 既に置いた区画の頂点(重複判定用)
     for i in order:
         g = _pg(out[i])
         if g.area <= 0: continue
         a0, b0 = _vr(out[i])
-        ov = [q for q, a1, b1 in kept if min(b0, b1) - max(a0, a1) > 0]
+        ov = [q for q, a1, b1, ic in kept if min(b0, b1) - max(a0, a1) > 0]
+        ov_ic = {ic for q, a1, b1, ic in kept if min(b0, b1) - max(a0, a1) > 0}
         if ov:
             acc = unary_union(ov)
             left = g.difference(acc)
-            if left.area < 0.05 * g.area:
+            # ⚠⚠ 重なっていても「同じ区画が2枚の図に載っている」とは限らない。
+            #   宇都宮ACAのように**東京ACAの中に入れ子で委任されている**空域は、
+            #   自分の図どおりの形で出さないと南東側が丸ごと欠ける(ユーザー指摘)。
+            #   本当の重複は**境界線そのものを共有している**(百里は42点中33点が
+            #   東京と同一座標、横田は重なり100%)。境界の共有長で見分ける
+            #   見分けは**頂点の一致**で。共有の境界は AIP の同じ座標から起こすので
+            #   小数以下まで一致する(union の境界で見ると、先に置いた図どうしの内部の
+            #   境界が消えてしまって判定できない)
+            mine = {(round(x, 3), round(y, 3)) for x, y in g.exterior.coords}
+            same_edge = len(mine & kept_v) >= 3
+            frac = (g.area - left.area) / g.area if g.area else 0
+            # 切り取ってよいのは次のどれか。それ以外は**自分の図どおりの形で残す**
+            #   ・同じ飛行場の図の中の区画どうし(1枚の図の区画は重なってはいけない)
+            #   ・AIPが「◯◯ACAを除く」と書いている図(late=1。中部ACA)
+            #   ・ほとんど(60%以上)が既出と重なる = 同じ区画が2枚の図に載っている(百里7000は94%)
+            same_ap = out[i].get('icao') in ov_ic
+            may_clip = same_edge and (same_ap or out[i].get('_late') or frac >= 0.6)
+            if may_clip and left.area < 0.05 * g.area:
                 drop += 1; continue                    # ほぼ丸ごと重複
-            if left.area < 0.999 * g.area:
-                cut = (g.area - left.area) * S0
-                print(f"  {out[i]['n']}: 既出と重なる {cut:.0f}km² を切り取り")
+            if may_clip and left.area < 0.999 * g.area:
+                print(f"  {out[i]['n']}: 既出と重複 {(g.area-left.area)*S0:.0f}km²({frac*100:.0f}%) を切り取り")
                 g = left; clip += 1
+            elif frac > 0.001:
+                print(f"  {out[i]['n']}: 既出と{frac*100:.0f}%重なるが別の図の空域なので残す")
         f = dict(out[i])
         parts = [g] if g.geom_type == 'Polygon' else list(g.geoms)
         for q in parts:
             if q.area * S0 < 1.0: continue
             r = dict(f); r['pts'] = [[round(y, 6), round(x/K0, 6)] for x, y in q.exterior.coords]
             keep.append(r)
-        kept.append((g, a0, b0))
+        kept.append((g, a0, b0, out[i].get('icao')))
+        kept_v |= {(round(x, 3), round(y, 3))
+                   for q in ([g] if g.geom_type == 'Polygon' else g.geoms) for x, y in q.exterior.coords}
     if drop or clip: print(f'  重複: {drop} 件を除外 / {clip} 件を切り取り')
     out = keep + dups + tcas
 
