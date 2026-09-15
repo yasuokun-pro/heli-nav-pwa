@@ -51,6 +51,9 @@
   .cell.live b{white-space:nowrap}
   .cell input{width:76px;background:none;border:none;border-bottom:1px solid var(--line);color:var(--grn);font-family:var(--mono);font-size:23px;font-weight:600;outline:none}
   .cell.timer span{color:var(--amb)}
+  /* 中継設定は数値入力ではなく長い文字列なので、.cell の大きな数字用フォントを打ち消す */
+  #cfgTfc .cell{flex:1 1 240px}
+  #cfgTfc .cell input{width:100%;font-size:13px;font-weight:400;color:var(--fg);letter-spacing:0}
   .cell small{font-size:11px}
   /* 更新通知。ホーム画面アプリだと更新に気づけないので明示する */
   #updBar{position:fixed;left:8px;right:8px;bottom:8px;z-index:2000;display:none;
@@ -795,6 +798,22 @@
       <button class="btn" id="btnTfc">他機表示 開始</button>
       <span id="tfcStatus" class="hint" style="align-self:center"></span>
     </div>
+    <details id="cfgTfc">
+      <summary>他機情報の中継設定</summary>
+      <div class="hint">adsb.lol / adsb.fi は<b>CORSヘッダを返さない</b>ため、このページから直接は読めません。
+        自分の Cloudflare Workers に中継を1枚置いて、そのURLと合言葉をここに入れてください
+        (<b>この端末にだけ保存され、リポジトリには書かれません</b>)。置き方は <code>worker/README.md</code>。</div>
+      <div class="strip">
+        <div class="cell" style="flex:2 1 260px"><b>中継URL</b><input id="tfcUrl" type="url" placeholder="https://xxxx.workers.dev"></div>
+        <div class="cell" style="flex:1 1 160px"><b>合言葉</b><input id="tfcKey" type="password" placeholder="RELAY_KEY"></div>
+      </div>
+      <div class="btnrow">
+        <button class="btn" id="btnTfcSave">保存</button>
+        <button class="btn" id="btnTfcTest">接続テスト</button>
+        <button class="btn" id="btnTfcClr">消去</button>
+        <span id="tfcCfgMsg" class="hint" style="align-self:center"></span>
+      </div>
+    </details>
     <table><thead><tr><th>C/S</th><th>高度 ft</th><th>速度 kt</th><th>方位</th><th>距離 NM</th></tr></thead>
     <tbody id="tfcBody"></tbody></table>
   </div>
@@ -895,7 +914,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-172';
+const VER_TAG='v6-173';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4919,8 +4938,11 @@ document.getElementById('alertBar').onclick=function(){
 function showTraffic(list,demo){
   acLayer.clearLayers();
   const body=document.getElementById('tfcBody');body.innerHTML='';
+  /* ⚠ デモ機は**接近警報にも警告色にも絶対に入れない**。
+     実データと同じ見た目で「⚠ TRAFFIC WARNING」が光ると、他人に渡したとき罠になる */
+  const lvOf=a=>demo?0:alertLevel(a);
   list.forEach(a=>{
-    const lv=alertLevel(a);
+    const lv=lvOf(a);
     const mk=L.marker([a.lat,a.lng],{icon:acIcon(a.trk,a.heli,lv)}).addTo(acLayer);
     mk.bindTooltip(`${a.heli?'🚁':''}${a.cs} ${a.alt}ft`,{direction:'top'});
     const tr=document.createElement('tr');
@@ -4937,7 +4959,7 @@ function showTraffic(list,demo){
     };
     body.appendChild(tr);
   });
-  renderAlert(list);
+  renderAlert(demo?[]:list);   // ⚠ デモ機で警報を鳴らさない
   document.getElementById('tfcStatus').innerHTML=demo
     ?`API未接続のためデモ表示<span class="tag">DEMO</span> <span style="color:var(--dim)">${tfcErr}${/403/.test(tfcErr)?'(airplanes.live は運営への連絡が要る)':''}</span>`
     :`${tfcSrcName} 受信データ(ADS-B/MLAT搭載機のみ・15s自動更新)`;
@@ -4950,13 +4972,23 @@ const TFC_SRC=[
   {n:'adsb.fi',u:c=>`https://opendata.adsb.fi/api/v2/lat/${c.lat.toFixed(4)}/lon/${c.lng.toFixed(4)}/dist/50`,k:'aircraft'},
 ];
 let tfcSrcName='',tfcErr='';
+/* ⚠ 中継の設定は**この端末のlocalStorageだけ**に置く。公開リポジトリに合言葉を書くと
+   Origin照合しか残らず、対策の意味が無くなる(worker/README.md 参照) */
+function tfcRelay(){const v=store.get('tfcRelay');return v&&v.url?v:null}
+function tfcSources(){
+  const R=tfcRelay();
+  if(!R)return TFC_SRC;
+  return[{n:'中継',k:'ac',u:c=>R.url.replace(/\/+$/,'')
+    +`?lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}&r=50`
+    +(R.key?`&k=${encodeURIComponent(R.key)}`:'')}];
+}
 async function fetchTraffic(){
   const c=ownPos||map.getCenter(); // GPS中は自機中心、なければ地図中心
   try{
     let j=null;const errs=[];
-    for(const S of TFC_SRC){
+    for(const S of tfcSources()){
       try{const r=await fetch(S.u(c));if(!r.ok){errs.push(`${S.n} ${r.status}`);continue}
-        const o=await r.json();j={ac:o[S.k]||[]};tfcSrcName=S.n;break}
+        const o=await r.json();j={ac:o[S.k]||[]};tfcSrcName=o.src||S.n;break}
       catch(e){errs.push(`${S.n} 取得不可`)}
     }
     tfcErr=errs.join(' / ');
@@ -5002,6 +5034,36 @@ function toggleTraffic(){ // トグル: 15秒ごと自動更新(タブと地図�
 }
 document.getElementById('btnTfc').onclick=toggleTraffic;
 document.getElementById('btnTfc2').onclick=toggleTraffic;
+
+/* ── 中継設定(他機タブ) ── */
+(function(){
+  const $=id=>document.getElementById(id);
+  const msg=(t,ok)=>{const e=$('tfcCfgMsg');e.textContent=t;e.style.color=ok?'var(--grn)':'var(--amb)'};
+  const v=store.get('tfcRelay')||{};
+  $('tfcUrl').value=v.url||'';$('tfcKey').value=v.key||'';
+  if(v.url)msg('中継を使用中',true);
+  $('btnTfcSave').onclick=()=>{
+    const url=$('tfcUrl').value.trim(),key=$('tfcKey').value.trim();
+    if(!url){store.del('tfcRelay');msg('中継を解除しました(直接取得に戻ります)',false);return}
+    if(!/^https:\/\//.test(url)){msg('httpsのURLを入れてください',false);return}
+    store.set('tfcRelay',{url,key});msg('保存しました',true);
+  };
+  $('btnTfcClr').onclick=()=>{store.del('tfcRelay');$('tfcUrl').value='';$('tfcKey').value='';
+    msg('消去しました',false)};
+  $('btnTfcTest').onclick=async()=>{
+    const url=$('tfcUrl').value.trim(),key=$('tfcKey').value.trim();
+    if(!url){msg('中継URLを入れてください',false);return}
+    msg('テスト中…',true);
+    const c=ownPos||map.getCenter();
+    try{
+      const r=await fetch(url.replace(/\/+$/,'')
+        +`?lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}&r=50`+(key?`&k=${encodeURIComponent(key)}`:''));
+      const o=await r.json().catch(()=>({}));
+      if(!r.ok){msg(`NG ${r.status} ${o.error||''}`,false);return}
+      msg(`OK ${o.src||''} ${(o.ac||[]).length}機`,true);
+    }catch(e){msg('NG 届きませんでした(URL・CORS許可を確認)',false)}
+  };
+})();
 
 /* ───────── tabs ───────── */
 document.querySelectorAll('.tabs button[data-tab]').forEach(btn=>{   // ⚠ IFR ボタンはタブではない(別画面)

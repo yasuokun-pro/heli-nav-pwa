@@ -892,6 +892,24 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     (`GAP_TO`。ユーザーがSWIMで確認)
   - ⚠ 形状はOSM由来の**目安**。ポップアップにその旨を出す(`osm:1`)。**消さないこと**
 
+- **他機情報の中継(v6-173)**: `worker/adsb-relay.js` (Cloudflare Workers・無料プラン)。
+  - **なぜ要るか**: `adsb.lol`/`adsb.fi` は無料で日本上空のデータを返すが
+    **`Access-Control-Allow-Origin` を返さない**。`no-cors` だと `type=opaque` になることから、
+    通信は届いていてブラウザが結果を渡していないだけと確認済み。`airplanes.live` は
+    2026-09 から寄与者限定で403、OpenSky は自サイト限定のCORS。
+    **静的ページである限りどの提供元でも同じ壁**なので、中継を1枚挟むしかない。
+  - ⚠ **中継URLと合言葉は `store.set('tfcRelay',...)` で端末のlocalStorageにだけ置く。
+    公開リポジトリには絶対に書かない**(書くとOrigin照合しか守りが残らない)。
+    設定は「他機」タブの `#cfgTfc`。
+  - 守りは4枚(Origin照合 / 合言葉 `k=` / IPごと1分12回 / 上流を0.05度に丸めて10秒キャッシュ)。
+    ⚠ 最後の1枚が減らすのは **adsb.lol 側の負荷**で、Cloudflareのリクエスト数は減らない。
+  - 無料枠は1日10万回。超えても課金にはならず `Error 1027` で止まり、
+    **00:00 UTC = 日本時間の朝9時**に戻る。置き方は `worker/README.md`。
+
+- ⚠ **デモ機は接近警報にも警告色にも入れない**(v6-173)。`showTraffic(list,demo)` の
+  `lvOf()` が demo のとき 0 を返し、`renderAlert(demo?[]:list)` で警報自体を抑える。
+  実データと同じ見た目で「⚠ TRAFFIC WARNING」が光ると、他人に渡したとき罠になる。
+
 - **送電線(v6-172)**: `tools/gen_pwln.py` → `pwln.json`(**32,600本**・3.0MB/gzip 1.17MB)。
   出典は OpenStreetMap の `power=line`(ODbL・レイヤーONの間だけ attribution に出す)。
   - **なぜ要るか**: AISの障害物データ(`obst.json`)は**点だけ**で、鉄塔は載っていても
