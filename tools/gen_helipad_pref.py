@@ -327,7 +327,87 @@ def ibaraki():
                       yr='令和7年(2025)')
 
 
-PARSERS = {13: tokyo, 14: kanagawa, 11: saitama, 12: chiba, 8: ibaraki}
+# ⚠ 'ー'(長音)は入れないこと。名称の「ヘリポート」が「ヘリポ-ト」になる
+ZEN = str.maketrans('０１２３４５６７８９－―‐ＮＥ／', '0123456789---NE/')
+
+
+def tochigi():
+    """栃木県緊急消防援助隊受援計画(令和2年3月) 別表第10
+    ヘリコプター離着陸場所(ランディングポイント)一覧表 (PDF p.41-44)
+    ⚠ 地域防災計画 資料編 2-22-2 の方は**那須地区41件の様式見本しか載っていない**。
+      県内全域が載っているのはこの受援計画の別表第10。
+    ⚠ 名称や区分が1個の空白でつながる行があるので -layout では切れない。**実座標**で列を切る。
+    ⚠ 緯度経度は全角(Ｎ３６度３３分５７秒/Ｅ１３９度５３分００秒)。載っているのでジオコーダ不要。"""
+    f = os.path.join(CACHE, 'tochigi_juen.pdf')
+    if not os.path.exists(f):
+        get('https://www.pref.tochigi.lg.jp/kurashi/bousai/kekaku/documents/juennkeikaku.pdf', f)
+    B = [114, 171, 216, 290, 368]     # 名称 / 離着陸場所 / 所在地 / 緯度経度 / (地積)
+    DM = re.compile(r'N(\d+)度(\d+)分(\d+)秒/?\s*E(\d+)度(\d+)分(\d+)秒')
+    rows = []
+    for ws in words(f, 41, 44):
+        ns = sorted((w for w in ws if w[2] < 40 and re.fullmatch(r'[0-9０-９]{1,4}', w[4])),
+                    key=lambda w: w[1])
+        if not ns: continue
+        y0 = (ns[0][1] + ns[0][3]) / 2 - 8      # ⚠ 見出し行が1件目に吸われるので切り落とす
+        own = {}      # ⚠ 緯度と経度が上下の行に割れる件がある。番号のy中心に近い方へ寄せる
+        for w in ws:
+            if (w[1] + w[3]) / 2 < y0: continue
+            c = (w[1] + w[3]) / 2
+            own.setdefault(min(range(len(ns)), key=lambda k: abs((ns[k][1] + ns[k][3]) / 2 - c)),
+                           []).append(w)
+        for k in sorted(own):
+            g = sorted(own[k], key=lambda w: (round(w[1]), w[0]))
+            def col(a, b): return ''.join(w[4] for w in g if B[a] <= w[0] < B[b])
+            t = col(3, 4).translate(ZEN)
+            m = DM.search(t) or DM.search(re.sub(r'^(E[^N]*)(N.*)$', r'\2\1', t))
+            if not m: continue
+            la = int(m.group(1)) + int(m.group(2)) / 60 + int(m.group(3)) / 3600
+            lo = int(m.group(4)) + int(m.group(5)) / 60 + int(m.group(6)) / 3600
+            nm, ad = col(0, 1), col(2, 3).translate(ZEN)
+            if not nm or not ad: continue
+            rows.append({'n': nm, 'a': '栃木県' + ad, 's': '', 'k': '', 'rm': col(1, 2),
+                         'll': (round(la, 6), round(lo, 6))})
+    return rows, dict(pref='栃木県',
+                      src='栃木県緊急消防援助隊受援計画 別表第10 ヘリコプター離着陸場所一覧表',
+                      yr='令和2年(2020)')
+
+
+def gunma():
+    """群馬県地域防災計画 資料編 12-5 / 緊急消防援助隊受援計画 別表第10 ヘリコプター離着陸場所
+    (群馬県防災航空隊管理データ・HB/FB含む)
+    ⚠ 出典PDF(消防庁 地域防災計画DB の 03_gunma_shiryou.pdf)は **約135MB** ある。
+      一度落としたら /tmp/helipad_pref に残るので消さないこと。
+    ⚠ 1件1行。座標は度分秒だが **分の記号が ″ になっている行**(139°05″41″)や
+      **全角数字が混ざる行**(36°3４′２２″)があるので、数字を半角化してから緩く拾う。
+    ⚠ 見出し【別表第１０】が各ページに出るので、終わりは【別表第１１】で見る。"""
+    t = pdftext('https://www.fdma.go.jp/bousaikeikaku/kanto/gunma/items/03_gunma_shiryou.pdf',
+                'gunma_shiryou')
+    L = t.split('\n')
+    st = next(i for i, l in enumerate(L) if '【別表第１０】' in l)
+    en = next(i for i in range(st + 50, len(L)) if '【別表第１１】' in L[i])
+    ROW = re.compile(r'^\s*(\S+-\d{1,3})\s+(.+?)\s+'
+                     r'(\d{1,3})°\s*(\d{1,2})\s*[′″\'"]\s*(\d{1,2})\s*[′″\'"]\s+'
+                     r'(\d{1,3})°\s*(\d{1,2})\s*[′″\'"]\s*(\d{1,2})\s*[′″\'"]\s+(.*)$')
+    AD = re.compile(r'[一-龥々ヶケぁ-んァ-ヶー]{1,8}[市町村][^\s]*')
+    rows = []
+    for l in L[st:en]:
+        m = ROW.match(l.translate(ZEN).replace('＊', '*'))
+        if not m: continue
+        la = int(m.group(3)) + int(m.group(4)) / 60 + int(m.group(5)) / 3600
+        lo = int(m.group(6)) + int(m.group(7)) / 60 + int(m.group(8)) / 3600
+        tail = m.group(9)
+        a = AD.search(tail)
+        if not a: continue
+        sz = re.search(r'(\d{1,4})\s*\*\s*(\d{1,4})', tail)
+        rows.append({'n': m.group(2).strip(), 'a': '群馬県' + a.group(), 's': '',
+                     'k': '', 'rm': (sz.group(1) + '×' + sz.group(2) + 'm') if sz else '',
+                     'll': (round(la, 6), round(lo, 6))})
+    return rows, dict(pref='群馬県',
+                      src='群馬県地域防災計画 資料編 別表第10 ヘリコプター離着陸場所(群馬県防災航空隊)',
+                      yr='令和5年(2023)')
+
+
+PARSERS = {13: tokyo, 14: kanagawa, 11: saitama, 12: chiba, 8: ibaraki, 9: tochigi, 10: gunma}
 
 
 # ── 突合とジオコーディング ────────────────────────────────────────────
@@ -393,7 +473,8 @@ def main():
             if r['k']: rec['kt'] = r['k']
             if r['rm']: rec['rm'] = r['rm']
             if r.get('ll'):
-                rec['lat'], rec['lng'] = r['ll']; rec['c'] = 1; hit += 1   # ⚠ 資料に載っている座標が最優先
+                # ⚠ キーは 'pc'。'c' は index.html 側で航空法上の分類に使っているので衝突させない
+                rec['lat'], rec['lng'] = r['ll']; rec['pc'] = 1; hit += 1
             elif cand:
                 rec['lat'], rec['lng'] = cand[0]['lat'], cand[0]['lng']; rec['o'] = 1; hit += 1
             else:
