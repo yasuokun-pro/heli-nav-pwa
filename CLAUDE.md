@@ -498,6 +498,9 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 - **nav aids**: ENR 4.1 の経路用 129施設(`tools/gen_navaids.py` → index.html の `/*NAVAIDS_GEN_*/`)に加えて、
   **各 AD 2.19 の飛行場の施設**(`tools/gen_adnav.py` → `adnav.json`・123局)も NAV ボタンで出す(v6-163)。
   ⚠ ILS の LOC/GP(96局)は滑走路に重なって邪魔なので**地図には出さない**(IFRの経路計算には使う)
+  ⚠ 周波数は ID と同じ行、TACAN の CH は**次の1〜2行**に "(CH-105X)" で来る(121/123局で取れた)
+  ⚠ **同じIDが VOR の行と DME の行に分かれて出る**(大島空港 OSE、富山 TOE)。ENR 4.1 と同じく
+    VOR/DME にまとめて周波数を両方持つ("109.85MHz / 1122MHz")
   - 記号は**航空図の標準**(ICAO Annex 4 / AIP GEN 2.3 と同じ約束事)に倣って `navSvg()` で自作:
     六角形=VOR / 六角形+四角=VOR/DME / 六角形+3つの突起=VORTAC / 破線六角形+突起=TACAN /
     四角=DME / 点線の円=NDB。⚠ 市販の航空図(区分航空図など)の**図柄そのものを写さないこと**。

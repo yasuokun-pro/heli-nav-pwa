@@ -19,6 +19,8 @@ import os, re, sys, json, glob, subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 LAT = re.compile(r'(\d{6}(?:\.\d+)?)N')
 LON = re.compile(r'(1\d{6}(?:\.\d+)?)E')
+FREQ = re.compile(r'(\d{2,4}(?:\.\d+)?)\s*(MHz|KHz|kHz)')
+CHAN = re.compile(r'\(\s*CH\s*-?\s*(\d{1,3}[XY])\s*\)')
 TYPE = re.compile(r'\b(VOR/DME|VORTAC|VOR|TACAN|DME|NDB|ILS-LOC|ILS-GP|LOC|GP|LLZ)\b')
 ID = re.compile(r'\b([A-Z]{2,3})\b')
 SKIP = {'VOR', 'DME', 'GP', 'ILS', 'LOC', 'NDB', 'MHz', 'KHZ', 'THR', 'RWY', 'ELEV', 'AD', 'CH',
@@ -64,8 +66,15 @@ def parse_one(pdf):
         # ID は種別の右、座標の左にある2〜3文字の大文字語
         ids = [x for x in ID.findall(head[mt.end():] if mt else head) if x not in SKIP]
         if not ids: continue
-        out.append({'id': ids[0], 'icao': icao, 't': (mt.group(1) if mt else ''),
-                    'lat': dms(ml.group(1), False), 'lng': dms(mo.group(1), True)})
+        r = {'id': ids[0], 'icao': icao, 't': (mt.group(1) if mt else ''),
+             'lat': dms(ml.group(1), False), 'lng': dms(mo.group(1), True)}
+        # 周波数は ID と同じ行、TACAN の CH は**次の1〜2行**に "(CH-105X)" で来る
+        mf = FREQ.search(head)
+        if mf: r['f'] = mf.group(1) + mf.group(2).replace('KHz', 'kHz')
+        for j in range(i, min(i+3, len(L))):
+            mc = CHAN.search(L[j])
+            if mc: r['ch'] = mc.group(1); break
+        out.append(r)
     return out
 
 
@@ -80,7 +89,17 @@ def main():
     seen = {}
     for f in fs:
         for r in parse_one(f):
-            if r['id'] in enr or r['id'] in seen: continue
+            if r['id'] in enr: continue
+            o = seen.get(r['id'])
+            if o:
+                # ⚠ 同じIDが VOR の行と DME の行に分かれて出る(大島空港 OSE、富山 TOE)。
+                #   ENR 4.1 と同じく **VOR/DME にまとめて**周波数を両方持つ
+                if o['icao'] == r['icao'] and {o['t'], r['t']} <= {'VOR', 'DME', 'TACAN', 'VORTAC'} and o['t'] != r['t']:
+                    o['t'] = 'VORTAC' if 'TACAN' in (o['t'], r['t']) else 'VOR/DME'
+                    if r.get('f') and r['f'] not in (o.get('f') or ''):
+                        o['f'] = ((o.get('f') + ' / ') if o.get('f') else '') + r['f']
+                    if r.get('ch') and not o.get('ch'): o['ch'] = r['ch']
+                continue
             seen[r['id']] = r
     eff = os.path.basename(os.path.dirname(os.path.dirname(fs[0])))
     dst = os.path.join(HERE, '..', 'adnav.json')
