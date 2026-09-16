@@ -357,6 +357,8 @@
   td.aspFrq{color:var(--amb)}
   @media print{ td.aspFrq{color:#000} }
   .metarRaw{font-family:var(--mono);font-size:11px;color:var(--txt);white-space:normal;word-break:break-all;margin-top:3px}
+  .tafTag{display:inline-block;font-size:9px;line-height:1;padding:2px 4px;border-radius:3px;border:1px solid var(--cyn);color:var(--cyn);vertical-align:middle;font-family:var(--mono)}
+  .tafBox{margin:4px 0 6px;padding:4px 6px;border-left:2px solid var(--cyn);background:rgba(61,213,243,.06)}
   #metarList td{cursor:pointer}
   #searchBar{position:absolute;z-index:960;left:52px;top:calc(var(--ovlH) + 12px);width:min(72%,380px);display:none}
   #searchBar input{width:100%;background:rgba(13,26,41,.96);border:1px solid var(--cyn);border-radius:6px;color:var(--txt);padding:9px 11px;font-size:14px;outline:none;font-family:var(--sans)}
@@ -799,7 +801,7 @@
       <span id="tfcStatus" class="hint" style="align-self:center"></span>
     </div>
     <details id="cfgTfc">
-      <summary>他機情報の中継設定</summary>
+      <summary>中継設定(他機情報・METAR/TAF 共通)</summary>
       <div class="hint">adsb.lol / adsb.fi は<b>CORSヘッダを返さない</b>ため、このページから直接は読めません。
         自分の Vercel に置いた中継のURLと合言葉をここに入れてください
         (<b>この端末にだけ保存され、リポジトリには書かれません</b>)。置き方は <code>relay/README.md</code>。
@@ -915,7 +917,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-175';
+const VER_TAG='v6-176';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3268,20 +3270,91 @@ document.getElementById('btnZmAll').onclick=()=>{
 /* ───────── 飛行場情報レイヤー ─────────
    タップで詳細ポップアップ(標高・滑走路)。D→ / ルート追加も可。
    周波数・運用時間等はAIP AD編の正式データ入手後に追加予定 */
-/* ───────── METAR(GitHub Actionsが更新するmetar.jsonを同一オリジン取得) ───────── */
-let METAR=null,metarFetched=0;
+/* ───────── METAR・TAF ─────────
+   1. 中継(relay/api/wx.js)が設定されていれば**その場で**取る。METAR も TAF も最新。
+   2. 中継が無い・失敗したら GitHub Actions が作る metar.json(同一オリジン)に戻る。
+   ⚠ metar.json の定期実行は30分おきの設定だが、**GitHub が混雑で飛ばすので実際は3〜6時間に1回**
+     (2026-09 の実行記録)。数時間前のメターが出ることがあるので、取得元と古さを必ず画面に出す。
+   ⚠ metar.json には TAF が無い。戻ったときは前回中継で取った TAF を残す(発表時刻つきなので古さは見える)。
+   ⚠ 中継は ids を1回80局まで受ける。NOAA の1回400件の上限(METAR 3時間ぶん×局数)に収めるため40局ずつ投げる。 */
+let METAR=null,metarFetched=0,metarErr='';
+const wxEsc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function relayBase(){
+  const R=tfcRelay();if(!R)return null;
+  return {base:R.url.replace(/\/+$/,'').replace(/\/api\/adsb$/,''),key:R.key||''};
+}
+async function metarViaRelay(RB){
+  const ids=[...new Set(ASP.map(a=>a.icao).filter(x=>x&&/^[A-Z0-9]{4}$/.test(x)))];
+  const chunks=[];for(let i=0;i<ids.length;i+=40)chunks.push(ids.slice(i,i+40));
+  const res=await Promise.all(chunks.map(async c=>{
+    const r=await fetch(`${RB.base}/api/wx?ids=${c.join(',')}`+(RB.key?`&k=${encodeURIComponent(RB.key)}`:''));
+    const o=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(`${r.status} ${o.error||''}${o.detail?' ('+[].concat(o.detail).join(' / ')+')':''}`.trim());
+    return o;
+  }));
+  const out={updated:res[0].updated,src:'relay',m:{},t:{},tafErr:''};
+  res.forEach(o=>{Object.assign(out.m,o.m||{});Object.assign(out.t,o.t||{});if(o.tafErr)out.tafErr=o.tafErr});
+  return out;
+}
 async function loadMetar(force){
   if(METAR&&!force&&Date.now()-metarFetched<120000){renderMetarTab();return}
   const st=document.getElementById('metStatus');if(st)st.textContent='取得中…';
-  try{
-    const r=await fetch('metar.json?t='+Math.floor(Date.now()/300000),{cache:'no-store'});
-    METAR=await r.json();metarFetched=Date.now();
-    store.set('hnav.metar',METAR); // オフライン用に退避
-  }catch(e){
-    METAR=METAR||store.get('hnav.metar'); // オフライン時は前回値
+  let got=null;metarErr='';
+  const RB=relayBase();
+  if(RB){try{got=await metarViaRelay(RB)}catch(e){metarErr='中継で取れず '+(e.message||e)}}
+  if(!got){
+    try{
+      const r=await fetch('metar.json?t='+Math.floor(Date.now()/300000),{cache:'no-store'});
+      got=await r.json();got.src='file';
+      const prev=METAR||store.get('hnav.metar');
+      if(prev&&prev.t)got.t=prev.t;
+    }catch(e){}
   }
+  if(got){METAR=got;metarFetched=Date.now();store.set('hnav.metar',METAR)} // オフライン用に退避
+  else METAR=METAR||store.get('hnav.metar');                                 // オフライン時は前回値
   renderMetarTab();
   document.querySelectorAll('.leaflet-popup .metarSlot').forEach(s=>s.innerHTML=metarHtml(s.dataset.icao));
+  const w=document.getElementById('ifrWxLines');
+  if(w){const[d,t,al]=w.dataset.ids.split(',');w.innerHTML=ifrWxLinesHtml(d,t,al)}
+}
+/* 画面に出ている間は5分ごとに取り直す(METAR は毎時・SPECI は随時。中継側でも2分は使い回す) */
+setInterval(()=>{
+  if(document.visibilityState!=='visible')return;
+  const met=document.getElementById('tab-met'),ifr=document.getElementById('ifrModal');
+  const metOn=met&&met.style.display!=='none'&&!document.body.classList.contains('main');
+  const ifrOn=ifr&&ifr.style.display!=='none'&&ifr.style.display!=='';
+  if(metOn||ifrOn)loadMetar(true);
+},300000);
+function metarAgeMin(){
+  if(!METAR||!METAR.updated)return null;
+  const t=Date.parse(METAR.updated.replace('Z',':00Z'));
+  return isNaN(t)?null:Math.round((Date.now()-t)/60000);
+}
+function metarSrcHtml(){
+  if(!METAR)return 'オフライン(データなし)';
+  const age=metarAgeMin(),old=age!==null&&age>90;
+  const ageTxt=age===null?'':`(${age<60?age+'分':Math.floor(age/60)+'時間'+(age%60)+'分'}前)`;
+  const head=METAR.src==='relay'
+    ?`<span style="color:var(--grn)">中継でその場取得</span> ${METAR.updated}${ageTxt}`
+    :`<span style="color:${old?'var(--amb)':'var(--dim)'}">定期取得分</span> ${METAR.updated} 更新(UTC)${ageTxt}`;
+  const tail=metarErr?` <span style="color:var(--amb)">⚠ ${wxEsc(metarErr)}</span>`
+    :(METAR.src!=='relay'&&!relayBase()?' <span style="color:var(--dim)">・中継を設定すると最新になります(他機情報タブ)</span>':'')
+    +(METAR.src==='relay'&&METAR.tafErr?' <span style="color:var(--amb)">⚠ TAF取得失敗</span>':'');
+  return head+tail;
+}
+/* TAF。変化群(TEMPO/BECMG/FM/PROB)ごとに改行して読みやすくする。原文は変えない */
+function tafDHM(ts){
+  if(!ts)return'';const d=new Date(ts*1000);
+  return pad(d.getUTCDate())+pad(d.getUTCHours())+pad(d.getUTCMinutes())+'Z';
+}
+function tafHtml(icao){
+  const t=METAR&&METAR.t&&METAR.t[icao];if(!t||!t.raw)return '';
+  const expired=t.to&&t.to*1000<Date.now();
+  const body=wxEsc(t.raw).replace(/\s+(?=(?:TEMPO|BECMG|FM\d{6}|PROB\d{2})\b)/g,'<br>&nbsp;&nbsp;');
+  return `<div class="tafBox"><span class="tafTag">TAF</span> <span style="color:var(--dim);font-size:10px">`+
+    `発表 ${tafDHM(t.issue)} ・ 有効 ${tafDHM(t.from)}〜${tafDHM(t.to)}`+
+    (expired?' <span style="color:var(--amb)">⚠ 有効期間切れ</span>':'')+`</span>`+
+    `<div class="metarRaw">${body}</div></div>`;
 }
 function catCls(c){return c&&['VFR','MVFR','IFR','LIFR'].includes(c)?c:'NA'}
 /* 自衛隊飛行場(立川・入間・厚木・木更津・館山・宇都宮・下総・小牧・浜松)や
@@ -3355,7 +3428,8 @@ function renderMetarTab(){
     const s=m;
     const tr=document.createElement('tr');
     if(metSel===a.icao)tr.className='metSel';
-    tr.innerHTML=`<td class="jp">${a.icao} ${a.n}</td>`+
+    const hasTaf=!!(METAR&&METAR.t&&METAR.t[a.icao]);
+    tr.innerHTML=`<td class="jp">${a.icao} ${a.n}${hasTaf?' <span class="tafTag">TAF</span>':''}</td>`+
       `<td>${s?`<span class="cat ${catCls(s.cat)}">${s.cat||'—'}</span>`:'—'}</td>`+
       `<td colspan="3" class="metarRaw">`+
         (s&&s.raw?s.raw:(imocLink(a.icao,'IMOCで見る')||'—'))+`</td>`+
@@ -3376,6 +3450,7 @@ function renderMetarTab(){
             extLink(imocListUrl(IMOC_AREA[a.icao]!==undefined?IMOC_AREA[a.icao]:nearImocArea()),
                     'IMOC 地域一覧')+
             extLink(ssUrl(a.icao),'sunny-spot 履歴4日')+`</div>`)+
+        tafHtml(a.icao)+
         (hist.length
           ? hist.map(z=>`<div style="margin:2px 0"><span class="cat ${catCls(z.cat)}">${z.cat||'—'}</span> `+
               `<span style="color:var(--dim)">${obsHM(z.obs)}</span> ${z.raw}</div>`).join('')
@@ -3388,7 +3463,7 @@ function renderMetarTab(){
   const st=document.getElementById('metStatus');
   if(st){
     const ar=nearImocArea();
-    st.innerHTML=(METAR?`${METAR.updated} 更新(UTC) / 近い順・タップで過去3時間`:'オフライン(データなし)')+
+    st.innerHTML=metarSrcHtml()+(METAR?' / 近い順・タップでTAFと過去3時間':'')+
       ` <span style="color:var(--dim)">|</span> `+
       extLink(imocListUrl(ar),`IMOC ${IMOC_RG[ar]}の一覧`)+
       ` <span style="color:var(--dim);font-size:10px">自衛隊飛行場等はこちら(1ページに全局)</span>`;
@@ -5453,6 +5528,13 @@ function iacMinHtml(icao,sel){
 let TOMIN=null;
 async function loadTomin(){if(TOMIN)return TOMIN;try{const r=await fetch('tomin.json?v='+VER_TAG);TOMIN=await r.json()}catch(e){TOMIN={f:{}}}return TOMIN}
 /* METAR の視程・雲高を判定せずに並べる(ミニマとの突き合わせはパイロット) */
+/* IFR 画面の気象欄。loadMetar が取り直したらここだけ描き直す(計画を組み直さなくても最新になる) */
+function ifrWxLinesHtml(dep,dst,alt){
+  const one=(lb,ic)=>`<div>${lb} ${ic}: ${wxLine(ic)}</div>`+
+    (tafHtml(ic)||`<div class="ifrNa" style="margin:2px 0 6px">TAFなし${METAR&&METAR.src!=='relay'?'(中継を設定すると表示)':''}</div>`);
+  return one('出発',dep)+one('目的',dst)+(alt?one('代替',alt):'')+
+    `<div class="hint" style="margin-top:4px">${metarSrcHtml()}。NOTAMは別途確認</div>`;
+}
 function wxLine(icao){
   const m=METAR&&METAR.m&&METAR.m[icao];if(!m)return '<span class="ifrNa">METARなし(IMOC等で確認)</span>';
   const v=metarVisCig(m.raw);
@@ -5636,11 +5718,8 @@ function renderIfrOut(P){
     <div>進入 ${dst.icao}: ${procChips(iac,S.iac,'iac')}</div>
     ${alt?`<div>進入(代替) ${alt.icao}: ${procChips(iacA,S.iacA,'iacA')}</div>`:''}
   </div>
-  <div class="ifrBox"><b class="k">気象(METAR)と AIP のミニマ</b>
-    <div>出発 ${dep.icao}: ${wxLine(dep.icao)}</div>
-    <div>目的 ${dst.icao}: ${wxLine(dst.icao)}</div>
-    ${alt?`<div>代替 ${alt.icao}: ${wxLine(alt.icao)}</div>`:''}
-    <div class="hint" style="margin-top:4px">METARは ${METAR&&METAR.updated?METAR.updated+' 更新(UTC)':'未取得'}。TAF・NOTAMは別途確認</div>
+  <div class="ifrBox"><b class="k">気象(METAR・TAF)と AIP のミニマ</b>
+    <div id="ifrWxLines" data-ids="${dep.icao},${dst.icao},${alt?alt.icao:''}">${ifrWxLinesHtml(dep.icao,dst.icao,alt?alt.icao:'')}</div>
     <div style="margin-top:8px"><b style="font-size:11px;color:var(--dim)">離陸ミニマ ${dep.icao}(AIP AD 2.22 原文)</b>
       ${tomin?aipTable(tomin):'<div class="ifrNa">AIP に記載なし(自衛隊・米軍飛行場など)</div>'}</div>
     ${iacMinHtml(dst.icao,S.iac)}

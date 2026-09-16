@@ -892,6 +892,14 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     (`GAP_TO`。ユーザーがSWIMで確認)
   - ⚠ 形状はOSM由来の**目安**。ポップアップにその旨を出す(`osm:1`)。**消さないこと**
 
+- **METAR・TAF の中継(v6-176)**: `relay/api/wx.js`(同じ Vercel・同じ鍵 `relay/lib/guard.js`)。
+  アプリは中継が設定されていれば**その場で**取り、失敗したら `metar.json` に戻る(`loadMetar`)。
+  ⚠ `metar.json` の定期実行は30分おき設定でも**実際は3〜6時間に1回**(GitHub が混雑で飛ばす)。
+    だから取得元と古さを `metarSrcHtml()` で必ず画面に出す。90分を超えたら黄色。
+  ⚠ 中継は ids を1回80局まで。NOAA は1回400件までなので、アプリは40局ずつに分ける。
+  ⚠ 自衛隊飛行場は NOAA に無い。IMOC 等の取り込みは許可の無い再配信なので**やらない**(リンクだけ)。
+  TAF はメタータブの展開行と IFR 画面の気象欄(`ifrWxLinesHtml`)。IFR は計画を組み直さなくても
+  `loadMetar` が取り直すたびに気象欄だけ描き直す。表示中は5分ごとに自動で取り直す。
 - **他機情報の中継(v6-174〜)**: **`relay/api/adsb.js` (Vercel・Node.js ランタイム・Hobby)**。
   ⚠ **Cloudflare Workers 版(`worker/adsb-relay.js`)は使えない**。2026-09-16 に実機で守りは全部通ったうえで
   `502 upstream`。adsb.lol / adsb.fi が Workers の**共有の送信元IP**を 403・429 で弾く(公開事例あり)。
