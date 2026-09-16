@@ -175,3 +175,19 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
    `pdftotext -layout "~/Downloads/AIP File Download Service/1_AIP (PDF)/20260709/ENR_20260709.pdf" enr.txt`
    行番号の当たりは「2. データの棚卸し」の表
 4. できたら BACKLOG.md の IFR の項を更新し、この文書の「7. 未確認」を潰していく
+
+
+## v6-177 RNAV 区間を navaid のラジアルで通す / 方式の逆走を禁止
+- **経緯**: 立川→宇都宮で OMIYA→SEKIYADO→TOHNE→LEMUM→KOGAR と遠回り(87.3NM)。
+  OMIYA–KOGAR は **Y588(RNAV5)にしか無い**ので、RNAV 無しの機体では使えなかった。
+- **ユーザー指摘**: OMIYA は JDT で標定できる。ENR 4.3 の OMIYA の評定は XAC・SHT・SYE・TNT の4つだけで
+  JDT は載っていないが、**座標から計算すると JDT 209°/38.4NM、KOGAR(公示 JDT 209°/25.4NM)と同じラジアル上で横ずれ0.06NM**。
+  つまり Y588 の OMIYA–KOGAR は JDT R-209 そのもので、TACAN があれば RNAV 無しで飛べる。
+- **対応** `radialOnSeg()`: RNAV の航空路の区間でも、両端が同じ navaid の同じラジアル上(角度差1°・横ずれ0.5NM以内、
+  navaid から3NM以上)で、**片端が公示の評定でその navaid を使っていれば**ラジアルの辺として通す。
+  公示に無い側の評定はレグ表に「(計算)」付きで出す。公示の直行経路が同じ線にあればそちらを優先(0.5NM 不利)。
+  → 立川→宇都宮 71.3NM、宇都宮→立川 54.1NM。
+- **ついでに見つかった既存の不具合**: 代替=出発地(立川→宇都宮→立川 など)で、SID の辺を逆向きに使って着陸していた
+  (辺を両向きに張っているため)。`dijkstra` で「SID で飛行場に入らない・STAR/IAF で飛行場から出ない」を追加。
+- [ ] navaid の使用不能区域(ENR 4.1 Unusable。JDT は 150-160°/310-330°/350-360° の一部)を見ていない
+- [ ] ラジアル接続で navaid 種別(TACAN/VOR)と装備のチェックボックスを照合していない(既存の評定接続も同じ)

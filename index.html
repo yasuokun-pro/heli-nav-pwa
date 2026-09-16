@@ -917,7 +917,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-176';
+const VER_TAG='v6-177';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -5271,6 +5271,10 @@ function awyBlock(r,ac){
 }
 function segBlock(r,sg,a,b,ac,cap){
   const w=awyBlock(r,ac);if(w)return w;
+  return segBlockRest(sg,a,b,ac,cap);
+}
+/* 装備以外で区間を塞ぐ理由(MEA 上限・DME)。RNAV 区間をラジアルで通すときもこれは必ず見る */
+function segBlockRest(sg,a,b,ac,cap){
   // 与圧なしの上限より MEA が高い区間は使わない(まず上限内で探し、無ければ上限を外して警告)
   const m=meaFt(sg.mea);if(cap&&m!=null&&m>cap)return `MEA ${m}ft が上限 ${cap}ft を超える`;
   if(!ac.gnss&&!ac.dme){
@@ -5290,12 +5294,36 @@ function ifrGraph(ac,cap){
       const A=ix[sg.a],B=ix[sg.b];if(!A||!B)return;
       const ka=node(A),kb=node(B);
       const d=sg.dist!=null?sg.dist:distNM(A,B);
-      const blk=segBlock(r,sg,A,B,ac,cap);
-      const e={d,r,sg,mea:meaFt(sg.mea),blk};
+      let blk=segBlock(r,sg,A,B,ac,cap),via=null;
+      if(blk&&r.k==='RNAV'){ via=radialOnSeg(A,B); if(via)blk=segBlockRest(sg,A,B,ac,cap); }
+      const e={d,r,sg,mea:meaFt(sg.mea),blk,via};
       add(ka,kb,Object.assign({fwd:1},e));add(kb,ka,Object.assign({fwd:0},e));
     });
   });
   return {nodes,adj};
+}
+/* RNAV の航空路の区間でも、両端が**同じ navaid の同じラジアル上**にあれば、そのラジアルで標定して飛べる。
+   例: Y588 の OMIYA–KOGAR は JDT R-209 そのもの。KOGAR は ENR 4.3 に「209°/25.4NM JDT」と公示、
+       OMIYA は ENR 4.3 に JDT の評定が無いが、座標から計算すると JDT 209°/38.4NM で横ずれ 0.06NM(ユーザー指摘・v6-177)。
+   ⚠ 片端は必ず**公示の評定**でその navaid を使っていること。もう片端は計算値として画面に「計算」と出す。
+     偏差は公示側の(真方位−公示の磁方位)から出すので、偏差表の誤差が入らない。
+   ⚠ 許容は 角度差1° かつ 遠い側の横ずれ0.5NM。navaid から3NM以内の点は方位が暴れるので使わない。
+   ⚠ navaid の使用不能区域(ENR 4.1 の Unusable)と、既存のラジアル接続と同じく navaid 種別と装備(TACAN/VOR)の照合はまだしていない */
+function radialOnSeg(A,B){
+  const ra=fixRadials(A.n),rb=fixRadials(B.n);
+  for(const id of [...new Set([...ra,...rb].map(x=>x.id))]){
+    const X=navPt(id);if(!X)continue;
+    const dA=distNM(X,A),dB=distNM(X,B);if(dA<3||dB<3)continue;
+    const tA=trueBrg(X,A),tB=trueBrg(X,B);
+    const dt=((tB-tA+540)%360)-180;
+    if(Math.abs(dt)>1||Math.max(dA,dB)*Math.sin(Math.abs(dt)*Math.PI/180)>0.5)continue;
+    const pa=ra.find(x=>x.id===id),pb=rb.find(x=>x.id===id),pub=pa||pb;
+    const v=(((pa?tA:tB)-pub.brg+540)%360)-180;                    // 真方位−磁方位
+    const mag=t=>(t-v+720)%360;
+    return {id,rad:pub.brg,
+      A:{n:A.n,brg:mag(tA),d:dA,pub:!!pa},B:{n:B.n,brg:mag(tB),d:dB,pub:!!pb}};
+  }
+  return null;
 }
 /* 飛行場を最寄りのFIXに仮の直行線で結ぶ(SID/STARの区間の代わり)。半径を広げて最低3点 */
 /* 方式名から FIX/navaid 名を拾う。日本の SID/STAR は終点/始点の FIX 名で呼ぶものが多い
@@ -5402,13 +5430,19 @@ function dijkstra(G,src,dst){
     (G.adj[u]||[]).forEach(e=>{
       if(e.blk||done[e.to])return;
       if(e.to.startsWith('AP:')&&e.to!==dst)return;      // 他の飛行場は経由しない
-      const nd=dist[u]+e.d;
+      // ⚠ 方式の向きを守る。SID で飛行場に**入らない**、STAR・IAF で飛行場から**出ない**。
+      //   辺は両向きに張ってあるので、代替=出発地(立川→宇都宮→立川)だと SID を逆走して着陸していた(v6-177)
+      if(e.to.startsWith('AP:')&&e.tag==='SID')return;
+      if(u.startsWith('AP:')&&(e.tag==='STAR'||e.tag==='IAF'))return;
+      // ⚠ RNAV 区間をラジアルで通す辺(e.via)は0.5NMぶん不利にする。同じ線に**公示の直行経路**があれば
+      //   そちらを選ばせるため(OMIYA–EDARR は ENR 3.5.1 の直行経路と Y588 が同じ XAC R014 上)
+      const nd=dist[u]+e.d+(e.via?0.5:0);
       if(dist[e.to]===undefined||nd<dist[e.to]){dist[e.to]=nd;prev[e.to]={u,e};Q.add(e.to)}
     });
   }
   if(dist[dst]===undefined)return null;
   const legs=[];let k=dst;while(k!==src){const p=prev[k];legs.unshift({from:p.u,to:k,e:p.e});k=p.u}
-  return {legs,d:dist[dst]};
+  return {legs,d:legs.reduce((x,l)=>x+(+l.e.d||0),0)};   // 表示する距離は不利の分を含めない
 }
 function ifrRoute(G,src,dst,vias){
   const seq=[src,...vias,dst],legs=[];let total=0;
@@ -5660,12 +5694,19 @@ function ifrTable(rows,key,warr,ac,dep,cruise,depAp){
   const fw=x=>x==null?'—':(x>0?'+':'')+Math.round(x);
   let h=`<tr><th>TO</th><th>経路</th><th>MC</th><th>風(°T/kt)</th><th>WCA</th><th>MH</th><th>CH</th><th>GS</th><th>NM</th><th>ETE</th><th>累計</th><th>MEA</th><th>評定</th></tr>`;
   if(depAp)h+=`<tr class="ap"><td>${depAp.icao} ${depAp.n}</td><td colspan="${IFR_COLS-1}" style="color:var(--dim)">標高 ${depAp.elev!=null?depAp.elev+'ft':'—'}</td></tr>`;
+  // ラジアルで通した RNAV 区間の、公示に無い側の評定(計算値)。その点が TO になる行に出す
+  const viaCalc={};
+  rows.forEach(r=>{const v=r.l.e&&r.l.e.via;if(!v)return;
+    [v.A,v.B].forEach(p=>{if(!p.pub)viaCalc[p.n]=`${pad3(p.brg)}°/${p.d.toFixed(1)}NM ${v.id}(計算)`})});
   rows.forEach((r,i)=>{
     const l=r.l,b=r.b,e=l.e;
     if(rca&&rca.i===i)h+=`<tr class="rca"><td>(RCA ${asg.toLocaleString()}ft)</td><td>上昇 ${ac.roc}ft/min・${ac.vcl||80}kt・GS${Math.round(rca.gs)}</td><td colspan="6"></td><td class="r">(${rca.dist.toFixed(1)})</td><td class="r">(${fmtHM(rca.time)})</td><td class="r"></td><td colspan="2">${rca.ok?'SID区間の内数(SID '+rca.len.toFixed(1)+'NM)':'<span class="ifrNg">⚠ SID終点('+rca.len.toFixed(1)+'NM)までに届かない。必要上昇率 '+Math.round(rca.reqRoc)+'ft/min</span>'}</td></tr>`;
-    const rn=e.tr?(e.proc?`<span style="color:var(--cyn)">${e.tag==='IAF'?(b.ap?'IAF→ '+e.proc.p.n+' 進入':e.proc.p.n+' の IAF'):e.proc.p.n+' '+e.tag}</span>`:`<i style="color:var(--dim)">${e.tag}</i>`):`<span style="color:${AWY_COL[e.r.k]}">${e.r.n}</span>`;
+    const rn=e.tr?(e.proc?`<span style="color:var(--cyn)">${e.tag==='IAF'?(b.ap?'IAF→ '+e.proc.p.n+' 進入':e.proc.p.n+' の IAF'):e.proc.p.n+' '+e.tag}</span>`:`<i style="color:var(--dim)">${e.tag}</i>`)
+      :e.via?`<span style="color:${AWY_COL.LOW}">${e.via.id} R${pad3(e.via.rad)}</span> <i style="color:var(--dim)">(${e.r.n}と同じ線)</i>`
+      :`<span style="color:${AWY_COL[e.r.k]}">${e.r.n}</span>`;
     const fx=FIX&&FIX._ix[b.n];
-    const ev=b.ap?'':(fixBrg(b.n)||(fx&&fixRnavOnly(fx)?'<span style="color:#6fc3ff">RNAV専用</span>':''));
+    const calc=viaCalc[b.n]?`${fixBrg(b.n)?'<br>':''}<span style="color:var(--amb)">${viaCalc[b.n]}</span>`:'';
+    const ev=b.ap?'':((fixBrg(b.n)+calc)||(fx&&fixRnavOnly(fx)?'<span style="color:#6fc3ff">RNAV専用</span>':''));
     const w=warr[i]||{same:true};
     const wcell=`<span class="wIn"><input type="checkbox" class="wsame" data-k="${key}" data-i="${i}" ${w.same?'checked':''} title="前のレグ(先頭は共通の風)と同じ">＝前
       <input type="number" class="wd" data-k="${key}" data-i="${i}" value="${w.same?r.w.d:(w.d!=null?w.d:'')}" min="0" max="360" ${w.same?'disabled':''}>/<input type="number" class="ws" data-k="${key}" data-i="${i}" value="${w.same?r.w.s:(w.s!=null?w.s:'')}" min="0" ${w.same?'disabled':''}></span>`;

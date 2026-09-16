@@ -892,6 +892,11 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     (`GAP_TO`。ユーザーがSWIMで確認)
   - ⚠ 形状はOSM由来の**目安**。ポップアップにその旨を出す(`osm:1`)。**消さないこと**
 
+- **IFR: RNAV 区間を navaid のラジアルで通す(v6-177)** `radialOnSeg()`。Y588 の OMIYA–KOGAR は JDT R-209 そのもの
+  (OMIYA は ENR 4.3 に JDT の評定が無いが計算で 209°/38.4NM・横ずれ0.06NM)。片端が公示の評定でその navaid を使い、
+  両端が同じラジアル上(1°・0.5NM)なら RNAV 無しでも辺にする。公示の直行経路が同じ線にあればそちらを優先。
+  ⚠ `dijkstra` は **SID で飛行場に入らない・STAR/IAF で出ない**。辺を両向きに張るので、代替=出発地で SID を逆走していた。
+  詳細は IFR.md の v6-177。
 - **METAR・TAF の中継(v6-176)**: `relay/api/wx.js`(同じ Vercel・同じ鍵 `relay/lib/guard.js`)。
   アプリは中継が設定されていれば**その場で**取り、失敗したら `metar.json` に戻る(`loadMetar`)。
   ⚠ `metar.json` の定期実行は30分おき設定でも**実際は3〜6時間に1回**(GitHub が混雑で飛ばす)。
