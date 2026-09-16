@@ -1,0 +1,5 @@
+{
+  "name": "heli-nav-adsb-relay",
+  "private": true,
+  "type": "module"
+}

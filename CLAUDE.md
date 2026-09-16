@@ -892,7 +892,13 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     (`GAP_TO`。ユーザーがSWIMで確認)
   - ⚠ 形状はOSM由来の**目安**。ポップアップにその旨を出す(`osm:1`)。**消さないこと**
 
-- **他機情報の中継(v6-173)**: `worker/adsb-relay.js` (Cloudflare Workers・無料プラン)。
+- **他機情報の中継(v6-174〜)**: **`relay/api/adsb.js` (Vercel・Node.js ランタイム・Hobby)**。
+  ⚠ **Cloudflare Workers 版(`worker/adsb-relay.js`)は使えない**。2026-09-16 に実機で守りは全部通ったうえで
+  `502 upstream`。adsb.lol / adsb.fi が Workers の**共有の送信元IP**を 403・429 で弾く(公開事例あり)。
+  Vercel でも **Edge ランタイムにすると Cloudflare 網に乗って同じく弾かれる**ので Node.js のまま。
+  守りの4枚・返事の形は Worker 版と同一。上流失敗時は `detail` に弾かれ方を返し、接続テストに表示する。
+  置き方は `relay/README.md`。以下は Worker 版を作ったときの記録。
+- (旧)他機情報の中継(v6-173): `worker/adsb-relay.js` (Cloudflare Workers・無料プラン)。
   - **なぜ要るか**: `adsb.lol`/`adsb.fi` は無料で日本上空のデータを返すが
     **`Access-Control-Allow-Origin` を返さない**。`no-cors` だと `type=opaque` になることから、
     通信は届いていてブラウザが結果を渡していないだけと確認済み。`airplanes.live` は

@@ -1,5 +1,9 @@
 # 他機情報の中継 (Cloudflare Workers)
 
+> ⚠ **2026-09-16: この方式は上流に弾かれて使えない。** Origin・合言葉・回数制限は正しく動いたが、
+> adsb.lol と adsb.fi が Cloudflare Workers の共有の送信元IPを 403・429 で断るため `502 upstream` になる。
+> **中継は [`relay/`](../relay/README.md) の Vercel 版を使うこと。** このファイルは経緯として残してある。
+
 ## なぜ要るか
 `adsb.lol` と `adsb.fi` は無料・登録不要で日本上空のデータを返すが、
 **`Access-Control-Allow-Origin` を返さない**。そのため GitHub Pages に置いた

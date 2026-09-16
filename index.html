@@ -914,7 +914,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-173';
+const VER_TAG='v6-174';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -5059,7 +5059,7 @@ document.getElementById('btnTfc2').onclick=toggleTraffic;
       const r=await fetch(url.replace(/\/+$/,'')
         +`?lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}&r=50`+(key?`&k=${encodeURIComponent(key)}`:''));
       const o=await r.json().catch(()=>({}));
-      if(!r.ok){msg(`NG ${r.status} ${o.error||''}`,false);return}
+      if(!r.ok){msg(`NG ${r.status} ${o.error||''}${o.detail?' ('+[].concat(o.detail).join(' / ')+')':''}`,false);return}  // ⚠ 上流の弾かれ方(detail)も出す
       msg(`OK ${o.src||''} ${(o.ac||[]).length}機`,true);
     }catch(e){msg('NG 届きませんでした(URL・CORS許可を確認)',false)}
   };
