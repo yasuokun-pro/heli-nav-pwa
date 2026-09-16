@@ -801,10 +801,11 @@
     <details id="cfgTfc">
       <summary>他機情報の中継設定</summary>
       <div class="hint">adsb.lol / adsb.fi は<b>CORSヘッダを返さない</b>ため、このページから直接は読めません。
-        自分の Cloudflare Workers に中継を1枚置いて、そのURLと合言葉をここに入れてください
-        (<b>この端末にだけ保存され、リポジトリには書かれません</b>)。置き方は <code>worker/README.md</code>。</div>
+        自分の Vercel に置いた中継のURLと合言葉をここに入れてください
+        (<b>この端末にだけ保存され、リポジトリには書かれません</b>)。置き方は <code>relay/README.md</code>。
+        ⚠ Cloudflare Workers は上流に弾かれるので使えません。</div>
       <div class="strip">
-        <div class="cell" style="flex:2 1 260px"><b>中継URL</b><input id="tfcUrl" type="url" placeholder="https://xxxx.workers.dev"></div>
+        <div class="cell" style="flex:2 1 260px"><b>中継URL</b><input id="tfcUrl" type="url" placeholder="https://xxxx.vercel.app"></div>
         <div class="cell" style="flex:1 1 160px"><b>合言葉</b><input id="tfcKey" type="password" placeholder="RELAY_KEY"></div>
       </div>
       <div class="btnrow">
@@ -914,7 +915,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-174';
+const VER_TAG='v6-175';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
