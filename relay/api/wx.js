@@ -4,7 +4,7 @@
    これまでは GitHub Actions が30分おきに metar.json を作っていたが、**定期実行は混雑で飛ばされ、
    実際には3〜6時間に1回しか動いていなかった**(2026-09 の実行記録)。ここでその場で取る。
 
-   GET /api/wx?ids=RJTT,RJAA,...&k=合言葉
+   POST /api/wx  本文 {"ids":"RJTT,RJAA,...","k":"合言葉"}(旧: GET /api/wx?ids=...&k=...)
      → { updated, src:'relay', m:{ICAO:{raw,cat,temp,wdir,wspd,visib,obs,hist[]}}, t:{ICAO:{raw,issue,from,to}}, tafErr? }
      m の形は metar.json と同じ(アプリは同じ描画を使う)。t は TAF。
 
@@ -40,12 +40,13 @@ async function getJson(u) {
 function hm(d) { return d.toISOString().slice(0, 16) + 'Z'; }
 
 export const OPTIONS = preflight;
+export const POST = (request) => GET(request);   // アプリは POST(本文に合言葉)で呼ぶ
 
 export async function GET(request) {
-  const { H, url, deny } = check(request, overLimit);
+  const { H, p, deny } = await check(request, overLimit);
   if (deny) return deny;
 
-  const ids = [...new Set((url.searchParams.get('ids') || '').toUpperCase().split(','))]
+  const ids = [...new Set((p.get('ids') || '').toUpperCase().split(','))]
     .map(s => s.trim()).filter(s => /^[A-Z0-9]{4}$/.test(s)).sort();
   if (!ids.length || ids.length > MAX_IDS) return json({ error: 'ids' }, 400, H);
 

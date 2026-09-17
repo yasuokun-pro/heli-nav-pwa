@@ -746,7 +746,7 @@
       <button class="btn sh" id="btnLoad">コード読込</button>
       <button class="btn sh" id="btnJson">JSON書出</button>
       <button class="btn sh" id="btnGpx">GPX書出</button>
-      <button class="btn sh" id="btnJsonIn">JSON/GPX読込</button>
+      <button class="btn sh" id="btnJsonIn">JSON/GPX/KML読込</button>
     </div>
     <div class="grpHead">地点の取り込み<small>Googleマップ等から</small></div>
     <div class="hint"><b>🔍検索窓に貼り付ければピンが立ちます。</b>受け付ける形:
@@ -766,7 +766,7 @@
     <div class="btnrow">
       <button class="btn sh" id="btnBk">端末データ書出</button>
       <button class="btn sh" id="btnBkIn">端末データ読込</button>
-      <input type="file" id="fileIn" accept=".json,.gpx" style="display:none">
+      <input type="file" id="fileIn" accept=".json,.gpx,.kml,.geojson" style="display:none">
       <input type="file" id="bkIn" accept=".json" style="display:none">
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
@@ -803,6 +803,7 @@
     <details id="cfgTfc">
       <summary>中継設定(他機情報・METAR/TAF 共通)</summary>
       <div class="hint">adsb.lol / adsb.fi は<b>CORSヘッダを返さない</b>ため、このページから直接は読めません。
+        位置は約5kmに丸め、合言葉と一緒に URL ではなく本文で中継に送ります。
         自分の Vercel に置いた中継のURLと合言葉をここに入れてください
         (<b>この端末にだけ保存され、リポジトリには書かれません</b>)。置き方は <code>relay/README.md</code>。
         ⚠ Cloudflare Workers は上流に弾かれるので使えません。</div>
@@ -917,7 +918,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-177';
+const VER_TAG='v6-178';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3286,12 +3287,7 @@ function relayBase(){
 async function metarViaRelay(RB){
   const ids=[...new Set(ASP.map(a=>a.icao).filter(x=>x&&/^[A-Z0-9]{4}$/.test(x)))];
   const chunks=[];for(let i=0;i<ids.length;i+=40)chunks.push(ids.slice(i,i+40));
-  const res=await Promise.all(chunks.map(async c=>{
-    const r=await fetch(`${RB.base}/api/wx?ids=${c.join(',')}`+(RB.key?`&k=${encodeURIComponent(RB.key)}`:''));
-    const o=await r.json().catch(()=>({}));
-    if(!r.ok)throw new Error(`${r.status} ${o.error||''}${o.detail?' ('+[].concat(o.detail).join(' / ')+')':''}`.trim());
-    return o;
-  }));
+  const res=await Promise.all(chunks.map(c=>relayPost('/api/wx',{ids:c.join(',')})));   // ⚠ 合言葉は本文で(URL に入れない)
   const out={updated:res[0].updated,src:'relay',m:{},t:{},tafErr:''};
   res.forEach(o=>{Object.assign(out.m,o.m||{});Object.assign(out.t,o.t||{});if(o.tafErr)out.tafErr=o.tafErr});
   return out;
@@ -4086,7 +4082,7 @@ function attachDrag(grip,tr,idx){
 }
 
 /* ───────── お気に入りポイント / 名前付きルート(フォルダ管理・地図表示) ─────────
-   pts: {name,lat,lng,folder,icon,color,show} / routes: {name,o,folder,color,show}
+   pts: {name,lat,lng,folder,icon,color,show,memo?} / routes: {name,o,folder,color,show}
    show=true のものは libLayer で地図に常時表示(WPとは別の小さめ表示) */
 const LIB_COLORS=[['#ff3df5','1マゼンタ'],['#3df5ff','2シアン'],['#38e07b','3緑'],['#ffb02e','4アンバー'],['#ff5a5a','5赤'],['#e8f1fb','6白']];
 const LIB_ICONS=['●','▲','■','◆','★','Ｈ'];
@@ -4100,8 +4096,10 @@ function rebuildLibLayer(){
     const mk=L.marker([p.lat,p.lng],{bubblingMouseEvents:false,
       icon:L.divIcon({className:'',html:`<div class="lib-ico" style="color:${p.color}">${p.icon}<span>${p.name}</span></div>`,iconAnchor:[6,6]})});
     const el=document.createElement('div');el.className='apPop';
-    el.innerHTML=`<h5 style="color:${p.color}">${p.icon} ${p.name}</h5>
-      <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>`;
+    const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    el.innerHTML=`<h5 style="color:${p.color}">${p.icon} ${esc(p.name)}</h5>`+
+      (p.memo?`<div style="font-size:11px;color:var(--dim);margin:-2px 0 6px">${esc(p.memo)}</div>`:'')+
+      `<div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>`;
     el.querySelector('.apDct').onclick=()=>{setDct({name:p.name,lat:p.lat,lng:p.lng,isWp:false});mk.closePopup()};
     el.querySelector('.add').onclick=()=>{pushUndo();addWp(p.lat,p.lng,p.name);redraw();mk.closePopup()};
     mk.bindPopup(el);mk.addTo(libLayer);
@@ -4253,7 +4251,7 @@ function libSelPack(){
   const rts=libRtsGet().filter(r=>libSel.rt.has(r.name))
         .map(r=>({name:r.name,folder:r.folder||'',color:r.color,o:r.o}));
   const pts=libPtsGet().filter(p=>libSel.pt.has(p.name))
-        .map(p=>({name:p.name,folder:p.folder||'',color:p.color,icon:p.icon,lat:p.lat,lng:p.lng}));
+        .map(p=>Object.assign({name:p.name,folder:p.folder||'',color:p.color,icon:p.icon,lat:p.lat,lng:p.lng},p.memo?{memo:p.memo}:{}));
   return {v:1,t:'lib',routes:rts,pts};
 }
 document.getElementById('btnSelMode').onclick=()=>libSelMode(true);
@@ -4474,6 +4472,63 @@ document.getElementById('btnLoad').onclick=()=>{
     shareBox.style.display='none';
   }catch(e){alert('コードを読み込めませんでした。形式を確認してください。')}
 };
+/* 他のアプリの地点ファイル(GPX の wpt・KML の Placemark・GeoJSON の Point)を登録地点に取り込む。
+   スーパー地形の書き出しで確認した項目:
+     GPX     … 名前・メモ(cmt)・登録日時・アイコン番号(kashmir3d:icon)  ← いちばん揃っている
+     KML     … 名前・メモ(description)・アイコン番号。日時なし
+     GeoJSON … 名前・メモ(W3_Memo)・日時。アイコン番号なし
+   ⚠ スーパー地形のフォルダ分けは**どの形式にも出てこない**。代わりにアイコン番号ごとにフォルダと色を分ける。
+   ⚠ 同じ名前の地点が1ファイルの中に何件もある(「丹沢低空域」7件など)。libImport は名前で上書きするので、
+     先にファイル内で「名前 (2)」のように一意にしてから渡す。
+   ⚠ 取り込んだ地点は**端末の localStorage にだけ**入る。リポジトリには入らない。表示は既定で OFF */
+function ptsFileToLib(txt,low,fname){
+  const list=[];
+  const clean=v=>String(v==null?'':v).replace(/\s+$/,'').trim();
+  if(low.endsWith('.geojson')||low.endsWith('.json')){
+    const o=JSON.parse(txt);
+    (o.features||[]).forEach(ft=>{
+      const g=ft.geometry,pr=ft.properties||{};if(!g||g.type!=='Point')return;
+      list.push({lat:+g.coordinates[1],lng:+g.coordinates[0],name:clean(pr.W1_Name||pr.name||pr.title),
+        memo:clean(pr.W3_Memo||pr.description||pr.memo),icon:''});
+    });
+  }else{
+    const doc=new DOMParser().parseFromString(txt,'application/xml');
+    if(low.endsWith('.gpx')){
+      [...doc.querySelectorAll('wpt')].forEach(w=>{
+        const t=n=>{const e=w.getElementsByTagName(n)[0];return e?e.textContent:''};
+        list.push({lat:+w.getAttribute('lat'),lng:+w.getAttribute('lon'),name:clean(t('name')),
+          memo:clean(t('cmt')||t('desc')),icon:clean(t('kashmir3d:icon'))});
+      });
+    }else{
+      [...doc.getElementsByTagName('Placemark')].forEach(pm=>{
+        const c=pm.getElementsByTagName('coordinates')[0];if(!c)return;
+        const [lng,lat]=c.textContent.trim().split(/[\s,]+/).map(Number);
+        const t=n=>{const e=pm.getElementsByTagName(n)[0];return e?e.textContent:''};
+        const iconEl=[...pm.getElementsByTagName('Data')].find(d=>d.getAttribute('name')==='IconNumber');
+        list.push({lat,lng,name:clean(t('name')),memo:clean(t('description')),
+          icon:iconEl?clean(iconEl.textContent):''});
+      });
+    }
+  }
+  const ok=list.filter(p=>isFinite(p.lat)&&isFinite(p.lng)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180);
+  if(!ok.length)return false;
+  // アイコン番号ごとにフォルダと色。件数の多い順に色を割り当てる
+  // スーパー地形の書き出しは「最初の地点名ほか1165個のポイント」という名前なので、その地点名はフォルダ名に使わない
+  const base=/ほか\d+個の/.test(fname||'')||/Super Dem App/i.test(txt.slice(0,600))?'スーパー地形'
+    :((fname||'取込').replace(/\.[^.]+$/,'').slice(0,20)||'取込');
+  const PAL=['#ffd24d','#ff6b6b','#3df5ff','#7cff7c','#c38bff','#ffa24d','#4da3ff','#ff7ac8','#b0e05c','#e0e0e0'];
+  const cnt={};ok.forEach(p=>{cnt[p.icon]=(cnt[p.icon]||0)+1});
+  const order=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
+  const seen={};
+  const pts=ok.map((p,i)=>{
+    let nm=p.name||('地点'+(i+1));
+    seen[nm]=(seen[nm]||0)+1;if(seen[nm]>1)nm=`${nm} (${seen[nm]})`;
+    const k=order.indexOf(p.icon);
+    return {name:nm,lat:p.lat,lng:p.lng,memo:p.memo,icon:'●',color:PAL[k%PAL.length],
+      folder:order.length>1&&p.icon?`取込 ${base} ${p.icon}`:`取込 ${base}`};
+  });
+  return libImport({t:'lib',routes:[],pts});
+}
 /* 複数まとめ(HNAVL1./{t:'lib'})の取り込み。同名は上書き確認する */
 function libImport(d){
   if(!d||d.t!=='lib')return false;
@@ -4495,6 +4550,7 @@ function libImport(d){
     const i=pts.findIndex(x=>x.name===p.name);
     const rec={name:p.name,lat:p.lat,lng:p.lng,folder:p.folder||'',
                color:p.color||'#ffd24d',icon:p.icon||'★',show:false};
+    if(p.memo)rec.memo=String(p.memo);
     if(i>=0&&over)pts[i]=rec; else if(i>=0){rec.name=uniq(p.name,pts);pts.push(rec)} else pts.push(rec);
   });
   store.set('hnav.routes',rts);store.set('hnav.pts',pts);
@@ -4568,10 +4624,20 @@ document.getElementById('fileIn').onchange=function(){
   rd.onload=()=>{
     try{
       const txt=rd.result;
-      if(f.name.toLowerCase().endsWith('.gpx')){
+      const low=f.name.toLowerCase();
+      if(low.endsWith('.kml')||low.endsWith('.geojson')){ if(!ptsFileToLib(txt,low,f.name))throw new Error('no pts'); }
+      else if(low.endsWith('.gpx')){
         const doc=new DOMParser().parseFromString(txt,'application/xml');
         let pts=[...doc.querySelectorAll('rtept')];
-        if(!pts.length)pts=[...doc.querySelectorAll('wpt')];
+        const wpts=[...doc.querySelectorAll('wpt')];
+        // ⚠ ルート(rtept)が無く地点(wpt)だけのファイルは、地点集として登録地点に入れられるようにする。
+        //   以前は必ず「今のルートを消して点を並べ直す」動きで、スーパー地形の1,165件が1,165点のルートになっていた
+        if(!pts.length&&wpts.length&&(/Super Dem App/i.test(doc.documentElement.getAttribute('creator')||'')||wpts.length>50)
+           &&confirm(`地点が ${wpts.length} 件あります。\nOK=登録地点に追加 / キャンセル=ルートとして読み込む`)){
+          if(!ptsFileToLib(txt,low,f.name))throw new Error('no pts');
+          this.value='';return;
+        }
+        if(!pts.length)pts=wpts;
         if(!pts.length)throw new Error('no pts');
         clearAllWp();
         pts.forEach((p,i)=>addWp(parseFloat(p.getAttribute('lat')),parseFloat(p.getAttribute('lon')),
@@ -5037,38 +5103,38 @@ function showTraffic(list,demo){
   });
   renderAlert(demo?[]:list);   // ⚠ デモ機で警報を鳴らさない
   document.getElementById('tfcStatus').innerHTML=demo
-    ?`API未接続のためデモ表示<span class="tag">DEMO</span> <span style="color:var(--dim)">${tfcErr}${/403/.test(tfcErr)?'(airplanes.live は運営への連絡が要る)':''}</span>`
+    ?`API未接続のためデモ表示<span class="tag">DEMO</span> <span style="color:var(--dim)">${tfcErr}</span>`
     :`${tfcSrcName} 受信データ(ADS-B/MLAT搭載機のみ・15s自動更新)`;
 }
-/* ⚠ airplanes.live は 2026-09 から「運営へ連絡した利用者だけ」になり 403 を返す(→DEMO表示になっていた)。
-   同じ readsb 形式の adsb.lol / adsb.fi を順に試す。全部だめならデモ+理由を表示 */
-const TFC_SRC=[
-  {n:'airplanes.live',u:c=>`https://api.airplanes.live/v2/point/${c.lat.toFixed(4)}/${c.lng.toFixed(4)}/50`,k:'ac'},
-  {n:'adsb.lol',u:c=>`https://api.adsb.lol/v2/point/${c.lat.toFixed(4)}/${c.lng.toFixed(4)}/50`,k:'ac'},
-  {n:'adsb.fi',u:c=>`https://opendata.adsb.fi/api/v2/lat/${c.lat.toFixed(4)}/lon/${c.lng.toFixed(4)}/dist/50`,k:'aircraft'},
-];
+/* 他機情報は**自分の中継(relay/api/adsb.js)経由だけ**で取る。
+   ⚠ 以前は中継が無いと adsb.lol / adsb.fi / airplanes.live を直接叩いていた。CORS で結果は読めないのに、
+     **正確な自機位置入りの URL は相手のサーバーに届いていた**(no-cors で到達を確認済み)。v6-178 でやめた。
+   ⚠ 位置は送る前に TFC_GRID 度(約5km)に丸める。表示半径は50NMなので丸めの分(最大約1.5NM)だけ半径を足す。
+     距離・方位・接近警報は端末の中で**丸める前の正確な位置**で計算する。
+   ⚠ 位置と合言葉は URL に入れず POST の本文で送る(Vercel の実行ログ等に残さない)。
+     Content-Type を text/plain にして、CORS の事前確認が要らない単純リクエストにしている。 */
+const TFC_GRID=0.05;
+const tfcRound=v=>+(Math.round(v/TFC_GRID)*TFC_GRID).toFixed(2);
 let tfcSrcName='',tfcErr='';
-/* ⚠ 中継の設定は**この端末のlocalStorageだけ**に置く。公開リポジトリに合言葉を書くと
-   Origin照合しか残らず、対策の意味が無くなる(worker/README.md 参照) */
 function tfcRelay(){const v=store.get('tfcRelay');return v&&v.url?v:null}
-function tfcSources(){
-  const R=tfcRelay();
-  if(!R)return TFC_SRC;
-  return[{n:'中継',k:'ac',u:c=>R.url.replace(/\/+$/,'')
-    +`?lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}&r=50`
-    +(R.key?`&k=${encodeURIComponent(R.key)}`:'')}];
+async function relayPost(path,body,override){
+  const R=override||tfcRelay();if(!R)throw new Error('中継が未設定');
+  const base=R.url.replace(/\/+$/,'').replace(/\/api\/adsb$/,'');
+  const r=await fetch(base+path,{method:'POST',headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify(Object.assign({},body,R.key?{k:R.key}:{}))});
+  const o=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(`${r.status} ${o.error||''}${o.detail?' ('+[].concat(o.detail).join(' / ')+')':''}`.trim());
+  return o;
 }
 async function fetchTraffic(){
-  const c=ownPos||map.getCenter(); // GPS中は自機中心、なければ地図中心
+  const c=ownPos||map.getCenter(); // GPS中は自機中心、なければ地図中心(距離計算は丸めない位置で)
   try{
-    let j=null;const errs=[];
-    for(const S of tfcSources()){
-      try{const r=await fetch(S.u(c));if(!r.ok){errs.push(`${S.n} ${r.status}`);continue}
-        const o=await r.json();j={ac:o[S.k]||[]};tfcSrcName=o.src||S.n;break}
-      catch(e){errs.push(`${S.n} 取得不可`)}
-    }
-    tfcErr=errs.join(' / ');
-    if(!j)throw new Error(tfcErr);
+    if(!tfcRelay()){tfcErr='中継が未設定のため取得しません(他機情報タブの中継設定)';throw new Error(tfcErr)}
+    let j=null;
+    try{
+      const o=await relayPost('/api/adsb',{lat:tfcRound(c.lat),lon:tfcRound(c.lng),r:52});
+      j={ac:o.ac||[]};tfcSrcName=o.src||'中継';tfcErr='';
+    }catch(e){tfcErr='中継 '+(e.message||'取得不可');throw e}
     const ac=(j.ac||[]).filter(a=>a.lat&&a.lon).map(a=>({
       cs:(a.flight||'').trim()||a.r||a.hex,
       lat:a.lat,lng:a.lon,
@@ -5132,12 +5198,9 @@ document.getElementById('btnTfc2').onclick=toggleTraffic;
     msg('テスト中…',true);
     const c=ownPos||map.getCenter();
     try{
-      const r=await fetch(url.replace(/\/+$/,'')
-        +`?lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}&r=50`+(key?`&k=${encodeURIComponent(key)}`:''));
-      const o=await r.json().catch(()=>({}));
-      if(!r.ok){msg(`NG ${r.status} ${o.error||''}${o.detail?' ('+[].concat(o.detail).join(' / ')+')':''}`,false);return}  // ⚠ 上流の弾かれ方(detail)も出す
+      const o=await relayPost('/api/adsb',{lat:tfcRound(c.lat),lon:tfcRound(c.lng),r:52},{url,key});
       msg(`OK ${o.src||''} ${(o.ac||[]).length}機`,true);
-    }catch(e){msg('NG 届きませんでした(URL・CORS許可を確認)',false)}
+    }catch(e){msg(/Failed to fetch|NetworkError|Load failed/i.test(e.message||'')?'NG 届きませんでした(URL・CORS許可を確認)':'NG '+e.message,false)}
   };
 })();
 

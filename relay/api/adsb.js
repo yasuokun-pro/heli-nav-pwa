@@ -41,14 +41,15 @@ async function upstream(lat, lon, rad) {
 }
 
 export const OPTIONS = preflight;
+export const POST = (request) => GET(request);   // アプリは POST(本文に位置と合言葉)で呼ぶ
 
 export async function GET(request) {
-  const { H, url, deny } = check(request, overLimit);
+  const { H, p, deny } = await check(request, overLimit);
   if (deny) return deny;
 
-  const lat = num(url.searchParams.get('lat'), -90, 90);
-  const lon = num(url.searchParams.get('lon'), -180, 180);
-  const rad = Math.min(Math.max(parseInt(url.searchParams.get('r') || '50', 10) || 50, 1), 250);
+  const lat = num(p.get('lat'), -90, 90);
+  const lon = num(p.get('lon'), -180, 180);
+  const rad = Math.min(Math.max(parseInt(p.get('r') || '50', 10) || 50, 1), 250);
   if (lat === null || lon === null) return json({ error: 'latlon' }, 400, H);
 
   const now = Date.now();

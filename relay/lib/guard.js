@@ -46,20 +46,39 @@ export function preflight(request) {
   const ok = ALLOW.includes(origin);
   return new Response(null, {
     status: ok ? 204 : 403,
-    headers: { ...corsHeaders(origin, ok), 'Access-Control-Allow-Methods': 'GET,OPTIONS', 'Access-Control-Max-Age': '86400' },
+    headers: { ...corsHeaders(origin, ok), 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400' },
   });
 }
 
-/* 通れば { H, url } を、止めるなら { H, deny } を返す */
-export function check(request, overLimit) {
+/* 引数の読み出し。**POST の本文(JSON)を優先**する。
+   ⚠ 位置と合言葉を URL に入れると、Vercel の実行ログなどにそのまま残る。本文なら残らない(v6-178)。
+     アプリは Content-Type: text/plain で送る(CORS の事前確認が要らない単純リクエストになる)。
+   ⚠ GET(URL の ? 以降)は古い版のアプリのために当面残している。全端末が更新されたら外す。 */
+async function paramsOf(request) {
+  if (request.method === 'POST') {
+    const t = await request.text();
+    if (t.length > 4000) return null;
+    let o;
+    try { o = JSON.parse(t || '{}'); } catch (e) { return null; }
+    if (!o || typeof o !== 'object') return null;
+    return { get: k => (o[k] == null ? null : String(o[k])) };
+  }
+  const u = new URL(request.url);
+  return { get: k => u.searchParams.get(k) };
+}
+
+/* 通れば { H, p } を、止めるなら { H, deny } を返す。p.get('lat') のように読む */
+export async function check(request, overLimit) {
   const origin = request.headers.get('origin') || '';
   const ok = ALLOW.includes(origin);
   const H = corsHeaders(origin, ok);
   if (!ok) return { H, deny: json({ error: 'origin' }, 403, H) };
-  const url = new URL(request.url);
+  const p = await paramsOf(request);
+  if (!p) return { H, deny: json({ error: 'body' }, 400, H) };
   const key = process.env.RELAY_KEY;
   // ⚠ RELAY_KEY 未設定のときは誰も通さない(設定し忘れて素通しになるのを防ぐ)
-  if (!key || url.searchParams.get('k') !== key) return { H, deny: json({ error: 'key' }, 403, H) };
+  if (!key || p.get('k') !== key) return { H, deny: json({ error: 'key' }, 403, H) };
   if (overLimit(ipOf(request))) return { H, deny: json({ error: 'rate' }, 429, H) };
-  return { H, url };
+  return { H, p };
 }
