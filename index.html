@@ -870,6 +870,7 @@
     <button class="btn" id="btnSelOff">やめる</button>
   </div>
   <h4>保存済みルート</h4><div id="libRoutes"></div>
+  <h4>トラック</h4><div id="libTrks"></div>
   <h4>お気に入りポイント</h4><div id="libPts"></div>
   <h4>作図レイヤー</h4><div id="libDraws"></div>
   <div class="btnrow" style="margin-top:14px">
@@ -936,7 +937,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-181';
+const VER_TAG='v6-182';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4121,6 +4122,8 @@ function libPtsGet(){
   if(ch)store.set('hnav.pts',a);
   return a;
 }
+/* トラック {name,folder,color,show,segs:[[[lat,lng],...],...],n0(元の点数),dist(NM),t0,t1(ISO UTC)} */
+function libTrksGet(){const a=store.get('hnav.trks')||[];a.forEach(k=>{k.folder=k.folder||'';k.color=k.color||'#ff5a5a';k.show=!!k.show;k.segs=k.segs||[]});return a}
 function libRtsGet(){const a=store.get('hnav.routes')||[];a.forEach(r=>{r.folder=r.folder||'';r.color=r.color||'#3df5ff';r.show=!!r.show});return a}
 const libLayer=L.layerGroup().addTo(map);
 /* 保存地点のピン。画鋲が斜めに刺さった形で、**針の先(左下)が地点**。頭の色はフォルダ/設定の色。
@@ -4151,6 +4154,27 @@ function rebuildLibLayer(){
     el.querySelector('.apDct').onclick=()=>{setDct({name:p.name,lat:p.lat,lng:p.lng,isWp:false});mk.closePopup()};
     el.querySelector('.add').onclick=()=>{pushUndo();addWp(p.lat,p.lng,p.name);redraw();mk.closePopup()};
     mk.bindPopup(el);mk.addTo(libLayer);
+  });
+  libTrksGet().forEach(k=>{
+    if(!k.show)return;
+    const jst=iso=>{if(!iso)return '';const d=new Date(Date.parse(iso)+9*3600e3);
+      return `${d.getUTCFullYear()}/${pad(d.getUTCMonth()+1)}/${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`};
+    const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    k.segs.forEach(sg=>{
+      const ln=L.polyline(sg,{color:k.color,weight:2.5,opacity:.9,bubblingMouseEvents:false});
+      const el=document.createElement('div');el.className='apPop';
+      // 手で引いた線(計画)の time は作図・編集した日時で数日に跨る。記録した航跡(数秒おき)らしい時だけ出す
+      const span=(Date.parse(k.t1)-Date.parse(k.t0))/1000,rec=k.n0>20&&span>0&&span<86400&&span/k.n0<120;
+      const a=rec?jst(k.t0):'',b=rec?jst(k.t1):'';
+      el.innerHTML=`<h5 style="color:${k.color}">〰 ${esc(k.name)}</h5>`+
+        `<div style="font-size:11px;color:var(--dim);margin:-2px 0 6px">${a?a+(b&&b!==a?' 〜 '+(b.slice(0,10)===a.slice(0,10)?b.slice(11):b):'')+' JST ・ ':''}`+
+        `${k.n0||'?'}点 ・ ${k.dist!=null?(+k.dist).toFixed(1):'?'}NM</div>`+
+        `<div class="row"><button class="add">ルートとして読込</button></div>`;
+      el.querySelector('.add').onclick=()=>{
+        if(wps.length&&!confirm('現在のルートを置き換えます。よろしいですか?'))return;
+        loadRouteObj(trkToRouteObj(k),true);ln.closePopup()};
+      ln.bindPopup(el);ln.addTo(libLayer);
+    });
   });
   libRtsGet().forEach(r=>{
     if(!r.show)return;
@@ -4203,7 +4227,7 @@ function renderLib(){
   const fill=(el,items,empty,makeRow)=>{
     el.innerHTML='';
     if(!items.length){el.innerHTML=`<div class="libEmpty">${empty}</div>`;return}
-    const kind=makeRow.isRt?'rt':'pt';
+    const kind=makeRow.kind||(makeRow.isRt?'rt':'pt');
     const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
     const root={path:'',kids:{},items:[]};
     items.forEach((x,i)=>{
@@ -4276,6 +4300,28 @@ function renderLib(){
   };
   rowP.isRt=false;rowP.save=saveP;
   fill(document.getElementById('libRoutes'),rts,'保存済みルートはありません(「ルート保存」で登録)',rowR);
+  // トラック(スーパー地形などから取り込んだ航跡・線)。共有の選択対象には入れない(点数が多い)
+  const tks=libTrksGet();
+  const saveT=()=>{store.set('hnav.trks',tks);renderLib();rebuildLibLayer()};
+  const rowT=(k,i)=>{
+    const d=document.createElement('div');d.className='libRow';
+    d.innerHTML=`<button class="eye${k.show?' on':''}">👁</button>
+      <span style="color:${k.color};font-family:var(--mono)">〰</span>
+      <span class="nm">${k.name}</span><small>${k.n0||'?'}点・${k.dist!=null?(+k.dist).toFixed(0):'?'}NM</small>
+      <button class="use">読込</button><button class="gear">⚙</button><button class="del2">削除</button>`;
+    d.querySelector('.eye').onclick=()=>{k.show=!k.show;saveT()};
+    d.querySelector('.use').onclick=()=>{
+      if(wps.length&&!confirm('現在のルートを置き換えます。よろしいですか?'))return;
+      loadRouteObj(trkToRouteObj(k),true);libModal.style.display='none'};
+    d.querySelector('.gear').onclick=()=>{
+      libEditKey=(libEditKey&&libEditKey.name===k.name&&libEditKey.t==='tk')?null:{t:'tk',name:k.name};
+      renderLib()};
+    d.querySelector('.del2').onclick=()=>{
+      if(!confirm('削除: '+k.name+' ?'))return;tks.splice(i,1);saveT()};
+    return d;
+  };
+  rowT.isRt=true;rowT.kind='tk';rowT.save=saveT;
+  fill(document.getElementById('libTrks'),tks,'トラックはありません(スーパー地形のトラックの zip・GPX を「ファイル読込」で取り込み)',rowT);
   fill(document.getElementById('libPts'),pts,'お気に入りはありません(表の★ か下のボタンで登録)',rowP);
   // 作図レイヤー
   const dws=drawsGet();
@@ -4603,6 +4649,60 @@ function parseRoutes(txt){
   });
   return out;
 }
+/* GPX の <trk>(スーパー地形のトラック=実際に飛んだ航跡や手で引いた線)。
+   ⚠ 1本に千点を超えるものがある(1秒ごとの記録)。保存前に Douglas-Peucker で間引く(ほぼ一直線の点を捨てる)。
+     距離と元の点数・開始/終了時刻は間引く前の値で持つ。区間(trkseg)ごとに分け、途切れた所を線で結ばない */
+function rdpThin(pts,tolM){
+  if(pts.length<3)return pts.slice();
+  const la0=pts[0][0]*Math.PI/180,kx=111320*Math.cos(la0),ky=110540;
+  const P=pts.map(p=>[p[1]*kx,p[0]*ky]);
+  const keep=new Uint8Array(pts.length);keep[0]=keep[pts.length-1]=1;
+  const stack=[[0,pts.length-1]];
+  while(stack.length){
+    const [i,j]=stack.pop();let best=-1,bd=0;
+    const ax=P[i][0],ay=P[i][1],bx=P[j][0],by=P[j][1],dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy;
+    for(let k=i+1;k<j;k++){
+      let t=L?((P[k][0]-ax)*dx+(P[k][1]-ay)*dy)/L:0;t=Math.max(0,Math.min(1,t));
+      const d=Math.hypot(P[k][0]-(ax+t*dx),P[k][1]-(ay+t*dy));
+      if(d>bd){bd=d;best=k}
+    }
+    if(best>0&&bd>tolM){keep[best]=1;stack.push([i,best],[best,j])}
+  }
+  return pts.filter((_,k)=>keep[k]);
+}
+function parseTracks(txt){
+  const doc=new DOMParser().parseFromString(txt,'application/xml');
+  const out=[];
+  [...doc.getElementsByTagName('trk')].forEach((t,i)=>{
+    const own=n=>{const e=[...t.children].find(c=>c.tagName===n);return e?e.textContent.trim():''};
+    const ext=[...t.children].find(c=>c.tagName==='extensions');
+    const ex=n=>{const e=ext&&[...ext.children].find(c=>c.tagName===n);return e?e.textContent.trim():''};
+    let n0=0,dist=0,t0='',t1='';
+    const segs=[...t.getElementsByTagName('trkseg')].map(sg=>{
+      const raw=[...sg.getElementsByTagName('trkpt')].map(q=>{
+        const tm=[...q.children].find(c=>c.tagName==='time');
+        if(tm){if(!t0)t0=tm.textContent.trim();t1=tm.textContent.trim()}
+        return [+q.getAttribute('lat'),+q.getAttribute('lon')];
+      }).filter(p=>isFinite(p[0])&&isFinite(p[1]));
+      n0+=raw.length;
+      for(let k=1;k<raw.length;k++)dist+=distNM({lat:raw[k-1][0],lng:raw[k-1][1]},{lat:raw[k][0],lng:raw[k][1]});
+      return rdpThin(raw,10).map(p=>[+p[0].toFixed(5),+p[1].toFixed(5)]);
+    }).filter(sg=>sg.length);
+    if(!segs.length)return;
+    const col=ex('kashmir3d:line_color');
+    out.push({name:own('name')||('トラック'+(i+1)),color:/^[0-9a-f]{6}$/i.test(col)?'#'+col.toLowerCase():'',
+      fid:ex('kashmir3d:folder'),segs,n0,dist:+dist.toFixed(1),t0,t1});
+  });
+  return out;
+}
+/* トラックをルートにする。点が多ければ許容幅を広げながら60点以内まで間引く(計画の線はそのまま) */
+function trkToRouteObj(k){
+  const pts=[].concat(...k.segs);
+  let tol=50,thin=rdpThin(pts,0.01);
+  while(thin.length>60&&tol<20000){thin=rdpThin(pts,tol);tol*=1.6}
+  const w=thin.length;
+  return {v:1,wp:thin.map((p,i)=>[p[0],p[1],i===0?'START':i===w-1?'END':'T'+String(i).padStart(2,'0')])};
+}
 function ptsFileToLib(txt,low,fname){
   const base=/ほか\d+個の/.test(fname||'')||/Super Dem App/i.test(txt.slice(0,600))?'スーパー地形'
     :((fname||'取込').replace(/\.[^.]+$/,'').slice(0,20)||'取込');
@@ -4695,25 +4795,27 @@ async function unzipTexts(buf){
      フォルダ表が別。番号も別系統なので混ぜないこと。
    ⚠ 以前は地点しか見ておらず、ルートの zip は「取り込める地点がありませんでした」で止まっていた(v6-181 で対応) */
 async function importPtsDocs(docs){
-  const pmap={},rmap={};
+  const pmap={},rmap={},tmap={};
   docs.filter(d=>/\.json$/i.test(d.name)).forEach(d=>{
     try{
       const o=JSON.parse(d.text);
       (o.wpt_folder||[]).forEach(x=>{pmap[x.id]={id:x.id,name:x.name,parent:x.parent}});
       (o.rte_folder||[]).forEach(x=>{rmap[x.id]={id:x.id,name:x.name,parent:x.parent}});
+      (o.trk_folder||[]).forEach(x=>{tmap[x.id]={id:x.id,name:x.name,parent:x.parent}});
     }catch(e){}
   });
-  const list=[],rts=[];
+  const list=[],rts=[],tks=[];
   docs.filter(d=>/\.(gpx|kml|geojson)$/i.test(d.name)).forEach(d=>{
     const low=d.name.toLowerCase();
     list.push(...parsePts(d.text,low));
-    if(low.endsWith('.gpx'))rts.push(...parseRoutes(d.text));
+    if(low.endsWith('.gpx')){rts.push(...parseRoutes(d.text));tks.push(...parseTracks(d.text))}
   });
-  if(!list.length&&!rts.length)return false;
+  if(!list.length&&!rts.length&&!tks.length)return false;
   const np=Object.keys(pmap).length;
-  const what=[list.length?`地点 ${list.length} 件${np?`(フォルダ ${np} 個)`:''}`:'',rts.length?`ルート ${rts.length} 本`:''].filter(Boolean).join('・');
+  const what=[list.length?`地点 ${list.length} 件${np?`(フォルダ ${np} 個)`:''}`:'',rts.length?`ルート ${rts.length} 本`:'',
+    tks.length?`トラック ${tks.length} 本`:''].filter(Boolean).join('・');
   if(!confirm(`${what}を保存一覧に追加します。`))return true;
-  const sc=docs.some(d=>/Super Dem App/i.test(d.text.slice(0,600)))||np||Object.keys(rmap).length;
+  const sc=docs.some(d=>/Super Dem App/i.test(d.text.slice(0,600)))||np||Object.keys(rmap).length||Object.keys(tmap).length;
   const base=sc?'スーパー地形':'取込';
   const pts=list.length?ptsListBuild(list,base,np?pmap:null):[];
   const seen={};
@@ -4722,18 +4824,25 @@ async function importPtsDocs(docs){
     return {name:nm,color:r.color||'#3df5ff',folder:Object.keys(rmap).length&&r.fid?scFolderPath(rmap,r.fid,base):`取込/${base}`,
       o:{v:1,wp:r.wp}};
   });
-  return libImport({t:'lib',routes,pts:pts||[]});
+  const seenT={};
+  const trks=tks.map(k=>{
+    let nm=k.name;seenT[nm]=(seenT[nm]||0)+1;if(seenT[nm]>1)nm=`${nm} (${seenT[nm]})`;
+    return Object.assign({},k,{name:nm,color:k.color||'#ff5a5a',
+      folder:Object.keys(tmap).length&&k.fid?scFolderPath(tmap,k.fid,base):`取込/${base}`});
+  });
+  return libImport({t:'lib',routes,pts:pts||[],trks});
 }
 function libImport(d){
   if(!d||d.t!=='lib')return false;
-  const rts=libRtsGet(),pts=libPtsGet();
+  const rts=libRtsGet(),pts=libPtsGet(),tks=libTrksGet();
   const dupR=(d.routes||[]).filter(r=>rts.some(x=>x.name===r.name)).map(r=>r.name);
   const dupP=(d.pts||[]).filter(p=>pts.some(x=>x.name===p.name)).map(p=>p.name);
+  const dupT=(d.trks||[]).filter(k=>tks.some(x=>x.name===k.name)).map(k=>k.name);
   let over=true;
-  if(dupR.length||dupP.length)
-    over=confirm(`同じ名前が ${dupR.length+dupP.length} 件あります。\n`+
+  if(dupR.length||dupP.length||dupT.length)
+    over=confirm(`同じ名前が ${dupR.length+dupP.length+dupT.length} 件あります。\n`+
       `OK=上書き / キャンセル=名前に (2) を付けて別に保存\n`+
-      [...dupR,...dupP].slice(0,6).join(', '));
+      [...dupR,...dupP,...dupT].slice(0,6).join(', '));
   const uniq=(name,arr)=>{let n=name,i=2;while(arr.some(x=>x.name===n))n=`${name} (${i++})`;return n};
   (d.routes||[]).forEach(r=>{
     const i=rts.findIndex(x=>x.name===r.name);
@@ -4747,10 +4856,16 @@ function libImport(d){
     if(p.memo)rec.memo=String(p.memo);
     if(i>=0&&over)pts[i]=rec; else if(i>=0){rec.name=uniq(p.name,pts);pts.push(rec)} else pts.push(rec);
   });
+  (d.trks||[]).forEach(k=>{
+    const i=tks.findIndex(x=>x.name===k.name);
+    const rec={name:k.name,folder:k.folder||'',color:k.color||'#ff5a5a',show:false,segs:k.segs,n0:k.n0||0,dist:k.dist||0,t0:k.t0||'',t1:k.t1||''};
+    if(i>=0&&over)tks[i]=rec; else if(i>=0){rec.name=uniq(k.name,tks);tks.push(rec)} else tks.push(rec);
+  });
   store.set('hnav.routes',rts);store.set('hnav.pts',pts);
+  if(d.trks&&d.trks.length)store.set('hnav.trks',tks);
   rebuildLibLayer();
-  alert(`取り込みました(ルート${(d.routes||[]).length}件・ポイント${(d.pts||[]).length}件)。`+
-        `保存一覧で確認できます。`);
+  alert(`取り込みました(ルート${(d.routes||[]).length}件・ポイント${(d.pts||[]).length}件`+
+        `${d.trks&&d.trks.length?`・トラック${d.trks.length}件`:''})。保存一覧で確認できます。`);
   return true;
 }
 function dl(name,mime,text){
@@ -4780,7 +4895,7 @@ ${rte}
    iOSはホーム画面に追加したアプリとSafariで保存領域が別なので、ブラウザで
    作ったルート・登録地点・ログはアプリ側に出てこない。全部まとめて
    書き出し/読み込みできるようにして、1回で移せるようにする */
-const BK_KEYS=['hnav.route','hnav.routes','hnav.pts','hnav.logs','hnav.draws','hnav.base','hnav.varAuto','hnav.hud'];
+const BK_KEYS=['hnav.route','hnav.routes','hnav.pts','hnav.trks','hnav.logs','hnav.draws','hnav.base','hnav.varAuto','hnav.hud'];
 document.getElementById('btnBk').onclick=()=>{
   const d={};BK_KEYS.forEach(k=>{const v=store.get(k);if(v!==null&&v!==undefined)d[k]=v});
   const n=(d['hnav.routes']||[]).length, p=(d['hnav.pts']||[]).length, l=(d['hnav.logs']||[]).length;
@@ -4831,7 +4946,7 @@ document.getElementById('fileIn').onchange=async function(){
   }
   const f=files[0];
   const rd=new FileReader();
-  rd.onload=()=>{
+  rd.onload=async()=>{
     try{
       const txt=rd.result;
       const low=f.name.toLowerCase();
@@ -4845,6 +4960,10 @@ document.getElementById('fileIn').onchange=async function(){
         if(!pts.length&&wpts.length&&(/Super Dem App/i.test(doc.documentElement.getAttribute('creator')||'')||wpts.length>50)
            &&confirm(`地点が ${wpts.length} 件あります。\nOK=登録地点に追加 / キャンセル=ルートとして読み込む`)){
           if(!ptsFileToLib(txt,low,f.name))throw new Error('no pts');
+          this.value='';return;
+        }
+        if(!pts.length&&!wpts.length&&doc.getElementsByTagName('trk').length){   // トラックだけの GPX
+          if(!await importPtsDocs([{name:f.name,text:txt}]))throw new Error('no pts');
           this.value='';return;
         }
         if(!pts.length)pts=wpts;
