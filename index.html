@@ -383,10 +383,27 @@
   .fav{background:none;border:1px solid var(--amb);color:var(--amb);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;margin-right:5px}
   .ins{background:none;border:1px solid var(--grn);color:var(--grn);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;margin-right:5px}
   .fav.on{background:var(--amb);color:#241500;opacity:1;cursor:default}
-  #libModal{position:fixed;inset:0;z-index:2000;background:rgba(4,10,18,.72);display:none;align-items:flex-end;justify-content:center}
-  #libModal .sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 0 0;width:100%;max-width:560px;max-height:78vh;overflow:auto;padding:16px}
+  /* 保存一覧は全画面(件数が千件を超えるのでポップアップでは見づらい)。IFR 計画と同じ作法 */
+  #libModal{position:fixed;inset:0;z-index:2000;background:rgba(4,10,18,.85);display:none;align-items:stretch;justify-content:center}
+  #libModal .sheet{background:var(--panel);border:1px solid var(--line);width:100%;max-width:760px;height:100%;overflow:auto;padding:0 16px calc(40px + env(safe-area-inset-bottom))}
+  #libModal .libHd{display:flex;align-items:center;gap:10px;position:sticky;top:0;background:var(--panel);z-index:2;
+    padding:calc(10px + env(safe-area-inset-top)) 0 8px;border-bottom:1px solid var(--line);margin-bottom:10px}
+  #libModal .libHd h3{margin:0;font-size:15px;color:var(--cyn);font-family:var(--mono);letter-spacing:.1em;flex:1}
   #libModal h4{font-size:12px;color:var(--dim);letter-spacing:.12em;margin:14px 0 6px}
-  #libModal h4:first-child{margin-top:0}
+  /* フォルダ行(▸開閉・👁まとめて表示・件数) */
+  .libFolderRow{display:flex;align-items:center;gap:6px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px}
+  .libFolderRow .tw{background:none;border:none;color:var(--dim);width:22px;font-size:13px;cursor:pointer;padding:0}
+  .libFolderRow .fn{flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .libFolderRow small{color:var(--dim);font-family:var(--mono)}
+  .eye.part{opacity:.75;border-color:var(--grn);color:var(--grn);border-style:dashed}
+  /* スマホの幅では名前を優先。座標や点数は隠し、ボタンを詰める(階層の字下げで名前が1文字まで削られていた) */
+  .libRow .nm{min-width:5em}
+  @media(max-width:560px){
+    #libModal .libRow small{display:none}
+    #libModal .libRow .nm{white-space:normal;word-break:break-all;line-height:1.3}
+    #libModal .libRow{gap:6px}
+    #libModal .libRow button{padding:3px 7px}
+  }
   /* 複数選択して共有するためのバー。選択モード中だけ操作ボタンが出る */
   #libSelBar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
   #libSelBar #libSelCnt{font-family:var(--mono);color:var(--grn);font-size:12px}
@@ -843,6 +860,7 @@
 <div id="printArea"></div>
 
 <div id="libModal"><div class="sheet">
+  <div class="libHd"><h3>保存一覧</h3><button class="btn" id="btnLibClose">閉じる</button></div>
   <div id="libSelBar">
     <button class="btn sh" id="btnSelMode">選んで共有</button>
     <span id="libSelCnt"></span>
@@ -855,7 +873,6 @@
   <h4>作図レイヤー</h4><div id="libDraws"></div>
   <div class="btnrow" style="margin-top:14px">
     <button class="btn" id="btnPtHere">地図中心をポイント登録</button>
-    <button class="btn" id="btnLibClose">閉じる</button>
   </div>
 </div></div>
 
@@ -918,7 +935,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-179';
+const VER_TAG='v6-180';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4086,7 +4103,23 @@ function attachDrag(grip,tr,idx){
    show=true のものは libLayer で地図に常時表示(WPとは別の小さめ表示) */
 const LIB_COLORS=[['#ff3df5','1マゼンタ'],['#3df5ff','2シアン'],['#38e07b','3緑'],['#ffb02e','4アンバー'],['#ff5a5a','5赤'],['#e8f1fb','6白']];
 const LIB_ICONS=['●','▲','■','◆','★','Ｈ'];
-function libPtsGet(){const a=store.get('hnav.pts')||[];a.forEach(p=>{p.folder=p.folder||'';p.icon=p.icon||'●';p.color=p.color||'#3df5ff';p.show=!!p.show});return a}
+/* 保存一覧のフォルダは「/」区切りで階層にする(例: スーパー地形/場外離着陸場)。
+   ⚠ v6-178〜179 の取り込みは「スーパー地形 場外離着陸場」「取込 スーパー地形 1925008」と空白区切りで付けていた。
+     読むたびにここで / 区切りへ直し、変わったら保存し直す */
+function libFolderMigrate(f){
+  f=String(f||'');
+  let m;
+  if((m=/^取込 (.+?) (\d+)$/.exec(f)))return `取込/${m[1]}/${m[2]}`;
+  if((m=/^取込 (.+)$/.exec(f)))return `取込/${m[1]}`;
+  if((m=/^スーパー地形 (.+)$/.exec(f)))return `スーパー地形/${m[1]}`;
+  return f;
+}
+function libPtsGet(){
+  const a=store.get('hnav.pts')||[];let ch=false;
+  a.forEach(p=>{const f=libFolderMigrate(p.folder);if(f!==(p.folder||''))ch=true;p.folder=f;p.icon=p.icon||'●';p.color=p.color||'#3df5ff';p.show=!!p.show});
+  if(ch)store.set('hnav.pts',a);
+  return a;
+}
 function libRtsGet(){const a=store.get('hnav.routes')||[];a.forEach(r=>{r.folder=r.folder||'';r.color=r.color||'#3df5ff';r.show=!!r.show});return a}
 const libLayer=L.layerGroup().addTo(map);
 function rebuildLibLayer(){
@@ -4137,7 +4170,7 @@ const libModal=document.getElementById('libModal');
 let libEditKey=null; // 開いている編集パネル {t:'pt'|'rt', name}
 function libEditor(x,isRoute,save){ // フォルダ入力+アイコン/色をタップ選択
   const e=document.createElement('div');e.className='libEdit';
-  e.innerHTML=`<div class="libEditRow"><span>フォルダ</span><input type="text" value="${x.folder||''}" placeholder="(空欄=未分類)"></div>`+
+  e.innerHTML=`<div class="libEditRow"><span>フォルダ</span><input type="text" value="${x.folder||''}" placeholder="空欄=フォルダ無し / で階層(例 スーパー地形/場外)"></div>`+
     (!isRoute?`<div class="libEditRow"><span>アイコン</span>${LIB_ICONS.map(ic=>`<button class="icoBtn${x.icon===ic?' sel':''}" data-ic="${ic}">${ic}</button>`).join('')}</div>`:'')+
     `<div class="libEditRow"><span>色</span>${LIB_COLORS.map(c=>`<button class="swatch${x.color===c[0]?' sel':''}" data-c="${c[0]}" style="background:${c[0]}" title="${c[1].slice(1)}"></button>`).join('')}</div>`;
   e.querySelector('input').onchange=ev=>{x.folder=ev.target.value.trim();save()};
@@ -4149,21 +4182,43 @@ function renderLib(){
   const rts=libRtsGet(),pts=libPtsGet();
   const saveR=()=>{store.set('hnav.routes',rts);renderLib();rebuildLibLayer()};
   const saveP=()=>{store.set('hnav.pts',pts);renderLib();rebuildLibLayer()};
+  /* フォルダは「/」区切りの木。▸で開閉(端末に覚える・既定は閉)、👁で下の階層までまとめて表示/非表示。
+     ⚠ 閉じたフォルダの中身は描かない(千件を超えても一覧が重くならない)。
+     並びは、最上位は「フォルダ無し」の行を先に、フォルダの中では子フォルダを先に出す */
   const fill=(el,items,empty,makeRow)=>{
     el.innerHTML='';
     if(!items.length){el.innerHTML=`<div class="libEmpty">${empty}</div>`;return}
-    const g={};items.forEach((x,i)=>{(g[x.folder||'']=g[x.folder||'']||[]).push([x,i])});
-    Object.keys(g).sort().forEach(f=>{
-      if(f!==''||Object.keys(g).length>1){
-        const h=document.createElement('div');h.className='libFolder';
-        h.textContent='📁 '+(f||'未分類');el.appendChild(h);
-      }
-      g[f].forEach(([x,i])=>{
-        el.appendChild(makeRow(x,i));
-        if(libEditKey&&libEditKey.name===x.name&&libEditKey.t===(makeRow.isRt?'rt':'pt'))
-          el.appendChild(libEditor(x,makeRow.isRt,makeRow.save));
-      });
+    const kind=makeRow.isRt?'rt':'pt';
+    const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const root={path:'',kids:{},items:[]};
+    items.forEach((x,i)=>{
+      let n=root;const parts=String(x.folder||'').split('/').map(t=>t.trim()).filter(Boolean);
+      parts.forEach((seg,k)=>{n=n.kids[seg]=n.kids[seg]||{name:seg,path:parts.slice(0,k+1).join('/'),kids:{},items:[]}});
+      n.items.push([x,i]);
     });
+    const under=n=>n.items.map(v=>v[0]).concat(...Object.values(n.kids).map(under));
+    const open=store.get('hnav.libOpen')||{};
+    const rowsOf=(n,depth)=>n.items.forEach(([x,i])=>{
+      const r=makeRow(x,i);r.style.paddingLeft=(depth*12+2)+'px';el.appendChild(r);
+      if(libEditKey&&libEditKey.name===x.name&&libEditKey.t===kind)el.appendChild(libEditor(x,makeRow.isRt,makeRow.save));
+    });
+    const draw=(n,depth)=>{
+      if(depth===0)rowsOf(n,0);
+      Object.keys(n.kids).sort((a,b)=>a.localeCompare(b,'ja')).forEach(k=>{
+        const c=n.kids[k],xs=under(c),on=xs.filter(x=>x.show).length,key=kind+':'+c.path,isOpen=!!open[key];
+        const h=document.createElement('div');h.className='libFolderRow';h.style.paddingLeft=(depth*12)+'px';
+        h.innerHTML=`<button class="tw">${isOpen?'▾':'▸'}</button>`+
+          `<button class="eye${on===xs.length?' on':on?' part':''}" title="フォルダの中をまとめて表示/非表示">👁</button>`+
+          `<span class="fn">📁 ${esc(c.name)}</span><small>${on?on+'/':''}${xs.length}</small>`;
+        const tog=()=>{const o=store.get('hnav.libOpen')||{};if(o[key])delete o[key];else o[key]=1;store.set('hnav.libOpen',o);renderLib()};
+        h.querySelector('.tw').onclick=tog;h.querySelector('.fn').onclick=tog;
+        // 全部表示中なら全部消す、それ以外(一部・無し)なら全部出す
+        h.querySelector('.eye').onclick=()=>{const v=on!==xs.length;xs.forEach(x=>x.show=v);makeRow.save()};
+        el.appendChild(h);
+        if(isOpen){draw(c,depth+1);rowsOf(c,depth+1)}
+      });
+    };
+    draw(root,0);
   };
   const rowR=(r,i)=>{
     const d=document.createElement('div');d.className='libRow';
@@ -4526,13 +4581,19 @@ function ptsListToLib(ok,base,fmap){
   if(!ok.length)return false;
   const PAL=['#ffd24d','#ff6b6b','#3df5ff','#7cff7c','#c38bff','#ffa24d','#4da3ff','#ff7ac8','#b0e05c','#e0e0e0'];
   const useF=fmap&&ok.some(p=>p.fid&&fmap[p.fid]!=null);
-  const keyOf=p=>useF?(fmap[p.fid]!=null?String(fmap[p.fid]):'(フォルダ不明)'):p.icon;
+  // スーパー地形のフォルダは親(parent)をたどって「スーパー地形/親/子」にする。id と parent が同じものが最上位
+  const pathOf=id=>{
+    const seen=new Set();let parts=[];let cur=fmap&&fmap[id];
+    while(cur&&!seen.has(cur.id)){seen.add(cur.id);if(cur.parent===cur.id||!fmap[cur.parent])break;parts.unshift(cur.name);cur=fmap[cur.parent]}
+    return [base,...parts].join('/');
+  };
+  const keyOf=p=>useF?(fmap[p.fid]!=null?pathOf(p.fid):`${base}/(フォルダ不明)`):p.icon;
   const cnt={};ok.forEach(p=>{const k=keyOf(p);cnt[k]=(cnt[k]||0)+1});
   const order=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
   const folderOf=p=>{
     const k=keyOf(p);
-    if(useF)return (k==='ポイント'&&String(p.fid)==='1')?base:`${base} ${k}`;   // id 1 はスーパー地形の最上位フォルダ
-    return order.length>1&&k?`取込 ${base} ${k}`:`取込 ${base}`;
+    if(useF)return k;
+    return order.length>1&&k?`取込/${base}/${k}`:`取込/${base}`;
   };
   const seen={};
   const pts=ok.map((p,i)=>{
@@ -4591,7 +4652,7 @@ async function unzipTexts(buf){
 async function importPtsDocs(docs){
   const fmap={};
   docs.filter(d=>/\.json$/i.test(d.name)).forEach(d=>{
-    try{(JSON.parse(d.text).wpt_folder||[]).forEach(x=>{fmap[x.id]=x.name})}catch(e){}
+    try{(JSON.parse(d.text).wpt_folder||[]).forEach(x=>{fmap[x.id]={id:x.id,name:x.name,parent:x.parent}})}catch(e){}
   });
   const list=[];
   docs.filter(d=>/\.(gpx|kml|geojson)$/i.test(d.name)).forEach(d=>list.push(...parsePts(d.text,d.name.toLowerCase())));
