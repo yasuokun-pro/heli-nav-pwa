@@ -746,7 +746,7 @@
       <button class="btn sh" id="btnLoad">コード読込</button>
       <button class="btn sh" id="btnJson">JSON書出</button>
       <button class="btn sh" id="btnGpx">GPX書出</button>
-      <button class="btn sh" id="btnJsonIn">JSON/GPX/KML読込</button>
+      <button class="btn sh" id="btnJsonIn">ファイル読込</button>
     </div>
     <div class="grpHead">地点の取り込み<small>Googleマップ等から</small></div>
     <div class="hint"><b>🔍検索窓に貼り付ければピンが立ちます。</b>受け付ける形:
@@ -766,7 +766,7 @@
     <div class="btnrow">
       <button class="btn sh" id="btnBk">端末データ書出</button>
       <button class="btn sh" id="btnBkIn">端末データ読込</button>
-      <input type="file" id="fileIn" accept=".json,.gpx,.kml,.geojson" style="display:none">
+      <input type="file" id="fileIn" accept=".json,.gpx,.kml,.geojson,.zip" multiple style="display:none">
       <input type="file" id="bkIn" accept=".json" style="display:none">
     </div>
     <textarea id="shareBox" placeholder="共有コードをここに貼り付けて「コード読込」を押してください"></textarea>
@@ -918,7 +918,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-178';
+const VER_TAG='v6-179';
 const BUILD='2026-09-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4481,7 +4481,7 @@ document.getElementById('btnLoad').onclick=()=>{
    ⚠ 同じ名前の地点が1ファイルの中に何件もある(「丹沢低空域」7件など)。libImport は名前で上書きするので、
      先にファイル内で「名前 (2)」のように一意にしてから渡す。
    ⚠ 取り込んだ地点は**端末の localStorage にだけ**入る。リポジトリには入らない。表示は既定で OFF */
-function ptsFileToLib(txt,low,fname){
+function parsePts(txt,low){
   const list=[];
   const clean=v=>String(v==null?'':v).replace(/\s+$/,'').trim();
   if(low.endsWith('.geojson')||low.endsWith('.json')){
@@ -4489,7 +4489,7 @@ function ptsFileToLib(txt,low,fname){
     (o.features||[]).forEach(ft=>{
       const g=ft.geometry,pr=ft.properties||{};if(!g||g.type!=='Point')return;
       list.push({lat:+g.coordinates[1],lng:+g.coordinates[0],name:clean(pr.W1_Name||pr.name||pr.title),
-        memo:clean(pr.W3_Memo||pr.description||pr.memo),icon:''});
+        memo:clean(pr.W3_Memo||pr.description||pr.memo),icon:'',fid:''});
     });
   }else{
     const doc=new DOMParser().parseFromString(txt,'application/xml');
@@ -4497,7 +4497,7 @@ function ptsFileToLib(txt,low,fname){
       [...doc.querySelectorAll('wpt')].forEach(w=>{
         const t=n=>{const e=w.getElementsByTagName(n)[0];return e?e.textContent:''};
         list.push({lat:+w.getAttribute('lat'),lng:+w.getAttribute('lon'),name:clean(t('name')),
-          memo:clean(t('cmt')||t('desc')),icon:clean(t('kashmir3d:icon'))});
+          memo:clean(t('cmt')||t('desc')),icon:clean(t('kashmir3d:icon')),fid:clean(t('kashmir3d:folder'))});
       });
     }else{
       [...doc.getElementsByTagName('Placemark')].forEach(pm=>{
@@ -4506,28 +4506,100 @@ function ptsFileToLib(txt,low,fname){
         const t=n=>{const e=pm.getElementsByTagName(n)[0];return e?e.textContent:''};
         const iconEl=[...pm.getElementsByTagName('Data')].find(d=>d.getAttribute('name')==='IconNumber');
         list.push({lat,lng,name:clean(t('name')),memo:clean(t('description')),
-          icon:iconEl?clean(iconEl.textContent):''});
+          icon:iconEl?clean(iconEl.textContent):'',fid:''});
       });
     }
   }
-  const ok=list.filter(p=>isFinite(p.lat)&&isFinite(p.lng)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180);
-  if(!ok.length)return false;
-  // アイコン番号ごとにフォルダと色。件数の多い順に色を割り当てる
-  // スーパー地形の書き出しは「最初の地点名ほか1165個のポイント」という名前なので、その地点名はフォルダ名に使わない
+  return list.filter(p=>isFinite(p.lat)&&isFinite(p.lng)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180);
+}
+function ptsFileToLib(txt,low,fname){
   const base=/ほか\d+個の/.test(fname||'')||/Super Dem App/i.test(txt.slice(0,600))?'スーパー地形'
     :((fname||'取込').replace(/\.[^.]+$/,'').slice(0,20)||'取込');
+  return ptsListToLib(parsePts(txt,low),base,null);
+}
+/* 地点の一覧を登録地点に入れる。
+   fmap があれば(スーパー地形を**フォルダ選択で書き出した zip** の「ポイント.json」= {id:フォルダ名})、
+   GPX の kashmir3d:folder で**スーパー地形と同じフォルダ**に入れる。無ければアイコン番号ごとに分ける。
+   ⚠ 同じ名前の地点が1回の取り込みの中に何件もある(「丹沢低空域」7件など)。libImport は名前で上書きするので、
+     先に「名前 (2)」のように一意にしてから渡す。付ける順番はファイルの並び順なので、何度取り込んでも同じ名前になる */
+function ptsListToLib(ok,base,fmap){
+  if(!ok.length)return false;
   const PAL=['#ffd24d','#ff6b6b','#3df5ff','#7cff7c','#c38bff','#ffa24d','#4da3ff','#ff7ac8','#b0e05c','#e0e0e0'];
-  const cnt={};ok.forEach(p=>{cnt[p.icon]=(cnt[p.icon]||0)+1});
+  const useF=fmap&&ok.some(p=>p.fid&&fmap[p.fid]!=null);
+  const keyOf=p=>useF?(fmap[p.fid]!=null?String(fmap[p.fid]):'(フォルダ不明)'):p.icon;
+  const cnt={};ok.forEach(p=>{const k=keyOf(p);cnt[k]=(cnt[k]||0)+1});
   const order=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
+  const folderOf=p=>{
+    const k=keyOf(p);
+    if(useF)return (k==='ポイント'&&String(p.fid)==='1')?base:`${base} ${k}`;   // id 1 はスーパー地形の最上位フォルダ
+    return order.length>1&&k?`取込 ${base} ${k}`:`取込 ${base}`;
+  };
   const seen={};
   const pts=ok.map((p,i)=>{
     let nm=p.name||('地点'+(i+1));
     seen[nm]=(seen[nm]||0)+1;if(seen[nm]>1)nm=`${nm} (${seen[nm]})`;
-    const k=order.indexOf(p.icon);
-    return {name:nm,lat:p.lat,lng:p.lng,memo:p.memo,icon:'●',color:PAL[k%PAL.length],
-      folder:order.length>1&&p.icon?`取込 ${base} ${p.icon}`:`取込 ${base}`};
+    return {name:nm,lat:p.lat,lng:p.lng,memo:p.memo,icon:'●',color:PAL[order.indexOf(keyOf(p))%PAL.length],folder:folderOf(p)};
   });
   return libImport({t:'lib',routes:[],pts});
+}
+/* zip の展開(外部ライブラリ無し)。中央ディレクトリから位置と大きさを読む。
+   ⚠ スーパー地形の zip は ZIP64 で「データ記述子あり(flag bit3)」。ローカルヘッダの大きさは当てにならない。
+     ローカルヘッダの値を信じてはいけない。deflate は DecompressionStream('deflate-raw')
+     (iOS 16.4 以降の Safari で使える) */
+async function unzipTexts(buf){
+  const dv=new DataView(buf),u8=new Uint8Array(buf);
+  const u64=o=>dv.getUint32(o+4,true)*4294967296+dv.getUint32(o,true);
+  let e=-1;
+  for(let i=u8.length-22;i>=Math.max(0,u8.length-66000);i--){if(dv.getUint32(i,true)===0x06054b50){e=i;break}}
+  if(e<0)throw new Error('zipでない');
+  let n=dv.getUint16(e+10,true),p=dv.getUint32(e+16,true);
+  // ⚠ ZIP64: 件数や中央ディレクトリの位置が 0xFFFF/0xFFFFFFFF のときは ZIP64 の終端レコードから読む
+  if((n===0xFFFF||p===0xFFFFFFFF)&&e>=20&&dv.getUint32(e-20,true)===0x07064b50){
+    const z=u64(e-12);
+    if(dv.getUint32(z,true)===0x06064b50){n=u64(z+32);p=u64(z+48)}
+  }
+  const out=[];
+  for(let k=0;k<n;k++){
+    if(dv.getUint32(p,true)!==0x02014b50)throw new Error('zipが壊れている');
+    const method=dv.getUint16(p+10,true);
+    let csize=dv.getUint32(p+20,true),usize=dv.getUint32(p+24,true),lho=dv.getUint32(p+42,true);
+    const nlen=dv.getUint16(p+28,true),xlen=dv.getUint16(p+30,true),clen=dv.getUint16(p+32,true);
+    const name=new TextDecoder().decode(u8.subarray(p+46,p+46+nlen));
+    // ⚠ スーパー地形の zip は ZIP64。大きさと位置が 0xFFFFFFFF になっていて、本当の値は拡張欄(id 0x0001)にある。
+    //   並びは「非圧縮の大きさ・圧縮後の大きさ・ローカルヘッダの位置」のうち 0xFFFFFFFF だったものだけ
+    for(let q=p+46+nlen,qe=q+xlen;q+4<=qe;){
+      const id=dv.getUint16(q,true),sz=dv.getUint16(q+2,true);
+      if(id===0x0001){let r=q+4;
+        if(usize===0xFFFFFFFF){usize=u64(r);r+=8}
+        if(csize===0xFFFFFFFF){csize=u64(r);r+=8}
+        if(lho===0xFFFFFFFF){lho=u64(r);r+=8}
+      }
+      q+=4+sz;
+    }
+    p+=46+nlen+xlen+clen;
+    const start=lho+30+dv.getUint16(lho+26,true)+dv.getUint16(lho+28,true);
+    const data=u8.subarray(start,start+csize);
+    let bytes;
+    if(method===0)bytes=data;
+    else if(method===8)bytes=new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    else continue;
+    out.push({name,text:new TextDecoder().decode(bytes)});
+  }
+  return out;
+}
+/* zip か、複数ファイル(GPX と ポイント.json を一緒に選んだ場合)を地点として取り込む */
+async function importPtsDocs(docs){
+  const fmap={};
+  docs.filter(d=>/\.json$/i.test(d.name)).forEach(d=>{
+    try{(JSON.parse(d.text).wpt_folder||[]).forEach(x=>{fmap[x.id]=x.name})}catch(e){}
+  });
+  const list=[];
+  docs.filter(d=>/\.(gpx|kml|geojson)$/i.test(d.name)).forEach(d=>list.push(...parsePts(d.text,d.name.toLowerCase())));
+  if(!list.length)return false;
+  const nf=Object.keys(fmap).length;
+  if(!confirm(`地点 ${list.length} 件${nf?`(フォルダ ${nf} 個)`:''}を登録地点に追加します。`))return true;
+  const sc=docs.some(d=>/Super Dem App/i.test(d.text.slice(0,600)))||nf;
+  return ptsListToLib(list,sc?'スーパー地形':'取込',nf?fmap:null);
 }
 /* 複数まとめ(HNAVL1./{t:'lib'})の取り込み。同名は上書き確認する */
 function libImport(d){
@@ -4618,8 +4690,24 @@ document.getElementById('bkIn').onchange=e=>{
 };
 
 document.getElementById('btnJsonIn').onclick=()=>document.getElementById('fileIn').click();
-document.getElementById('fileIn').onchange=function(){
-  const f=this.files[0];if(!f)return;
+document.getElementById('fileIn').onchange=async function(){
+  const files=[...this.files];if(!files.length)return;
+  // zip(スーパー地形のフォルダ書き出し)や複数ファイルは地点としてまとめて取り込む
+  if(files.length>1||files.some(f=>/\.zip$/i.test(f.name))){
+    this.value='';
+    try{
+      const docs=[];
+      for(const f of files){
+        if(/\.zip$/i.test(f.name)){
+          if(typeof DecompressionStream==='undefined'){alert('この端末のブラウザは zip を開けません。ファイルアプリで展開してから、GPX と json をまとめて選んでください');return}
+          docs.push(...await unzipTexts(await f.arrayBuffer()));
+        }else docs.push({name:f.name,text:await f.text()});
+      }
+      if(!await importPtsDocs(docs))alert('取り込める地点がありませんでした');
+    }catch(e){alert('ファイルを読み込めませんでした('+(e.message||e)+')')}
+    return;
+  }
+  const f=files[0];
   const rd=new FileReader();
   rd.onload=()=>{
     try{
