@@ -45,7 +45,18 @@ NAV = {'HUC': (36.18701, 140.41373), 'SYE': (36.01093, 139.83917),
 LBL = {'HUC': (287.7, 116.4), 'SYE': (154.0, 184.9), 'SHT': (176.3, 257.8),
        'NRE': (282.5, 271.3), 'CVT': (392.2, 276.4), 'OJT': (291.0, 454.1),
        'TET': (154.8, 545.8)}
-SHIFT = (42, 22)      # 描かれている霞ヶ浦CTR/成田CTRの円で実測した平行移動(px)
+# 位置合わせの基準。⚠ **navaidのラベル位置で当ててはいけない**。
+#   ラベルは記号から離れて置かれ、離れる向きも量もまちまちなので、当てはめ残差が
+#   9〜57px(1.5〜9NM)になり、**羽田の特別管制区が約2NM東南東へずれていた**(〜v6-182)。
+#   代わりに、図に描かれていて位置が確定しているものを画像から探して当てる:
+#     ・navaidの**記号**(四角い枠)。中心が公示位置そのもの → SYM
+#     ・**CTRの5NM円**。中心=ARP・半径=公示値 → CTR_CIRCLES
+#   ⚠ 館山・木更津のCTRは**破線**で描かれていて円探索が安定しないので使わない。
+#   ⚠ HUC/SHT/CVT/OJT/TET の記号は他の線と重なって相関が上がらない。SYE/NRE だけ使う。
+SYM = ('SYE', 'NRE')                                  # 記号で当てるnavaid
+CTR_CIRCLES = {'東京CTR': (35.553333, 139.781111),     # RJTT ARP
+               '霞ヶ浦CTR': (36.03472, 140.19278)}     # RJAK ARP
+CTR_R = 9260.0        # 5NM
 
 # 区画id → (上限, 下限)。⚠ **引き出し線を目視で追って決めた**。
 #   id は本ファイルの塗り分けの順に決まるので、AIRAC更新で図が変わったら
@@ -72,24 +83,144 @@ DROP = {43, 44, 45, 46}    # 図の下にある別枠(UTC限定図・周波数�
 
 
 def rjtt_pdf():
+    """⚠ CELL の区画idは **AIRAC 2026-07-09 の図** の塗り分け順に合わせてある。
+       新しい図は区画の切れ方が変わり、そのままでは「高度の割り当てが無い」が出る。
+       更新するときは probe で振り直すこと。それまでは --airac で図を固定する。"""
+    want = None
+    if '--airac' in sys.argv:
+        want = sys.argv[sys.argv.index('--airac')+1]
     for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf',
                 '~/Downloads/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
+        if want: f = [x for x in f if want in x]
         if f: return f[-1]
     return None
 
 
-def georef():
-    S = DPI / 72.0; ks = list(NAV)
-    A = np.array([[NAV[k][1], NAV[k][0], 1] for k in ks])
-    cx = np.linalg.lstsq(A, np.array([LBL[k][0]*S for k in ks]), rcond=None)[0]
-    cy = np.linalg.lstsq(A, np.array([LBL[k][1]*S for k in ks]), rcond=None)[0]
-    cx[2] += SHIFT[0]; cy[2] += SHIFT[1]
-    M = np.array([[cx[0], cx[1]], [cy[0], cy[1]]])
-    Mi = np.linalg.inv(M)
+def affine(pairs):
+    """(lat, lon, px_x, px_y) の組から緯度経度↔画素のアフィンを作る"""
+    A = np.array([[p[1], p[0], 1] for p in pairs])
+    cx = np.linalg.lstsq(A, np.array([p[2] for p in pairs], float), rcond=None)[0]
+    cy = np.linalg.lstsq(A, np.array([p[3] for p in pairs], float), rcond=None)[0]
+    res = np.hypot(A @ cx - np.array([p[2] for p in pairs], float),
+                   A @ cy - np.array([p[3] for p in pairs], float))
+    M = np.array([[cx[0], cx[1]], [cy[0], cy[1]]]); Mi = np.linalg.inv(M)
     def px2ll(x, y):
         lon, lat = Mi @ np.array([x-cx[2], y-cy[2]])
         return round(float(lat), 5), round(float(lon), 5)
+    def ll2px(lat, lon):
+        return cx[0]*lon + cx[1]*lat + cx[2], cy[0]*lon + cy[1]*lat + cy[2]
+    return px2ll, ll2px, res
+
+
+def ring_ll(lat, lon, rm, n=720):
+    """半径 rm[m] の円周(緯度経度)。経度方向は cos(lat) で縮める"""
+    kx = 111320 * math.cos(math.radians(lat))
+    return [(lat + rm*math.cos(2*math.pi*i/n)/110540,
+             lon + rm*math.sin(2*math.pi*i/n)/kx) for i in range(n)]
+
+
+def cover(dil, ll2px, pts, dx=0.0, dy=0.0):
+    """線の上に乗っている点の割合。dil は線を太らせた墨のマスク"""
+    H, W = dil.shape; c = 0
+    for lat, lon in pts:
+        x, y = ll2px(lat, lon); X = int(round(x+dx)); Y = int(round(y+dy))
+        if 0 <= Y < H and 0 <= X < W and dil[Y, X]: c += 1
+    return c / len(pts)
+
+
+def find_circle(dil, ll2px, lat, lon, span=110):
+    """図に描かれている5NM円を探して、その中心の画素位置を返す"""
+    pts = ring_ll(lat, lon, CTR_R)
+    best = (0.0, 0, 0)
+    for step, rng in ((4, span), (1, 6)):
+        bx, by = best[1], best[2]
+        for dx in range(bx-rng, bx+rng+1, step):
+            for dy in range(by-rng, by+rng+1, step):
+                c = cover(dil, ll2px, pts, dx, dy)
+                if c > best[0]: best = (c, dx, dy)
+    x0, y0 = ll2px(lat, lon)
+    return x0 + best[1], y0 + best[2], best[0]
+
+
+def asp_poly(icao, t):
+    """index.html の ASP_POLY(AIPの座標表から起こした確かな形)を検算に借りる"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        s = open(os.path.join(here, '..', 'index.html'), encoding='utf-8').read()
+        A = json.loads(re.search(r'const ASP_POLY=(\[.*?\]);\n', s, re.S).group(1))
+    except Exception:
+        return []
+    return [f for f in A if f.get('icao') == icao and f.get('t') == t and f.get('pts')]
+
+
+def box_tmpl(side, w=4):
+    """navaid記号の四角い枠(一辺side px・線幅w px)"""
+    T = np.zeros((side+8, side+8)); o = 4
+    T[o:o+side, o:o+w] = 1; T[o:o+side, o+side-w:o+side] = 1
+    T[o:o+w, o:o+side] = 1; T[o+side-w:o+side, o:o+side] = 1
+    return T
+
+
+def find_sym(ink, x0, y0, span=80):
+    """ラベル位置の近くから navaid記号の枠を探し、その中心(=公示位置)を返す"""
+    best = (-9.0, x0, y0)
+    for side in (36, 38, 40):
+        T = box_tmpl(side); h, w = T.shape; Tn = (T - T.mean()) / T.std()
+        for y in range(y0-span, y0+span+1):
+            for x in range(x0-span, x0+span+1):
+                P = ink[y-h//2:y-h//2+h, x-w//2:x-w//2+w].astype(float)
+                if P.shape != T.shape: continue
+                sd = P.std()
+                if sd < 0.05: continue
+                v = float(((P - P.mean()) / sd * Tn).mean())
+                if v > best[0]: best = (v, x, y)
+    return best
+
+
+def georef(img):
+    S = DPI / 72.0; ks = list(NAV)
+    # 1. navaidのラベル位置で粗く当てる(記号と円を探す出発点にするだけ)
+    A = np.array([[NAV[k][1], NAV[k][0], 1] for k in ks])
+    cx = np.linalg.lstsq(A, np.array([LBL[k][0]*S for k in ks]), rcond=None)[0]
+    cy = np.linalg.lstsq(A, np.array([LBL[k][1]*S for k in ks]), rcond=None)[0]
+    ll2px0 = lambda lat, lon: (cx[0]*lon + cx[1]*lat + cx[2], cy[0]*lon + cy[1]*lat + cy[2])
+    ink = np.array(img) < 160
+    dil = np.array(Image.fromarray(np.where(ink, 0, 255).astype('uint8'))
+                   .filter(ImageFilter.MinFilter(5))) < 128
+    pairs = []
+    # 2. navaid記号の枠を探す
+    for k in SYM:
+        v, x, y = find_sym(ink, int(LBL[k][0]*S), int(LBL[k][1]*S))
+        print(f'  {k}記号: 相関{v:.2f} px=({x},{y})')
+        if v < 0.35:
+            print(f'  ⚠ {k} の記号が見つからない(図の作りが変わった?)', file=sys.stderr); continue
+        pairs.append((NAV[k][0], NAV[k][1], x, y))
+    # 3. 描かれているCTRの5NM円を探す(線を2px太らせて拾う)
+    for nm, (lat, lon) in CTR_CIRCLES.items():
+        x, y, c = find_circle(dil, ll2px0, lat, lon)
+        x0, y0 = ll2px0(lat, lon)
+        print(f'  {nm}: 円の一致率{c:.2f} 粗当てからのずれ({x-x0:+.0f},{y-y0:+.0f})px')
+        if c < 0.4:
+            print(f'  ⚠ {nm} の円が見つからない(図の作りが変わった?)', file=sys.stderr); continue
+        pairs.append((lat, lon, x, y))
+    if len(pairs) < 3:
+        print('  ⚠ 基準が3つそろわないので粗当てのまま(形がずれる)', file=sys.stderr)
+        pairs = [(NAV[k][0], NAV[k][1], *ll2px0(*NAV[k])) for k in ks]
+    px2ll, ll2px, res = affine(pairs)
+    if res.max() > 8:
+        print(f'  ⚠ 基準どうしが合わない(残差{res.max():.0f}px)。位置合わせを疑うこと', file=sys.stderr)
+    print(f'  当てはめ残差 {np.round(res, 1)} px (1NM≒{abs(ll2px(35.6,140)[1]-ll2px(35.6+1852/110540,140)[1]):.1f}px)')
+    # 4. 検算: 同じ図に描かれている東京の特別管制区(AIPの座標表で確定)に乗るか。
+    #    ⚠ 副区画の境目は図に描かれていないものがあるので、**一番よく乗る1本**で見る
+    cs = []
+    for f in asp_poly('RJTT', 'pca'):
+        if len(f['pts']) < 40: continue
+        c = cover(dil, ll2px, [(p[0], p[1]) for p in f['pts']])
+        cs.append(c)
+        print(f"  検算 {f['n']} {f['lo']}-{f['up']}ft: 図の線との一致率 {c:.2f}")
+    if cs and max(cs) < 0.6:
+        print('  ⚠ 特別管制区の線に乗らない。位置合わせを疑うこと', file=sys.stderr)
     return px2ll, (cx, cy)
 
 
@@ -161,6 +292,7 @@ def main():
     if not pdf: print('RJTTのPDFが見つからない', file=sys.stderr); sys.exit(1)
     subprocess.run(['pdftoppm', '-png', '-r', str(DPI), '-f', str(PAGE), '-l', str(PAGE),
                     pdf, '/tmp/tca_tt'], check=True)
+    print(f'  図: {os.path.basename(pdf)} p.{PAGE}')
     img = Image.open(sorted(glob.glob('/tmp/tca_tt-*.png'))[-1]).convert('L')
     er = img.filter(ImageFilter.MaxFilter(5))
     thick = np.array(Image.fromarray(np.where(np.array(er) < 128, 0, 255).astype('uint8'))
@@ -169,7 +301,7 @@ def main():
     #   CELL の区画idはこの手順での塗り分け順に対応しているので変えないこと
     thick = dilate(thick, 3)
     lab, cells = segment(thick)
-    px2ll, _ = georef()
+    px2ll, _ = georef(img)
 
     def emit(mask, up, lo, name, out):
         m = dilate(mask, 9)          # 線幅の半分(≒4px)ぶん戻して隣と接するように
