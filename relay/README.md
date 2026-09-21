@@ -1,11 +1,24 @@
 # 中継 (Vercel)
 
-2つの窓口がある。どちらも同じ4つの鍵(`lib/guard.js`)を通る。
+3つの窓口がある。どれも同じ4つの鍵(`lib/guard.js`)を通る。
 
 | 窓口 | 中身 | 上流 | 使い回し |
 |---|---|---|---|
 | `/api/adsb` (`/` も同じ) | 他機情報 | adsb.lol → adsb.fi | 位置を0.05度に丸めて10秒 |
 | `/api/wx?ids=RJTT,...` | METAR 3時間ぶん + TAF | aviationweather.gov (NOAA) | 同じ局の組み合わせを2分 |
+| `/api/notam` 本文 `{"ids":"RJTT,..."}` | NOTAM(最大8飛行場) | FAA NOTAM API | 同じ組み合わせを10分 |
+
+## NOTAM を使うのに要るもの
+1. <https://api.faa.gov/> で無料登録し、**NOTAM API** を申し込むと `client_id` と `client_secret` が出る。
+2. Vercel の Settings → Environment Variables に
+   **`FAA_CLIENT_ID`** と **`FAA_CLIENT_SECRET`** を入れて Redeploy。
+3. 未設定なら `/api/notam` は **503 `{"error":"key"}`** を返し、アプリはその旨を画面に出す。
+
+⚠ 1回の要求で飛行場1つしか指定できないので、ids の数だけ並列に投げる(上限8)。
+  その分だけ上流を叩くので、IPごとの回数制限はこの窓口だけ **1分6回**。
+⚠ **公式ブリーフィングの代わりにはならない**。国内の正式な情報源は AIS Japan と部隊のブリーフィング。
+  自衛隊飛行場や国内限定の通知は ICAO 配信に流れてこないことがあるので、
+  **出ない=異常なし ではない**。アプリ側にも同じ注意書きを出している。
 
 ## 送り方(v6-178〜)
 アプリは **POST の本文**に `{"lat","lon","r","k"}` や `{"ids","k"}` を JSON で入れて送る。
