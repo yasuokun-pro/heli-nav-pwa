@@ -866,7 +866,7 @@
         <button class="btn" id="btnNtmR">↻ 取得</button>
         <span id="ntmStatus" class="hint" style="align-self:center"></span>
       </div>
-      <div class="hint">ルート上の飛行場のNOTAM(中継経由・FAAのICAO配信)。
+      <div class="hint">ルート上の飛行場のNOTAM(中継経由)。
         ⚠ <b>公式ブリーフィングの代わりにはなりません</b>。国内の正式な情報源はAIS Japan・部隊のブリーフィングです。
         自衛隊飛行場や国内限定の通知は流れてこないことがあり、<b>出ない＝異常なしではありません</b>。</div>
       <div id="ntmBody"></div>
@@ -961,7 +961,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-184';
+const VER_TAG='v6-185';
 const BUILD='2026-09-21';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3565,7 +3565,7 @@ async function loadNotam(force){
     ntmIds=ids;ntmFetched=Date.now();
   }catch(e){
     const m=String(e.message||e);
-    ntmErr=/503 key/.test(m)?'中継にFAAの鍵が入っていません(Vercelの環境変数 FAA_CLIENT_ID / FAA_CLIENT_SECRET)'
+    ntmErr=/503 key/.test(m)?'中継に取得元の設定が入っていません(Vercelの環境変数 AR_USER / AR_PASS)'
           :'取れませんでした '+m;
   }
   renderNotam();
@@ -3573,7 +3573,9 @@ async function loadNotam(force){
 function renderNotam(){
   const b=document.getElementById('ntmBody'),st=document.getElementById('ntmStatus');
   if(!b)return;
-  if(st)st.innerHTML=NTM?`${NTM.updated} 取得(UTC) / ${ntmIds.length}飛行場`:'';
+  const srcName={autorouter:'autorouter(EAD)',faa:'FAA'};
+  if(st)st.innerHTML=NTM?`${NTM.updated} 取得(UTC) / ${ntmIds.length}飛行場`+
+    (srcName[NTM.src]?` / ${srcName[NTM.src]}`:''):'';
   if(ntmErr&&!NTM){b.innerHTML=`<div class="ifrNa">${wxEsc(ntmErr)}</div>`;return}
   if(!NTM){b.innerHTML='<div class="hint">「↻ 取得」でルート上の飛行場のNOTAMを取ります。</div>';return}
   const now=Date.now();

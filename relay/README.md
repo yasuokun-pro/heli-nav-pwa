@@ -9,13 +9,18 @@
 | `/api/notam` 本文 `{"ids":"RJTT,..."}` | NOTAM(最大8飛行場) | FAA NOTAM API | 同じ組み合わせを10分 |
 
 ## NOTAM を使うのに要るもの
-1. <https://api.faa.gov/> で無料登録し、**NOTAM API** を申し込むと `client_id` と `client_secret` が出る。
-2. Vercel の Settings → Environment Variables に
-   **`FAA_CLIENT_ID`** と **`FAA_CLIENT_SECRET`** を入れて Redeploy。
-3. 未設定なら `/api/notam` は **503 `{"error":"key"}`** を返し、アプリはその旨を画面に出す。
+取得元は環境変数で切り替わる。**どちらも未設定なら 503 `{"error":"key"}`** を返し、アプリはその旨を画面に出す。
 
-⚠ 1回の要求で飛行場1つしか指定できないので、ids の数だけ並列に投げる(上限8)。
-  その分だけ上流を叩くので、IPごとの回数制限はこの窓口だけ **1分6回**。
+| 取得元 | 環境変数 | 状況(2026-09) |
+|---|---|---|
+| autorouter.aero (既定) | `AR_USER` / `AR_PASS` | **API利用合意が要る**。合意が取れるまで設定しないこと |
+| FAA NOTAM API | `FAA_CLIENT_ID` / `FAA_CLIENT_SECRET` | ポータルが login.gov の**身元確認(米国発行の身分証)**を要求。日本からは事実上取れない |
+
+⚠ autorouter の規約: "Use of autorouter's API ... is prohibited unless an API usage agreement is in place"。
+  先に許可を取ること。`client_id` はアカウントのメール、`client_secret` は**アカウントのパスワードそのもの**なので、
+  **他で使っていないパスワード**にすること。トークンは1時間で切れる(中継が自動で取り直す・同時20個まで)。
+⚠ FAA 側は1回の要求で飛行場1つなので ids の数だけ並列に投げる(上限8)。autorouter は1回でまとめて引ける。
+  どちらも上流を叩くので、IPごとの回数制限はこの窓口だけ **1分6回**。
 ⚠ **公式ブリーフィングの代わりにはならない**。国内の正式な情報源は AIS Japan と部隊のブリーフィング。
   自衛隊飛行場や国内限定の通知は ICAO 配信に流れてこないことがあるので、
   **出ない=異常なし ではない**。アプリ側にも同じ注意書きを出している。
