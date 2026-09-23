@@ -177,6 +177,10 @@
     background:var(--panel);border:1px solid var(--line);border-radius:6px;
     padding:4px 7px;font-family:var(--mono);font-size:10.5px;color:var(--dim);
     line-height:1.4;text-align:right;white-space:nowrap;pointer-events:none}
+  #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:76px;z-index:4000;max-width:min(92vw,520px);
+    background:rgba(20,24,32,.95);border:1px solid var(--grn);border-radius:8px;color:var(--txt);
+    padding:10px 14px;font-size:12.5px;line-height:1.6;display:none;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  #toast.on{display:block}
   #zmScale b{color:var(--cyn);font-weight:600;font-size:11.5px}
   /* 北を指す矢印。回転しているときだけ出す(ノースアップなら要らない) */
   #btnNorth{position:absolute;z-index:900;right:54px;bottom:140px;display:none;
@@ -835,7 +839,11 @@
     <div class="hint">行をタップすると経路と時間の実績を表示します。</div>
     <table><thead><tr><th>日付</th><th>T/O</th><th>L/D</th><th>飛行時間</th><th>経路</th></tr></thead>
     <tbody id="logBody"></tbody></table>
-    <div class="btnrow" style="margin-top:16px">
+    <div class="hint" style="margin-top:14px">L/Dを押し忘れても、最後に動いてから
+      <input id="inpGrace" type="number" min="1" max="180" step="1" style="width:56px">分たてば飛行記録に自動で保存します。
+      他のアプリに切り替えているだけなら、その間は同じ飛行を続けます。
+      ⚠ アプリを閉じている間は位置を記録できません(iOSの制約)。次に開いたときに保存されます。</div>
+    <div class="btnrow" style="margin-top:10px">
       <button class="btn" id="btnCSV">CSV書き出し</button>
       <button class="btn" id="btnLogClr">ログ全消去</button>
     </div>
@@ -977,7 +985,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-188';
+const VER_TAG='v6-189';
 const BUILD='2026-09-23';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3823,6 +3831,13 @@ function setFollow(on){
   if(on&&ownPos)map.setView(ownPos,Math.max(map.getZoom(),11),{animate:false});
   syncNorth();
 }
+/* 他のアプリへ切り替えたら退避、戻ってきたら猶予を過ぎていないか見る */
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){if(flt)fltSave()}
+  else fltCheckStale();
+});
+window.addEventListener('pagehide',()=>{if(flt)fltSave()});
+setInterval(()=>{if(!document.hidden)fltCheckStale()},60000);
 document.getElementById('btnTrkUp').onclick=()=>setTrackUp(!trackUp);
 document.getElementById('btnNorth').onclick=()=>setTrackUp(false);
 map.on('rotate',syncNorth);
@@ -5390,23 +5405,25 @@ function trackBindPopup(){
   const el=document.createElement('div');
   el.innerHTML=trackPopupHtml(trk,live);
   const sv=el.querySelector('.trkSave'),dl2=el.querySelector('.trkDel');
-  if(sv)sv.onclick=()=>{trackSaveAsLog(trk);map.closePopup()};
+  if(sv)sv.onclick=()=>{trackSaveAsLog(trk,trkMeta);map.closePopup()};
   if(dl2)dl2.onclick=()=>{
     if(!confirm('この軌跡を消します。保存していなければ元に戻せません。よろしいですか?'))return;
-    trackShow([]);store.del('hnav.fltTrk');map.closePopup();
+    trackShow([]);store.del('hnav.fltTrk');store.del('hnav.flt');map.closePopup();
   };
   [trackLine,trackHit].forEach(l=>l.bindPopup(el));
 }
-/* 未保存の軌跡を飛行記録に足す。時刻は軌跡の最初と最後から取る */
-function trackSaveAsLog(trk){
+/* 未保存の軌跡を飛行記録に足す。時刻は軌跡の最初と最後から取る。
+   ⚠ 経路は**その軌跡と一緒に退避してあったもの**を使う。今画面に出ている経路を入れてはいけない
+     (別の日の軌跡に今日の経路が付いてしまう。v6-188で実際にそうなっていた) */
+function trackSaveAsLog(trk,meta){
   if(!trk||trk.length<2){alert('点が少なすぎて保存できません。');return}
   const t0=trk[0][4],t1=trk[trk.length-1][4];
   const d0=t0?new Date(t0*1000):new Date(),d1=t1?new Date(t1*1000):new Date();
   const ms=Math.max(0,d1-d0);
   logs.push({date:d0.toLocaleDateString('ja-JP'),off:hm(d0),on:hm(d1),
-    dur:fmtHMS(ms).slice(0,5),route:wps.map(w=>w.name).join('→')||'—',
-    wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name]),legs:[{off:hm(d0),on:hm(d1)}],trk});
-  saveLogs();store.del('hnav.fltTrk');
+    dur:fmtHMS(ms).slice(0,5),route:(meta&&meta.route)||'—',
+    wp:(meta&&meta.wp)||[],legs:[{off:hm(d0),on:hm(d1)}],trk});
+  saveLogs();store.del('hnav.fltTrk');store.del('hnav.flt');
   trackShow([]);                       // 未保存の線は消して、記録側の表示に切り替える
   logTrkSet(logKey(logs[logs.length-1]),true);
   renderLogs();
@@ -5425,13 +5442,72 @@ function trackRecord(){
     ownSpdKt!==null?Math.round(ownSpdKt):null,
     Math.floor(now/1000)]);
   trkLast={lat:ownPos.lat,lng:ownPos.lng,t:now};
-  trackShow(flt.trk);
-  store.set('hnav.fltTrk',{firstOff:+flt.firstOff,trk:flt.trk}); // 落ちても復元できるよう随時退避
+  trackShow(flt.trk,fltRouteNow());
+  fltSave();                                      // 落ちても復元できるよう随時退避
 }
-function trackShow(pts){ // 記録中・未保存のトラックを地図に表示(タップで素性と保存/削除)
+/* 飛行中の「今の経路」。⚠ 軌跡を後から保存するときに**そのときの経路**を使うため、
+   現在画面に出ている経路ではなく、これを軌跡と一緒に退避しておく */
+function fltRouteNow(){
+  return {route:wps.map(w=>w.name).join('→')||'',
+          wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name])};
+}
+/* ───────── 進行中の飛行の退避と自動保存 ─────────
+   ⚠ L/Dの押し忘れ対策。**アプリを閉じてもJSは走れない**ので、次に開いたとき(または復帰したとき)に
+     「最後に動いてから FLT_GRACE 分以上たっていれば自動で飛行記録にする」。
+     ナビ中に他のアプリへ切り替えるだけなら猶予内に戻るので、そのまま同じ飛行を続ける。
+   ⚠ 猶予は `hnav.fltGrace`(分)。飛行記録タブで変えられる。既定15分 */
+let toastT=null;
+function toast(msg,ms=9000){
+  // ⚠ 起動直後(init)はまだ #toast が組まれていない。無ければその場で作る
+  let el=document.getElementById('toast');
+  if(!el){el=document.createElement('div');el.id='toast';document.body.appendChild(el)}
+  el.textContent=msg;el.classList.add('on');
+  clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('on'),ms);
+  el.onclick=()=>el.classList.remove('on');
+}
+const FLT_GRACE_DEF=15;
+function fltGrace(){const v=+store.get('hnav.fltGrace');return v>0?v:FLT_GRACE_DEF}
+function fltSave(){
+  if(!flt){store.del('hnav.flt');return}
+  const r=fltRouteNow();
+  store.set('hnav.flt',{firstOff:+flt.firstOff,legOff:flt.legOff?+flt.legOff:0,accMs:flt.accMs||0,
+    legs:flt.legs||[],trk:flt.trk||[],route:r.route,wp:r.wp,seen:Date.now()});
+}
+function fltLastMs(fs){
+  const t=fs.trk&&fs.trk.length?fs.trk[fs.trk.length-1][4]*1000:0;
+  return Math.max(t||0,fs.seen||0,fs.legOff||0,fs.firstOff||0);
+}
+/* 猶予を過ぎた飛行を自動で記録にする。短すぎる(動いていない)ものは捨てる */
+function fltAutoClose(fs){
+  const end=fltLastMs(fs),d0=new Date(fs.firstOff),d1=new Date(end);
+  const ms=(fs.accMs||0)+(fs.legOff?Math.max(0,end-fs.legOff):0);
+  store.del('hnav.flt');store.del('hnav.fltTrk');
+  if(ms<60000&&(!fs.trk||fs.trk.length<2))return null;      // 1分未満で軌跡も無い=押し間違い
+  const legs=(fs.legs||[]).slice();
+  if(fs.legOff)legs.push({off:hm(new Date(fs.legOff)),on:hm(d1)});
+  const rec={date:d0.toLocaleDateString('ja-JP'),off:hm(d0),on:hm(d1),dur:fmtHMS(ms).slice(0,5),
+    route:fs.route||'—',wp:fs.wp||[],legs,trk:fs.trk||[],auto:1};
+  logs.push(rec);saveLogs();
+  return rec;
+}
+function fltCheckStale(){       // 復帰時・起動時に呼ぶ
+  const fs=store.get('hnav.flt');
+  if(!fs)return false;
+  if(Date.now()-fltLastMs(fs)<=fltGrace()*60000)return false;
+  if(flt){flt=null;clearInterval(timerId);trkLast=null;setFltButtons()}
+  const rec=fltAutoClose(fs);
+  trackShow([]);
+  if(rec){
+    logTrkSet(logKey(rec),true);renderLogs();
+    toast(`L/Dが押されないまま${fltGrace()}分たったので、${rec.date} ${rec.off}〜${rec.on} を飛行記録に保存しました。`);
+  }else renderLogs();
+  return true;
+}
+function trackShow(pts,meta){ // 記録中・未保存のトラックを地図に表示(タップで素性と保存/削除)
   const ll=(pts||[]).map(p=>[p[0],p[1]]);
   trackLine.setLatLngs(ll);trackHit.setLatLngs(ll);
-  trkMeta=(pts&&pts.length)?{trk:pts}:null;
+  trkMeta=(pts&&pts.length)?Object.assign({trk:pts},meta||{}):null;
+  trkBindAt=0;                         // 素性が変わったので吹き出しを作り直す
   trackBindPopup();
 }
 function trkStats(trk){ // 距離NM・最高高度ft・最高速度kt
@@ -5458,10 +5534,13 @@ ${seg}
 }
 const hm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
 function fltDurMs(){return flt?flt.accMs+(flt.legOff?Date.now()-flt.legOff:0):0}
+let fltSeenAt=0;
 function tickTimer(){
   document.getElementById('dTimer').textContent=fmtHMS(fltDurMs());
   const f=document.getElementById('flyDur');
   if(f)f.textContent=fmtHMS(fltDurMs()).slice(0,5);
+  // 止まっていてGPS点が増えなくても「生きている」ことを残す(自動保存の判定に使う)
+  if(flt&&Date.now()-fltSeenAt>30000){fltSeenAt=Date.now();fltSave()}
 }
 function setFltButtons(){
   const to=document.getElementById('btnTO'),ld=document.getElementById('btnLDG');
@@ -5476,7 +5555,7 @@ document.getElementById('btnTO').onclick=function(){
   if(gpsWatch===null)document.getElementById('btnGPS').click(); // 軌跡記録のためGPSを自動ON
   setTrackUp(true);                    // 離陸したら進行方向を上にする
   clearInterval(timerId);timerId=setInterval(tickTimer,1000);
-  setFltButtons();renderLogs();
+  fltSave();setFltButtons();renderLogs();
 };
 document.getElementById('btnLDG').onclick=function(){
   const now=new Date();
@@ -5485,7 +5564,7 @@ document.getElementById('btnLDG').onclick=function(){
     flt.legs.push({off:hm(flt.legOff),on:hm(now)});
     flt.legOff=null;
     clearInterval(timerId);tickTimer();
-    setFltButtons();renderLogs();
+    fltSave();setFltButtons();renderLogs();
   }else{ // 地上 → FLT終了(記録確定)
     logs.push({date:flt.firstOff.toLocaleDateString('ja-JP'),
       off:hm(flt.firstOff),
@@ -5495,7 +5574,7 @@ document.getElementById('btnLDG').onclick=function(){
       wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name]),
       legs:flt.legs,
       trk:flt.trk||[]});                 // GPS軌跡を記録に保存
-    store.del('hnav.fltTrk');            // 進行中トラックの退避を破棄
+    store.del('hnav.fltTrk');store.del('hnav.flt');   // 進行中の退避を破棄
     trackShow([]);                       // 未保存の線は消す(記録側の👁で出せる)
     logTrkSet(logKey(logs[logs.length-1]),true);
     flt=null;clearInterval(timerId);trkLast=null;
@@ -6648,10 +6727,31 @@ function fixLogHead(){
   document.getElementById('btnVarAuto').classList.toggle('on',varAuto);
   const sl=store.get('hnav.logs');
   if(Array.isArray(sl)&&sl.length){sl.forEach(l=>logs.push(l));renderLogs()}
-  // 飛行中にアプリが落ちた場合、退避しておいた軌跡を地図に復元(参考表示)
-  const ft=store.get('hnav.fltTrk');
-  if(ft&&Array.isArray(ft.trk)&&ft.trk.length)trackShow(ft.trk);   // 落ちた飛行の未保存の軌跡
-  drawLogTrks();                                                    // 👁で出していた記録の軌跡
+  document.getElementById('inpGrace').value=fltGrace();
+  document.getElementById('inpGrace').onchange=function(){
+    const v=Math.min(180,Math.max(1,Math.round(+this.value)||FLT_GRACE_DEF));
+    this.value=v;store.set('hnav.fltGrace',v);
+  };
+  /* 前回の飛行の続き。猶予の内なら**そのまま続け**、過ぎていれば飛行記録に自動保存する */
+  const fs=store.get('hnav.flt');
+  if(fs&&Date.now()-fltLastMs(fs)<=fltGrace()*60000){
+    flt={firstOff:new Date(fs.firstOff),legOff:fs.legOff?new Date(fs.legOff):null,
+         accMs:fs.accMs||0,legs:fs.legs||[],trk:fs.trk||[]};
+    trkLast=null;trackShow(flt.trk,{route:fs.route,wp:fs.wp});
+    if(flt.legOff){
+      clearInterval(timerId);timerId=setInterval(tickTimer,1000);
+      if(gpsWatch===null)document.getElementById('btnGPS').click();   // 記録を続けるためGPSを戻す
+      toast(`飛行を続けています(T/O ${hm(flt.firstOff)})。L/Dを押すか、`+
+            `最後に動いてから${fltGrace()}分で自動保存します。`);
+    }
+    setFltButtons();tickTimer();renderLogs();
+  }else if(fs){
+    fltCheckStale();
+  }else{
+    const ft=store.get('hnav.fltTrk');                               // 旧形式の未保存の軌跡
+    if(ft&&Array.isArray(ft.trk)&&ft.trk.length)trackShow(ft.trk,{route:'',wp:[]});
+  }
+  drawLogTrks();                                                     // 👁で出していた記録の軌跡
   const sv=store.get('hnav.route');
   if(sv&&Array.isArray(sv.wp)&&sv.wp.length){
     try{loadRouteObj(sv,true);return}catch(e){}
@@ -6659,6 +6759,7 @@ function fixLogHead(){
   redraw();
 })();
 </script>
+<div id="toast"></div>
 <div id="updBar">
   <span>新しいバージョン <b id="updVer">—</b> があります</span>
   <button id="updGo">更新</button><button class="x" id="updNo">あとで</button>
