@@ -23,7 +23,9 @@
      取れなかったことを「異常なし」と読まないこと。
 
    POST /api/notam  本文 {"ids":"RJTT,RJAA,...","k":"合言葉"}
-     → { updated, src:'autorouter'|'faa', n:{ICAO:[{no,txt,from,to,iss,cls,type,q}]}, err:{ICAO:"理由"} }
+     → { updated, src:'autorouter'|'faa', n:{ICAO:[{no,txt,from,to,iss,cls,type,q,lat,lon,rad}]}, err:{ICAO:"理由"} }
+   ⚠ lat/lon/rad(NM) は**あるときだけ**。EADのNOTAMは大半が飛行場そのものへの通知で座標を持たない。
+     アプリは座標があれば円、無ければ飛行場にピンを出す。
 */
 import { check, preflight, json, makeLimiter } from '../lib/guard.js';
 
@@ -66,8 +68,11 @@ function arRow(x) {
   if (!txt) return null;
   const no = `${x.series || ''}${String(x.number || '').padStart(4, '0')}/${String(x.year || '').slice(-2)}`;
   const end = Number(x.endvalidity) || 0;
+  const lat = Number(x.lat), lon = Number(x.lon), rad = Number(x.radius);
   return {
     no, icao: x.itema || '', txt,
+    ...(Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon) ? { lat, lon } : {}),
+    ...(Number.isFinite(rad) && rad > 0 ? { rad } : {}),
     iss: '',                                        // autorouter は発行時刻を返さない
     from: x.startvalidity ? iso(x.startvalidity) : '',
     to: !end || end > PERM_AFTER ? 'PERM' : iso(end),
@@ -112,8 +117,12 @@ function faaRow(it) {
   const tr = (core.notamTranslation || []).find(x => x && (x.simpleText || x.formattedText)) || {};
   const txt = (n.text || tr.simpleText || tr.formattedText || '').trim();
   if (!txt) return null;
+  // GeoJSON の Point だけ拾う(Polygon は中心が出せないので地図には出さない)
+  const g = p.geometry || {};
+  const c = g.type === 'Point' && Array.isArray(g.coordinates) ? g.coordinates : null;
   return {
     no: n.number || n.id || '', icao: n.icaoLocation || n.location || '', txt,
+    ...(c && Number.isFinite(+c[1]) && Number.isFinite(+c[0]) ? { lat: +c[1], lon: +c[0] } : {}),
     iss: n.issued || '', from: n.effectiveStart || '', to: n.effectiveEnd || '',
     cls: n.classification || '', type: n.type || '', q: n.selectionCode || '',
   };

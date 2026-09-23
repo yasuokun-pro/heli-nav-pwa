@@ -493,6 +493,10 @@
   .tabs button.active{color:var(--grn);border-bottom-color:var(--grn)}
   .tabbody{overflow:auto;padding:12px 16px;flex:1}
   .hint{color:var(--dim);font-size:12px;margin-bottom:8px}
+  .ntmPin{display:flex;align-items:center;justify-content:center;gap:1px;width:30px;height:30px;border-radius:50%;
+    background:rgba(20,24,32,.88);border:2px solid #ff9500;color:#ff9500;font:700 11px/1 var(--mono)}
+  .ntmPin.zero{border-color:var(--dim);color:var(--dim)}
+  .ntmPin b{font-size:12px}
   .ntmAd{border:1px solid var(--line);border-radius:6px;margin-bottom:8px;overflow:hidden}
   .ntmHd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel2);cursor:pointer}
   .ntmHd small{margin-left:auto;color:var(--dim);font-size:11px}
@@ -689,10 +693,11 @@
       </div>
     </div>
     <div class="mtGrp" data-grp="wx">
-      <button class="mtHead">気象<i>▾</i></button>
+      <button class="mtHead">情報<i>▾</i></button>
       <div class="mtSub">
-        <button id="btnRain">雨雲</button>
         <button id="btnTfc2">他機</button>
+        <button id="btnRain">雨雲</button>
+        <button id="btnNtmMap" title="ルート上の飛行場のNOTAM(中継経由)。座標のあるものは円、無いものは飛行場に件数のピン。⚠ 公式ブリーフィングの代わりにはならない">NOTAM</button>
       </div>
     </div>
     <button id="btnGPS">GPS</button>
@@ -719,7 +724,8 @@
     <button class="active" data-tab="wp">飛行ログ</button>
     <button data-tab="log">飛行記録</button>
     <button data-tab="tfc">他機情報</button>
-    <button data-tab="met">情報</button>
+    <button data-tab="met">METAR</button>
+    <button data-tab="ntm">NOTAM</button>
     <button id="btnIfr" class="ifrTab" title="IFR計画(別画面)">IFR</button>
   </div>
 
@@ -849,28 +855,24 @@
   </div>
 
   <div class="tabbody" id="tab-met" style="display:none">
-    <div class="btnrow" id="infoSw">
-      <button class="btn on" data-info="wx">気象</button>
-      <button class="btn" data-info="ntm">NOTAM</button>
+    <div class="btnrow">
+      <button class="btn" id="btnMetR">↻ 更新</button>
+      <span id="metStatus" class="hint" style="align-self:center"></span>
     </div>
-    <div id="infoWx">
-      <div class="btnrow">
-        <button class="btn" id="btnMetR">↻ 更新</button>
-        <span id="metStatus" class="hint" style="align-self:center"></span>
-      </div>
-      <table><thead><tr><th>飛行場</th><th>区分</th><th colspan="3">METAR原文</th><th>距離</th></tr></thead>
-      <tbody id="metBody"></tbody></table>
+    <table><thead><tr><th>飛行場</th><th>区分</th><th colspan="3">METAR原文</th><th>距離</th></tr></thead>
+    <tbody id="metBody"></tbody></table>
+  </div>
+
+  <div class="tabbody" id="tab-ntm" style="display:none">
+    <div class="btnrow">
+      <button class="btn" id="btnNtmR">↻ 取得</button>
+      <button class="btn" id="btnNtmMap2" title="地図にも出す">地図に表示</button>
+      <span id="ntmStatus" class="hint" style="align-self:center"></span>
     </div>
-    <div id="infoNtm" style="display:none">
-      <div class="btnrow">
-        <button class="btn" id="btnNtmR">↻ 取得</button>
-        <span id="ntmStatus" class="hint" style="align-self:center"></span>
-      </div>
-      <div class="hint">ルート上の飛行場のNOTAM(中継経由)。
-        ⚠ <b>公式ブリーフィングの代わりにはなりません</b>。国内の正式な情報源はAIS Japan・部隊のブリーフィングです。
-        自衛隊飛行場や国内限定の通知は流れてこないことがあり、<b>出ない＝異常なしではありません</b>。</div>
-      <div id="ntmBody"></div>
-    </div>
+    <div class="hint">ルート上の飛行場のNOTAM(中継経由)。
+      ⚠ <b>公式ブリーフィングの代わりにはなりません</b>。国内の正式な情報源はAIS Japan・部隊のブリーフィングです。
+      自衛隊飛行場や国内限定の通知は流れてこないことがあり、<b>出ない＝異常なしではありません</b>。</div>
+    <div id="ntmBody"></div>
   </div>
 </div>
 
@@ -961,8 +963,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-185';
-const BUILD='2026-09-21';
+const VER_TAG='v6-186';
+const BUILD='2026-09-23';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -3556,7 +3558,7 @@ async function loadNotam(force){
   const st=document.getElementById('ntmStatus');
   const ids=ntmPickIcaos();
   if(!ids.length){ntmErr='ルートも現在地も無いので飛行場を決められません';renderNotam();return}
-  if(NTM&&!force&&Date.now()-ntmFetched<600000&&ids.join()===ntmIds.join()){renderNotam();return}
+  if(NTM&&!force&&Date.now()-ntmFetched<600000&&ids.join()===ntmIds.join()){renderNotam();drawNtmMap();return}
   if(!relayBase()){ntmErr='中継が未設定です(他機情報タブの中継設定)';renderNotam();return}
   if(st)st.textContent='取得中…';
   ntmErr='';
@@ -3569,6 +3571,7 @@ async function loadNotam(force){
           :'取れませんでした '+m;
   }
   renderNotam();
+  drawNtmMap();
 }
 function renderNotam(){
   const b=document.getElementById('ntmBody'),st=document.getElementById('ntmStatus');
@@ -3602,15 +3605,54 @@ function renderNotam(){
     const ic=h.dataset.ic;ntmOpen[ic]=ntmOpen[ic]===false;renderNotam()});
 }
 document.getElementById('btnNtmR').onclick=()=>loadNotam(true);
-document.querySelectorAll('#infoSw button[data-info]').forEach(btn=>{
-  btn.onclick=()=>{
-    document.querySelectorAll('#infoSw button[data-info]').forEach(b2=>b2.classList.toggle('on',b2===btn));
-    const wx=btn.dataset.info==='wx';
-    document.getElementById('infoWx').style.display=wx?'':'none';
-    document.getElementById('infoNtm').style.display=wx?'none':'';
-    if(!wx)renderNotam();
-  };
-});
+
+/* ───────── 地図のNOTAM(情報グループ) ─────────
+   座標(lat/lon)を持つものは円(半径は Q行の値・無ければ2NM)、持たないものは飛行場に件数のピン。
+   ⚠ EADのNOTAMは**大半が座標を持たない**(飛行場そのものに対する通知)。円が無い=範囲が無いという意味ではない。 */
+let ntmLayer=null,ntmMapOn=false;
+function toggleNtmMap(){
+  ntmMapOn=!ntmMapOn;
+  document.getElementById('btnNtmMap').classList.toggle('on',ntmMapOn);
+  if(!ntmMapOn){if(ntmLayer){map.removeLayer(ntmLayer);ntmLayer=null}return}
+  if(!NTM)loadNotam(false).then(drawNtmMap); else drawNtmMap();
+}
+function ntmPopHtml(x){
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return `<div class="apPop"><h5>${esc(x.no)} ${esc(x.icao)}</h5>`+
+    `<div style="font-size:11px;color:var(--dim)">${ntmTime(x.from)} 〜 ${ntmTime(x.to)} JST</div>`+
+    `<div style="font-family:var(--mono);font-size:11px;white-space:pre-wrap;margin-top:3px">${esc(x.txt)}</div></div>`;
+}
+function drawNtmMap(){
+  if(!ntmMapOn)return;
+  if(ntmLayer)map.removeLayer(ntmLayer);
+  ntmLayer=L.layerGroup().addTo(map);
+  if(!NTM)return;
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  ntmIds.forEach(ic=>{
+    const list=(NTM.n&&NTM.n[ic])||[];
+    const noGeo=[];
+    list.forEach(x=>{
+      if(!isFinite(x.lat)||!isFinite(x.lon)||(!x.lat&&!x.lon)){noGeo.push(x);return}
+      const r=(+x.rad>0?+x.rad:2)*1852;
+      L.circle([x.lat,x.lon],{radius:r,color:'#ff9500',weight:1.5,dashArray:'5,4',fillOpacity:.06})
+        .bindPopup(ntmPopHtml(x)).addTo(ntmLayer);
+    });
+    const a=ASP.find(z=>z.icao===ic);
+    if(!a)return;
+    const n=list.length;
+    L.marker([a.lat,a.lng],{icon:L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,15],
+      html:`<div class="ntmPin${n?'':' zero'}">N${n?'<b>'+n+'</b>':''}</div>`})})
+      .bindPopup(`<div class="apPop"><h5>${ic} ${esc(a.n)}</h5>`+
+        (n?list.map(x=>`<div style="margin:3px 0"><span style="color:var(--dim);font-family:var(--mono);font-size:10px">`+
+             `${esc(x.no)} ${ntmTime(x.from)}〜${ntmTime(x.to)}</span><br>`+
+             `<span style="font-family:var(--mono);font-size:11px">${esc(x.txt)}</span></div>`).join('')
+           :'<div style="color:var(--dim)">有効なNOTAMはありません(この配信で見える範囲では)</div>')+
+        `</div>`,{maxHeight:260})
+      .addTo(ntmLayer);
+  });
+}
+document.getElementById('btnNtmMap').onclick=toggleNtmMap;
+document.getElementById('btnNtmMap2').onclick=()=>{if(!ntmMapOn)toggleNtmMap();setScreen('main')};
 
 /* AIPのAD2/AD3から起こした飛行場マスタ(tools/gen_ad.py)を ASP に合流させる。
    従来のASPは「管制圏・情報圏を持つ飛行場」だけだったので、圏の無い飛行場
@@ -5664,8 +5706,9 @@ document.querySelectorAll('.tabs button[data-tab]').forEach(btn=>{   // ⚠ IFR 
   btn.onclick=()=>{
     document.querySelectorAll('.tabs button[data-tab]').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
-    ['wp','log','tfc','met'].forEach(t=>document.getElementById('tab-'+t).style.display=(t===btn.dataset.tab)?'':'none');
+    ['wp','log','tfc','met','ntm'].forEach(t=>document.getElementById('tab-'+t).style.display=(t===btn.dataset.tab)?'':'none');
     if(btn.dataset.tab==='met')loadMetar();
+    if(btn.dataset.tab==='ntm')renderNotam();
   };
 });
 
