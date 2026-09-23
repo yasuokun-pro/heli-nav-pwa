@@ -178,6 +178,14 @@
     padding:4px 7px;font-family:var(--mono);font-size:10.5px;color:var(--dim);
     line-height:1.4;text-align:right;white-space:nowrap;pointer-events:none}
   #zmScale b{color:var(--cyn);font-weight:600;font-size:11.5px}
+  /* 北を指す矢印。回転しているときだけ出す(ノースアップなら要らない) */
+  #btnNorth{position:absolute;z-index:900;right:54px;bottom:140px;display:none;
+    width:38px;height:38px;border-radius:50%;background:rgba(20,24,32,.86);border:1px solid var(--line);
+    color:var(--txt);cursor:pointer;padding:0;align-items:center;justify-content:center}
+  body.rot #btnNorth{display:flex}
+  body.alerting #btnNorth{bottom:260px}
+  #btnNorth svg{display:block;overflow:visible}
+  body.hideR #btnNorth,body.hideAll #btnNorth{display:none}
   /* ⚠ 目盛りの上で地図をドラッグできなくならないよう、**押せる行だけ**通す */
   #zmScale .tap{cursor:pointer;display:block;pointer-events:auto}
   #zmScale .tap:active{opacity:.6}
@@ -630,6 +638,11 @@
 下=eye alt: Google Earthと同じ「カメラの高さ」の考え方で、
 画面の縦がちょうど画角に収まる高度。画角は垂直60°で計算している。
 ⚠ 水平線までの距離(1.17×√h)とは別物"></div>
+  <button id="btnNorth" title="地図の向き(赤い針が北)。タップでノースアップに戻す"><svg viewBox="0 0 36 36" width="34" height="34">
+    <g><polygon points="18,9 22.5,21.5 18,19 13.5,21.5" fill="#ff5a5a"/>
+       <polygon points="18,29 13.5,21.5 18,24 22.5,21.5" fill="#7c8798"/>
+       <text x="18" y="7.6" text-anchor="middle" font-size="7.5" font-weight="700" fill="currentColor"
+             font-family="var(--mono)">N</text></g></svg></button>
   <div id="zmBtns">
     <button id="btnZmNext" title="自機と次ポイントを表示">NXT PT</button>
     <button id="btnZmAll" title="ルート全体を表示">ALL</button>
@@ -675,6 +688,7 @@
         <button id="btnRing" title="自機(GPS OFFなら画面の中心)から 3/5/10NM の距離環">距離環</button>
         <button id="btnLos" title="見通し円。その高度から水平線まで(1.17×√h NM)の円を、自機(GPS中は実高度・OFFなら画面の中心に設定高度)に描く。幾何学的な水平線で地形は見ていない">見通し</button>
         <button id="btnShade" title="地形の遮蔽。国土地理院の標高タイルを読んで、見えない範囲を暗く塗る。⚠ 建物・樹木は入っていない">遮蔽</button>
+        <button id="btnTrkUp" title="進行方向を上にする(トラックアップ)。T/Oで自動的にON、FLT終了でノースアップに戻る。GPSの対地トラックを使い、止まっているときは次ポイントへの針路を使う">TRK UP</button>
       </div>
     </div>
     <div class="mtGrp" data-grp="feat">
@@ -963,7 +977,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-186';
+const VER_TAG='v6-187';
 const BUILD='2026-09-23';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -1113,7 +1127,7 @@ function windTri(tc){
 function fmtWca(w){const r=Math.round(w);return(r>=0?'+':'−')+Math.abs(r)}
 
 /* ───────── 実測GS ───────── */
-let liveMode=false,ownSpdKt=null;
+let liveMode=false,ownSpdKt=null,ownHdg=null;
 function liveGsActive(){return liveMode&&ownSpdKt!==null&&ownSpdKt>2}
 function effGs(planGs){return liveGsActive()?ownSpdKt:planGs}
 document.getElementById('btnLive').onclick=function(){
@@ -3763,12 +3777,55 @@ document.getElementById('btnRain').onclick=async function(){
 
 /* ───────── GPS / 追尾(自機中心+進行方向上) ───────── */
 let ownPos=null,ownMarker=null,gpsWatch=null,follow=false,ownAltFt=null;
+/* トラックアップ(進行方向を上にする)。leaflet-rotate の setBearing で地図ごと回す。
+   ⚠ 向きの元は3段構え: ①GPSの対地トラック(3kt以上で動いているとき) ②自機→次ポイントの真方位
+     ③直前のレグの真方位。**止まっている間はGPSのheadingがnullになる**ので②③が要る。
+   ⚠ 回すと北が画面の上でなくなる。北を指す矢印(#btnNorth)を必ず出すこと(タップでノースアップ)。 */
+let trackUp=false,trkUpDeg=null;
+function trackUpHdg(){
+  if(ownSpdKt!==null&&ownSpdKt>3&&ownHdg!==null&&!isNaN(ownHdg))return ownHdg;   // ①実際に動いている
+  if(wps.length){
+    const i=Math.min(nextIdx,wps.length-1),w=wps[i];
+    const from=ownPos||(i>0?wps[i-1]:null);
+    if(from&&distNM(from,w)>0.05)return trueBrg(from,w);                          // ②自機(or直前の点)→次ポイント
+    if(i+1<wps.length)return trueBrg(w,wps[i+1]);                                 // ③先頭に居るときは次のレグ
+    if(i>0)return trueBrg(wps[i-1],w);                                            // ④最後の点なら直前のレグ
+  }
+  return trkUpDeg;                                                                // 直前の向きを保つ
+}
+function syncNorth(){
+  const b=map.getBearing?map.getBearing():0;
+  document.body.classList.toggle('rot',Math.abs(b)>0.5);
+  const g=document.querySelector('#btnNorth svg g');
+  if(g)g.setAttribute('transform',`rotate(${b.toFixed(1)} 18 18)`);   // 赤い針が北を指す
+}
+function applyTrackUp(force){
+  if(!map.setBearing)return;
+  if(!trackUp){
+    if(map.getBearing&&map.getBearing()!==0)map.setBearing(0);
+    trkUpDeg=null;syncNorth();return;
+  }
+  const h=trackUpHdg();
+  if(h===null||isNaN(h))return;
+  // 1〜2°の揺れで回し続けると読めないので、3°以上変わったときだけ回す
+  if(!force&&trkUpDeg!==null&&Math.abs(((h-trkUpDeg+540)%360)-180)<3)return;
+  trkUpDeg=h;map.setBearing(-h);syncNorth();
+}
+function setTrackUp(on){
+  trackUp=on;
+  document.getElementById('btnTrkUp').classList.toggle('on',on);
+  applyTrackUp(true);
+}
 function setFollow(on){
   follow=on;
   document.getElementById('btnFollow').classList.toggle('on',on);
-  if(!on&&map.setBearing)map.setBearing(0); // 追尾解除でノースアップに戻す
+  if(!on&&!trackUp&&map.setBearing)map.setBearing(0); // 追尾解除でノースアップ(トラックアップ中は回したまま)
   if(on&&ownPos)map.setView(ownPos,Math.max(map.getZoom(),11),{animate:false});
+  syncNorth();
 }
+document.getElementById('btnTrkUp').onclick=()=>setTrackUp(!trackUp);
+document.getElementById('btnNorth').onclick=()=>setTrackUp(false);
+map.on('rotate',syncNorth);
 document.getElementById('btnFollow').onclick=()=>{
   if(!ownPos){alert('先に ◎GPS をONにしてください(追尾はGPS連動時のみ)。');return}
   setFollow(!follow);
@@ -3776,7 +3833,7 @@ document.getElementById('btnFollow').onclick=()=>{
 map.on('dragstart',()=>{if(follow)setFollow(false)}); // 手でパンしたら追尾解除
 document.getElementById('btnGPS').onclick=function(){
   if(gpsWatch!==null){navigator.geolocation.clearWatch(gpsWatch);gpsWatch=null;
-    ownPos=null;ownSpdKt=null;ownAltFt=null;setFollow(false);
+    ownPos=null;ownSpdKt=null;ownAltFt=null;ownHdg=null;setFollow(false);
     if(ownMarker){map.removeLayer(ownMarker);ownMarker=null}
     if(ringOn)drawRing(); if(losOn)drawLos();
     this.classList.remove('on');renderLiveGs();redraw();return}
@@ -3786,15 +3843,12 @@ document.getElementById('btnGPS').onclick=function(){
     ownPos={lat:p.coords.latitude,lng:p.coords.longitude};
     ownSpdKt=(p.coords.speed!==null&&!isNaN(p.coords.speed))?p.coords.speed*1.9438:null;
     ownAltFt=(p.coords.altitude!==null&&!isNaN(p.coords.altitude))?p.coords.altitude*3.281:null;
+    ownHdg=(p.coords.heading!==null&&!isNaN(p.coords.heading))?p.coords.heading:null;   // 対地トラック(°)
     if(!ownMarker){ownMarker=L.marker(ownPos,{icon:L.divIcon({className:'',html:'<div class="own-ico"></div>',iconAnchor:[9,9]})}).addTo(map)}
     else ownMarker.setLatLng(ownPos);
     if(firstFix){firstFix=false;setFollow(true)} // GPS開始時は自動で追尾ON
-    if(follow){
-      map.setView(ownPos,map.getZoom(),{animate:false});
-      const hdg=p.coords.heading; // 対地トラック(°)
-      if(map.setBearing&&hdg!==null&&!isNaN(hdg)&&ownSpdKt!==null&&ownSpdKt>5)
-        map.setBearing(-hdg); // トラックアップ
-    }
+    if(follow)map.setView(ownPos,map.getZoom(),{animate:false});
+    applyTrackUp();                    // 追尾していなくても向きは合わせる
     updateNext();
     if(applyAutoVar())redraw();   // 移動で偏差が変わったら再計算
     trackRecord(); // 飛行中ならGPS軌跡を記録
@@ -5237,6 +5291,7 @@ function updateNext(){
   }
   const tc=trueBrg(from,w),d=distNM(from,w);
   if(ownPos&&d<0.4&&nextIdx<wps.length-1){nextIdx++;updateNext();return} // 0.4nm以内で自動送り
+  if(trackUp)applyTrackUp();          // 次ポイントが変わったら向きも合わせ直す
   document.getElementById('nxBrg').textContent=fmt3(magOf(tc))+'°';
   document.getElementById('nxDist').innerHTML=d.toFixed(1)+' <small>NM</small>';
   const tri=windTri(tc),g=(tri&&!tri.bad)?effGs(tri.gs):null;
@@ -5319,6 +5374,7 @@ document.getElementById('btnTO').onclick=function(){
   if(!flt){flt={firstOff:now,legOff:now,accMs:0,legs:[],trk:[]};trkLast=null;trackShow([])}
   else{flt.legOff=now;trkLast=null} // 再出発(一時着陸中の移動は記録しない)
   if(gpsWatch===null)document.getElementById('btnGPS').click(); // 軌跡記録のためGPSを自動ON
+  setTrackUp(true);                    // 離陸したら進行方向を上にする
   clearInterval(timerId);timerId=setInterval(tickTimer,1000);
   setFltButtons();renderLogs();
 };
@@ -5341,6 +5397,7 @@ document.getElementById('btnLDG').onclick=function(){
       trk:flt.trk||[]});                 // GPS軌跡を記録に保存
     store.del('hnav.fltTrk');            // 進行中トラックの退避を破棄
     flt=null;clearInterval(timerId);trkLast=null;
+    setTrackUp(false);                   // FLT終了でノースアップに戻す(一時着陸では戻さない)
     document.getElementById('dTimer').textContent='00:00:00';
     setFltButtons();renderLogs();saveLogs();
   }
