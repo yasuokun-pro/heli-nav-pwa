@@ -1,0 +1,58 @@
+name: AIRAC release
+# 発効前に用意した AIRAC ブランチ(airac-YYYYMMDD)を、発効日 00:00 UTC(= 09:00 JST)以降に main へ取り込み、
+# 版(sw.js の VER / index.html の VER_TAG・BUILD)を上げて公開する。
+# ⚠ 定期実行は GitHub の混雑で間引かれる(metar.yml は1日7〜8回しか動いていなかった)。
+#   なので発効日の 00:00〜02:50 UTC に10分おきに何度も試し、**最初に動いた回だけ**取り込む(2回目以降は何もしない)。
+# ⚠ ブランチを用意したあとに main を直したら、**そのブランチにも main を取り込んでおく**(衝突すると失敗してメールが来る)。
+# 手動: Actions → AIRAC release → Run workflow(branch に airac-YYYYMMDD)。発効前に押しても何もしない
+on:
+  schedule:
+    - cron: '*/10 0-2 1 10 *'     # 2026-10-01 分。次の版を用意するときはここと既定のブランチ名を直す
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '取り込む AIRAC ブランチ(airac-YYYYMMDD)'
+        required: false
+        default: 'airac-20261001'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: airac-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Merge the AIRAC branch once it is effective
+        env:
+          BR: ${{ inputs.branch || 'airac-20261001' }}
+        run: |
+          set -e
+          EFF="${BR#airac-}"
+          case "$EFF" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;; *) echo "ブランチ名が airac-YYYYMMDD でない: $BR"; exit 1;; esac
+          NOW=$(date -u +%Y%m%d%H%M)
+          if [ "$NOW" -lt "${EFF}0000" ]; then echo "まだ発効前 (now ${NOW}Z < ${EFF}0000Z)。何もしない"; exit 0; fi
+          if ! git fetch -q origin "$BR"; then echo "ブランチ $BR が無い(取り込み後に消した?)。何もしない"; exit 0; fi
+          if git merge-base --is-ancestor "origin/$BR" HEAD; then echo "取り込み済み。何もしない"; exit 0; fi
+          git config user.name 'airac-bot'
+          git config user.email 'actions@github.com'
+          git merge --no-ff "origin/$BR" -m "AIRAC ${EFF} を公開 [${BR}]"
+          N=$(grep -o "hnav-v6-[0-9]*" sw.js | head -1 | sed 's/hnav-v6-//'); N=$((N+1))
+          D="${EFF:0:4}-${EFF:4:2}-${EFF:6:2}"
+          sed -i "s/const VER = 'hnav-v6-[0-9]*';/const VER = 'hnav-v6-$N';/" sw.js
+          sed -i "s/const VER_TAG='v6-[0-9]*';/const VER_TAG='v6-$N';/; s/const BUILD='[0-9-]*';/const BUILD='$D';/" index.html
+          grep -q "hnav-v6-$N" sw.js && grep -q "VER_TAG='v6-$N'" index.html
+          git commit -qam "AIRAC ${EFF}: 版を v6-$N に上げる"
+          # metar.yml が同時に push していることがあるので、取り込み直して3回まで試す
+          for i in 1 2 3; do
+            if git push -q origin HEAD:main; then echo "公開: v6-$N (AIRAC ${EFF})"; exit 0; fi
+            git fetch -q origin main && git merge -q --no-edit origin/main
+          done
+          echo "push に失敗"; exit 1
