@@ -20,7 +20,7 @@ AIRAC更新時: 新しいAD2 PDFで座標・定義に変更がないか確認し
 変わった箇所だけ下のSPECを直して再実行する。
 依存: pip install shapely
 """
-import json, math, re, sys, os
+import glob, json, math, re, sys, os
 from shapely.geometry import Point, Polygon, LineString
 from shapely.ops import unary_union
 
@@ -649,7 +649,11 @@ def gen_kobe_ctr():
 def main():
     gen_ctrs(); gen_tokyo_pca(); gen_narita_pca(); gen_natl()
     gen_pca_natl(); gen_kobe_ctr()
-    js = ('/* 自動生成: tools/gen_asp.py — AIP Japan AIRAC 2026-07-09\n'
+    # 版は aip/ の最新の日付フォルダ(natl_ctr.json も同じ版から作る)
+    _d = sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip', '1_AIP (PDF)', '2*')))
+    _eff = os.path.basename(_d[-1]) if _d else '?'
+    _eff = f'{_eff[:4]}-{_eff[4:6]}-{_eff[6:]}' if len(_eff) == 8 else _eff
+    js = (f'/* 自動生成: tools/gen_asp.py — AIP Japan AIRAC {_eff}\n'
           '   出典: AD2各飛行場 AD 2.17 / RJTT・RJAA 特別管制区チャート */\n'
           'const ASP_POLY=' + json.dumps(OUT, ensure_ascii=False, separators=(',', ':')) + ';')
     here = os.path.dirname(os.path.abspath(__file__))

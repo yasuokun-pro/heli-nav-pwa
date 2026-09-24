@@ -146,11 +146,17 @@ def parse(pdf, sec):
     sec12 = re.search(r'AD %s\.12 RUNWAY PHYSICAL CHARACTERISTICS(.*?)(?:AD %s\.13|$)'
                       % (sec, sec), t, re.S)
     if sec12:
-        rw = re.findall(r'^\s{2,}(\d{2}[LRC]?|H\d?)\s+\d{3}\.\d+°\s+([\d,]+\s*[×xX]\s*[\d,]+)',
+        # ⚠ 真方位は2桁のこともある(八尾09 = 86.65°)。未公示だと "to be issued later"(20260903 まで八尾)
+        rw = re.findall(r'^\s{2,}(\d{2}[LRC]?|H\d?)\s+(?:\d{1,3}\.\d+°|to\s+be)\S*\s+([\d,]+\s*[×xX]\s*[\d,]+)',
                         sec12.group(1), re.M)
         if rw:
-            dim = rw[0][1].replace(' ', '')
-            r['rwy'] = '/'.join(x[0] for x in rw) + ' ' + dim
+            # 両端の番号を2つずつ組にし、滑走路ごとに寸法を付ける(「16L/34R 3000×60・16R/34L 3360×60」)
+            # ⚠ 以前は全部の番号をつないで**最初の1本の寸法だけ**出していた
+            parts = []
+            for i in range(0, len(rw), 2):
+                pr = rw[i:i+2]
+                parts.append('/'.join(x[0] for x in pr) + ' ' + re.sub(r'\s*[xX×]\s*', '×', pr[0][1]))
+            r['rwy'] = '・'.join(parts)
     return r
 
 

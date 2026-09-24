@@ -336,7 +336,17 @@ CLAUDE.mdから分離した「進行中・未着手タスク」。着手する�
 ## AIRAC更新(28日ごと・半自動運用)
 
 - ユーザー: SWIMポータル(https://top.swim.mlit.go.jp/swim/ 要ログイン)から
-  AIP一式をダウンロード → `~/Downloads/1_AIP (PDF)/<日付>/` に置く
+  AIP一式をダウンロード → リポジトリ直下の `aip/1_AIP (PDF)/<日付>/` に置く(.gitignore 済み)
+- 発効前に用意したものは**ブランチ `airac-YYYYMMDD` に置き、`.github/workflows/airac-release.yml` が
+  発効日 00:00 UTC(09:00 JST)以降に main へ取り込んで版を上げる**(2026-10-01 分から)
+
+### ★未了: 福岡ACA(大分ACAの統合)を 2026-10-01 版の図で起こし直す
+- AIRAC AMDT NR11/2026「Revision of integration for OITA ACA」。大分ACA(RJFO)が廃止され**福岡ACAに統合**、
+  福岡ACAの図(RJFF AD 2.17 添付図・p.23)は点番号が振り直されて **55点→69点**。
+- `gen_aca.py` の SPEC['RJFF/ACA'] が合わなくなり検算落ち(副区画合計が外形の141%)→ aca.json の `pending` に入り、
+  アプリの一覧に「福岡(改正未反映)」と押せないボタンで出している。**旧い形は出していない**(改正後と違うため)。
+- 作業: `gen_aca.py --annot RJFF 23` で点を打った画像を出し、区画(高度帯)ごとのリングを書き直して検算0.01%以内。
+  福岡TCA(p.24)は周波数の注記(121.275MHz の脚注番号)が変わっただけで形は同じと判断(本文比較)
 - Claude: 関東各飛行場のAD 2.17とRJTT/RJAA特別管制区チャートの差分を確認し、
   変更があれば tools/gen_asp.py のSPECを修正して `--splice` 再実行、
   sw.jsのVERを上げてコミット
