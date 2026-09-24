@@ -499,6 +499,45 @@
   .libRow button.del2{border-color:var(--red);color:var(--red)}
   .libEmpty{color:var(--dim);font-size:12px;padding:6px 2px}
 
+  /* EMER(v6-192)。⚠ ボタン表示切替(👁)で他を隠していても EMER だけは必ず出す */
+  .zbtn.emer{top:calc(var(--ovlH) + 252px);width:auto;padding:0 7px;background:#5a1010;border-color:var(--red);
+    color:#fff;font:700 12px/1 var(--mono);letter-spacing:.05em}
+  .zbtn.emer.on{background:var(--red)}
+  body.hideAll #btnEmer,body.hideR #btnEmer{display:block}
+  #emerCard,#emerRtePanel{position:absolute;z-index:975;left:56px;right:12px;top:calc(var(--ovlH) + 8px);max-width:480px;
+    background:rgba(24,8,8,.96);border:2px solid var(--red);border-radius:10px;padding:8px 10px;display:none;
+    box-shadow:0 6px 22px rgba(0,0,0,.6);max-height:calc(100% - var(--ovlH) - 24px);overflow-y:auto}
+  #emerRtePanel{border-color:var(--amb);background:rgba(20,16,6,.96)}
+  #emrHd{cursor:pointer}#emerRtePanel.min .emrTh,#emerRtePanel.min #emrBody{display:none}
+  #emerRtePanel.min .emHd{margin-bottom:0}#emerRtePanel.min .emrFold{display:inline-block;transform:rotate(-90deg)}
+  #emerCard .emHd,#emerRtePanel .emHd{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  #emerCard .emHd b{color:#ff6b6b;font:700 13px var(--mono);letter-spacing:.1em}
+  #emerRtePanel .emHd b{color:var(--amb);font:700 13px var(--mono)}
+  .emHd span{flex:1;font-size:10px;color:var(--dim)}
+  .emHd button{background:none;border:1px solid var(--line);color:var(--txt);border-radius:5px;padding:4px 10px;font-size:12px;cursor:pointer}
+  .emRow{display:grid;grid-template-columns:78px 1fr auto 44px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid rgba(255,255,255,.08)}
+  .emRow .emK{font-size:11px;font-weight:700;color:var(--c)}
+  .emRow .emK small{display:block;font-weight:400;color:var(--dim);font-size:9.5px}
+  .emRow .emN{font-size:13px;color:var(--txt);line-height:1.3;word-break:break-all}
+  .emRow .emN small{display:block;color:var(--dim);font-size:10px}
+  .emRow .emV{text-align:right;font-family:var(--mono);line-height:1.15}
+  .emRow .emV b{display:block;font-size:20px;color:var(--c)}
+  .emRow .emV span{font-size:11px;color:var(--txt)}
+  .emRow button{height:36px;border-radius:6px;border:1px solid var(--c);background:none;color:var(--c);font:700 12px var(--mono);cursor:pointer}
+  .emRow.none .emN{color:var(--dim)}
+  #emAsp{border-top:1px solid rgba(255,255,255,.12);margin-top:4px;padding-top:6px;font-size:11.5px;line-height:1.55}
+  #emAsp b{font-family:var(--mono);color:var(--grn)}
+  #emAsp .edge{color:var(--amb)}
+  .emNote{font-size:10px;color:var(--dim);margin-top:6px}
+  .leaflet-tooltip.emTip{background:rgba(24,8,8,.92);color:#fff;border:1px solid var(--red);font-size:11px;padding:2px 6px}
+  #emSetBox{border-top:1px solid rgba(255,255,255,.12);margin-top:6px;padding-top:6px;font-size:12px}
+  #emSetBox label{display:flex;gap:6px;align-items:center;padding:3px 0}
+  .emrTh{font-size:11px;color:var(--dim);margin-bottom:6px}
+  .emrTh input{width:48px}
+  #emrBody table{width:100%;border-collapse:collapse;font-size:11.5px}
+  #emrBody td,#emrBody th{padding:4px 5px;border-top:1px solid rgba(255,255,255,.08);text-align:left;vertical-align:top}
+  #emrBody th{color:var(--dim);font-weight:400;font-size:10px}
+  #emrBody .r{color:#ff6b6b}#emrBody .a{color:var(--amb)}#emrBody .g{color:var(--grn)}
   #dctCard{position:absolute;z-index:950;left:12px;bottom:12px;background:rgba(13,26,41,.94);
     border:1px solid var(--cyn);border-radius:8px;padding:10px 14px;display:none;min-width:250px;
     box-shadow:0 4px 18px rgba(0,0,0,.5)}
@@ -625,6 +664,7 @@
   <button id="btnSearch" class="zbtn" title="地名検索">🔍</button>
   <button id="btnUndo" class="zbtn" title="操作を一つ戻す">↩</button>
   <button id="btnUiHide" class="zbtn" title="ボタン表示切替">👁</button>
+  <button id="btnEmer" class="zbtn emer" title="緊急: 近くの着陸候補(飛行場・ヘリポート・着陸候補地)を1本ずつ出す">EMER</button>
   <div id="searchBar">
     <input id="searchInput" type="search" placeholder="地名・住所・座標・GoogleマップのURLを貼ってEnter" autocomplete="off">
     <div id="searchResults"></div>
@@ -702,6 +742,7 @@
         <button id="btnRing" title="自機(GPS OFFなら画面の中心)から 3/5/10NM の距離環">距離環</button>
         <button id="btnLos" title="見通し円。その高度から水平線まで(1.17×√h NM)の円を、自機(GPS中は実高度・OFFなら画面の中心に設定高度)に描く。幾何学的な水平線で地形は見ていない">見通し</button>
         <button id="btnShade" title="地形の遮蔽。国土地理院の標高タイルを読んで、見えない範囲を暗く塗る。⚠ 建物・樹木は入っていない">遮蔽</button>
+        <button id="btnEmerRte" title="ルート上で、飛行場・ヘリポート・着陸候補地から遠い区間を色で示す(事前の検討用)">候補(ルート)</button>
         <button id="btnTrkUp" title="進行方向を上にする(トラックアップ)。T/Oで自動的にON、FLT終了でノースアップに戻る。GPSの対地トラックを使い、止まっているときは次ポイントへの針路を使う">TRK UP</button>
       </div>
     </div>
@@ -732,6 +773,20 @@
     <button id="btnBase">淡色</button>
   </div>
 
+  <div id="emerCard">
+    <div class="emHd"><b>EMER 着陸候補</b><span id="emSrc"></span>
+      <button id="emSet" title="着陸候補として扱う保存フォルダ(この端末だけに保存)">⚙</button><button id="emOff">解除</button></div>
+    <div id="emRows"></div>
+    <div id="emAsp"></div>
+    <div id="emSetBox" style="display:none"></div>
+    <div class="emNote">候補は<b>参考</b>。人・障害物・電線・地表の状態は<b>目視で判断</b>すること(防災拠点は2013年のデータを含む)</div>
+  </div>
+  <div id="emerRtePanel">
+    <div class="emHd" id="emrHd"><b>ルート上の着陸候補 <span class="emrFold">▾</span></b><span id="emrSum"></span><button id="emrOff">閉じる</button></div>
+    <div class="emrTh">飛行場まで <input id="emrT1" type="number" min="1" max="60" step="1">NM超 /
+      降りられる所まで <input id="emrT3" type="number" min="0.5" max="10" step="0.5">NM超 を色で示す</div>
+    <div id="emrBody"></div>
+  </div>
   <div id="dctCard">
     <h4>D→ <span id="dctName" style="margin-left:6px"></span><button id="dctOff">解除</button></h4>
     <div class="dctRow">
@@ -1005,7 +1060,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-191';
+const VER_TAG='v6-192';
 const BUILD='2026-09-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3916,6 +3971,8 @@ document.getElementById('btnGPS').onclick=function(){
     ownSpdKt=(p.coords.speed!==null&&!isNaN(p.coords.speed))?p.coords.speed*1.9438:null;
     ownAltFt=(p.coords.altitude!==null&&!isNaN(p.coords.altitude))?p.coords.altitude*3.281:null;
     ownHdg=(p.coords.heading!==null&&!isNaN(p.coords.heading))?p.coords.heading:null;   // 対地トラック(°)
+    if(!lastFix||Date.now()-lastFix.t>30000){lastFix={lat:ownPos.lat,lng:ownPos.lng,t:Date.now()};store.set('hnav.lastFix',lastFix)}
+    emerUpdate();                      // EMER 表示中は位置に合わせて出し直す(3秒に1回)
     if(!ownMarker){ownMarker=L.marker(ownPos,{icon:L.divIcon({className:'',html:'<div class="own-ico"></div>',iconAnchor:[9,9]})}).addTo(map)}
     else ownMarker.setLatLng(ownPos);
     if(firstFix){firstFix=false;setFollow(true)} // GPS開始時は自動で追尾ON
@@ -4178,6 +4235,7 @@ function adFreqOf(w){
 }
 
 function redraw(){
+  if(typeof emerRteSchedule==='function')emerRteSchedule();   // ルート上の着陸候補(表示中のみ)
   applyAutoVar();          // 位置に応じて磁気偏差を自動更新(AUTO時のみ)
   if(typeof losOn!=='undefined'&&losOn)drawLos();   // ポイントを動かしたら見通し円も
   const lls=wps.map(w=>[w.lat,w.lng]);
@@ -5189,7 +5247,8 @@ ${rte}
    iOSはホーム画面に追加したアプリとSafariで保存領域が別なので、ブラウザで
    作ったルート・登録地点・ログはアプリ側に出てこない。全部まとめて
    書き出し/読み込みできるようにして、1回で移せるようにする */
-const BK_KEYS=['hnav.route','hnav.routes','hnav.pts','hnav.trks','hnav.logs','hnav.draws','hnav.base','hnav.varAuto','hnav.hud'];
+const BK_KEYS=['hnav.route','hnav.routes','hnav.pts','hnav.trks','hnav.logs','hnav.draws','hnav.base','hnav.varAuto','hnav.hud',
+  'hnav.emerFolders','hnav.emerTh'];
 document.getElementById('btnBk').onclick=()=>{
   const d={};BK_KEYS.forEach(k=>{const v=store.get(k);if(v!==null&&v!==undefined)d[k]=v});
   const n=(d['hnav.routes']||[]).length, p=(d['hnav.pts']||[]).length, l=(d['hnav.logs']||[]).length;
@@ -5334,6 +5393,274 @@ function updateDct(){
     +(liveGsActive()?' / GS: 実測連動':' / GS: 計画値(TAS+風)');
 }
 map.on('move',()=>{if(!ownPos)updateDct()});
+/* ───────── EMER(緊急時の着陸候補)v6-192 ─────────
+   ボタン1つで、今いる位置から**種別ごとに最寄りを1本ずつ**直線で出す:
+     ① 飛行場(自衛隊・米軍・民間)  ② ヘリポート  ③ 着陸候補地(自分で保存した場外 → 防災拠点・滑空場)
+   ⚠ 距離順の3本にしないこと。防災拠点が全国1万3千あり、距離順だと**ほぼ必ずグラウンドが3本を埋めて
+     飛行場が一度も出ない**。どこへ降りるかは不具合の緊急度で決まるので、種別ごとに並べて選ばせる。
+   ⚠ 同じ種別の中で「ほぼ同じ距離」なら優先を付ける(①は自衛隊・米軍、③は自分で保存した場外)。
+     「ほぼ同じ」= 最寄りから max(1.5NM, 15%) 以内。
+   ⚠ 表示は**候補**であって適地ではない。人・障害物・電線・地表は目視で判断(画面にも常に出す)。
+   ⚠ 候補にする保存フォルダは**この端末の localStorage(hnav.emerFolders)だけ**に置く。リポジトリには入れない。 */
+const EMER_MIL={   // 自衛隊・米軍の飛行場(共用飛行場を含む)。⚠ 近接判定で作ると入間・館山・下総が漏れ、福岡・長崎が混ざる
+  RJTC:'陸',RJTK:'陸',RJTU:'陸',RJAK:'陸',RJOE:'陸',RJDM:'陸',RJSU:'陸',RJCA:'陸',RJCT:'陸',RJTS:'陸',
+  RJTA:'海',RJTE:'海',RJTL:'海',RJFY:'海',RJDU:'海',RJSH:'海',RJOZ:'海',RJAW:'海',RJOS:'海',
+  RJTJ:'空',RJAH:'空',RJNH:'空',RJNG:'空',RJNK:'空',RJOH:'空',RJFZ:'空',RJFN:'空',RJFA:'空',RJCJ:'空',
+  RJSM:'空',RJNY:'空',RJOF:'空',RJNA:'空',ROAH:'空',RJCO:'陸',
+  RJTY:'米',RODN:'米',ROTM:'米',RJOI:'米'};
+const EMER_COL={ad:'#3df5ff',hp:'#38e07b',ld:'#ffb000'};
+const EMER_LBL={ad:'① 飛行場',hp:'② ヘリポート',ld:'③ 着陸候補地'};
+var emerOn=false,emerC=null,emerCKey='',emerAt=0,emerLayer=L.layerGroup();   // ⚠ var: 起動途中の redraw から参照されうる
+var lastFix=store.get('hnav.lastFix');       // GPSが途切れたとき用の最後の位置
+function emerFolders(){const v=store.get('hnav.emerFolders');return Array.isArray(v)?v:[]}
+function emerNM(a,b){                           // 候補選びは近似で十分(表示は distNM で出し直す)
+  const k=Math.cos(a.lat*Math.PI/180);
+  return Math.hypot((b.lat-a.lat)*60,(b.lng-a.lng)*60*k);
+}
+/* 候補の一覧。データの読み込み状況と保存地点・フォルダ設定で変わるので、鍵が変わったときだけ作り直す */
+function emerCands(){
+  const F=emerFolders(),pts=libPtsGet();
+  const key=[ASP.length,HP?HP.f.length:0,HPAD?HPAD.f.length:0,pts.length,F.join('|')].join('/');
+  if(emerC&&key===emerCKey)return emerC;
+  const ad=[],hp=[],ld=[];
+  ASP.forEach(a=>{
+    if(!a.icao||!isFinite(a.lat))return;
+    if(/ヘリポート/.test(a.n||'')){hp.push({k:'hp',sub:'ヘリポート',n:`${a.n} (${a.icao})`,lat:a.lat,lng:a.lng});return}
+    const m=EMER_MIL[a.icao];
+    ad.push({k:'ad',mil:!!m,sub:m?(m==='米'?'米軍飛行場':'自衛隊飛行場'):'民間飛行場',n:`${a.n} (${a.icao})`,
+      lat:a.lat,lng:a.lng,icao:a.icao});
+  });
+  if(HP)HP.f.forEach(x=>{
+    const n=x.n||x.en||'(名称不明)';
+    if(x.t==='H')hp.push({k:'hp',sub:'ヘリポート(AIP)',n,lat:x.lat,lng:x.lng});
+    else if(x.t==='A')ad.push({k:'ad',mil:false,sub:'飛行場(小)',n,lat:x.lat,lng:x.lng});
+    else if(x.t==='G')ld.push({k:'ld',sub:'滑空場',n,lat:x.lat,lng:x.lng});
+  });
+  // ⚠ 防災拠点の種別に「臨時ヘリポート」「ヘリポート適地」が多数あるが、実態はグラウンド等なので③のまま。
+  //   ②に上げるのは公共用・非公共用ヘリポートと、種別に「(病院)」がある離着陸可能ヘリポートだけ
+  if(HPAD)HPAD.f.forEach(x=>{
+    const kind=(HPAD.kinds&&x.k!==undefined)?HPAD.kinds[x.k]||'':'';
+    if(x.c==='1'||x.c==='2')hp.push({k:'hp',sub:x.c==='1'?'公共用ヘリポート':'非公共用ヘリポート',n:x.n,lat:x.lat,lng:x.lng});
+    else if(/ヘリポート[（(]病院/.test(kind))hp.push({k:'hp',sub:'病院ヘリポート',n:x.n,lat:x.lat,lng:x.lng});
+    else if(!ad.some(a=>Math.abs(a.lat-x.lat)<0.008&&Math.abs(a.lng-x.lng)<0.01))   // 空港そのもの(①と重複)は外す
+      ld.push({k:'ld',sub:'防災拠点',n:x.n,dim:x.s,lat:x.lat,lng:x.lng});
+  });
+  if(F.length)pts.forEach(p=>{
+    const f=p.folder||'';
+    if(isFinite(p.lat)&&F.some(z=>f===z||f.startsWith(z+'/')))
+      ld.push({k:'ld',own:1,sub:'場外(保存地点)',n:p.name||'(名前なし)',lat:p.lat,lng:p.lng});
+  });
+  emerCKey=key;emerC={ad,hp,ld};
+  return emerC;
+}
+function emerNearest(list,o){let b=null;for(const x of list){const d=emerNM(o,x);if(!b||d<b.d)b={x,d}}return b}
+const emerTol=d=>Math.max(1.5,d*0.15);
+function emerChoose(o){
+  const C=emerCands();
+  const nAd=emerNearest(C.ad,o),nMil=emerNearest(C.ad.filter(x=>x.mil),o);
+  const ad=(nMil&&nAd&&nMil.d<=nAd.d+emerTol(nAd.d))?nMil:nAd;           // ほぼ同距離なら自衛隊・米軍
+  const nLd=emerNearest(C.ld,o),nOwn=emerNearest(C.ld.filter(x=>x.own),o);
+  const ld=(nOwn&&nLd&&nOwn.d<=nLd.d+emerTol(nLd.d))?nOwn:nLd;           // ほぼ同距離なら自分の場外
+  return {ad,hp:emerNearest(C.hp,o),ld};
+}
+/* 基準の位置: GPS → 最後に取れたGPS(10分以内) → 地図の中心 */
+function emerOrigin(){
+  if(ownPos)return {lat:ownPos.lat,lng:ownPos.lng,src:'GPS現在地'};
+  if(lastFix&&Date.now()-lastFix.t<600000)
+    return {lat:lastFix.lat,lng:lastFix.lng,src:`最後のGPS位置(${Math.round((Date.now()-lastFix.t)/60000)}分前)`};
+  const c=map.getCenter();return {lat:c.lat,lng:c.lng,src:'⚠ GPS無し・地図の中心から'};
+}
+function emerGs(tc){
+  if(ownSpdKt!==null&&ownSpdKt>30)return ownSpdKt;
+  const t=windTri(tc);return (t&&!t.bad&&t.gs>0)?t.gs:(num('tas')||100);
+}
+/* ───── 高度込みの空域判定(EMER の連絡先用) ─────
+   ⚠ airspaceAt() は平面だけで高度を見ず、ACA/TCA も含まない。ここでは GPS 高度で上限・下限の中に入っている
+     空域だけを拾い、ACA/TCA(aca.json)も見る。GPS高度は気圧高度と100ft以上ずれるので、境界±300ftは「境界付近」
+     として外さずに出す。高度が取れなければ平面で当たるものを全部出す */
+function airspacesAtAlt(lat,lng,alt){
+  const M=300,out=[],seen=new Set();
+  const within=(lo,up)=>{
+    if(alt===null||alt===undefined)return 'u';
+    const L=(lo===null||lo===undefined)?-1e9:lo,U=(up===null||up===undefined)?1e9:up;
+    if(alt>L&&alt<=U)return (alt-L<M||U-alt<M)?'edge':'in';
+    return (alt>L-M&&alt<=U+M)?'edge':null;
+  };
+  ASP_POLY.forEach(a=>{
+    if(!aspHit(lat,lng,a))return;
+    const w=within(a.lo||0,a.up);if(!w)return;
+    const key=a.t+'|'+a.icao+'|'+a.rmk;if(seen.has(key))return;seen.add(key);
+    const sc=splitCall(a.rmk);
+    out.push({pri:{ctr:0,pca:1,inf:2}[a.t]??5,kind:ASP_LBL[a.t]||'空域',n:a.n,lo:a.lo||0,up:a.up,call:sc.call,freq:sc.freq,w});
+  });
+  if(ACA)ACA.f.forEach(f=>{
+    if(!f.pts||!inArea(lat,lng,f.pts))return;
+    const w=within(f.lo,f.up);if(!w)return;
+    const key=f.k+'|'+f.icao;if(seen.has(key))return;seen.add(key);
+    const fq=AD_FREQ[f.icao]||{},t=f.k==='TCA';
+    out.push({pri:t?3:4,kind:t?'TCA':'進入管制区',n:f.jp||f.n,lo:f.lo,up:f.up,
+      call:t?'TCAアドバイザリー':'進入管制(APP)',freq:t?(fq.TCA||''):(fq.APP||''),w});
+  });
+  out.sort((a,b)=>a.pri-b.pri);
+  return out;
+}
+function emerAltTxt(v){return v===null||v===undefined?'—':v>=18000?'FL'+Math.round(v/100):v===0?'SFC':v.toLocaleString()}
+function emerRender(){
+  const o=emerOrigin(),P=emerChoose(o);
+  emerLayer.clearLayers();
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  let html='';
+  ['ad','hp','ld'].forEach(k=>{
+    const p=P[k],col=EMER_COL[k];
+    if(!p){html+=`<div class="emRow none" style="--c:${col}"><div class="emK">${EMER_LBL[k]}</div>`+
+      `<div class="emN">${(k!=='ad'&&!HPAD)?'読込中…':'候補なし'}</div><div></div><div></div></div>`;return}
+    const t={lat:p.x.lat,lng:p.x.lng},d=distNM(o,t),tc=trueBrg(o,t),g=emerGs(tc);
+    html+=`<div class="emRow" style="--c:${col}"><div class="emK">${EMER_LBL[k]}<small>${esc(p.x.sub)}</small></div>`+
+      `<div class="emN">${esc(p.x.n)}${p.x.dim?`<small>広さ ${esc(p.x.dim)}</small>`:''}</div>`+
+      `<div class="emV"><b>${fmt3(magOf(tc))}°</b><span>${d.toFixed(1)}NM ${fmtHM(d/g)}</span></div>`+
+      `<button class="emDct" data-k="${k}">D→</button></div>`;
+    L.polyline([[o.lat,o.lng],[t.lat,t.lng]],{color:'#000',weight:6,opacity:.45,interactive:false}).addTo(emerLayer);
+    L.polyline([[o.lat,o.lng],[t.lat,t.lng]],{color:col,weight:3,dashArray:'9 6',opacity:.95,interactive:false}).addTo(emerLayer);
+    L.circleMarker([t.lat,t.lng],{radius:8,color:col,weight:3,fillColor:'#000',fillOpacity:.5})
+      .bindTooltip(`${EMER_LBL[k].slice(0,1)} ${esc(p.x.n)}`,{permanent:true,direction:'right',className:'emTip'})
+      .addTo(emerLayer);
+  });
+  document.getElementById('emRows').innerHTML=html;
+  document.getElementById('emSrc').textContent=`基準: ${o.src}`+(ownSpdKt>30?' / GS実測':' / GS計画値');
+  document.querySelectorAll('#emRows .emDct').forEach(b=>b.onclick=()=>{
+    const p=P[b.dataset.k];if(!p)return;
+    setDct({name:'EMER '+p.x.n,lat:p.x.lat,lng:p.x.lng,isWp:false});
+  });
+  // 連絡先(高度込み)
+  const alt=ownPos?ownAltFt:null,A=airspacesAtAlt(o.lat,o.lng,alt);
+  const altTxt=alt===null||alt===undefined?'高度不明(平面で判定)':`GPS高度 約${Math.round(alt/100)*100}ft`;
+  document.getElementById('emAsp').innerHTML=
+    `<div style="color:var(--dim);font-size:10px">${altTxt} ・ GPS高度は気圧高度と100ft以上ずれることがある</div>`+
+    (A.length?A.slice(0,4).map(a=>`<div class="${a.w==='edge'?'edge':''}">${esc(a.kind)} ${esc(a.n)}`+
+      // 高度が分からないとき ACA/TCA は区画ごとに高度が違うので、代表の上下限を出すと誤解を招く
+      ` <small>(${a.w==='u'&&/TCA|進入管制区/.test(a.kind)?'区画により高度が違う':
+        emerAltTxt(a.lo)+'〜'+emerAltTxt(a.up)}${a.w==='edge'?'・境界付近':''})</small> → `+
+      `${esc(a.call)} <b>${esc(a.freq||'周波数不明')}</b></div>`).join('')
+      :'<div>管制圏・進入管制区などの外(平面・高度で該当なし)</div>')+
+    `<div>緊急 <b>121.5</b> ・ トランスポンダ <b>7700</b></div>`;
+}
+function emerUpdate(force){
+  if(!emerOn)return;
+  if(!force&&Date.now()-emerAt<3000)return;     // GPSは毎秒来るので3秒に1回で十分
+  emerAt=Date.now();emerRender();
+}
+async function emerLoadAll(){                    // 候補データを全部読み込む(T/O時に先読みもする)
+  await Promise.all([loadAd(),loadHp(),loadHpad(),loadAca()].map(p=>p.catch(()=>{})));
+}
+function setEmer(on){
+  emerOn=on;
+  document.getElementById('btnEmer').classList.toggle('on',on);
+  document.getElementById('emerCard').style.display=on?'block':'none';
+  if(!on){map.removeLayer(emerLayer);emerLayer.clearLayers();return}
+  emerLayer.addTo(map);
+  emerUpdate(true);                               // 手元のデータ(飛行場)ですぐ出す
+  emerLoadAll().then(()=>emerUpdate(true));       // 読み込めたら出し直す
+  if(flt){                                        // 飛行記録に押した時刻と位置を残す(事後の報告用)
+    const o=emerOrigin();
+    (flt.emer=flt.emer||[]).push({t:Math.floor(Date.now()/1000),lat:+o.lat.toFixed(4),lng:+o.lng.toFixed(4)});
+    fltSave();
+  }
+}
+document.getElementById('btnEmer').onclick=()=>setEmer(!emerOn);
+document.getElementById('emOff').onclick=()=>setEmer(false);
+/* 候補にする保存フォルダの設定。⚠ この端末だけ(localStorage)。公開リポジトリには書かない */
+document.getElementById('emSet').onclick=()=>{
+  const box=document.getElementById('emSetBox');
+  if(box.style.display!=='none'){box.style.display='none';return}
+  const cnt={};
+  libPtsGet().forEach(p=>{
+    const parts=String(p.folder||'').split('/').map(t=>t.trim()).filter(Boolean);
+    parts.forEach((_,i)=>{const k=parts.slice(0,i+1).join('/');cnt[k]=(cnt[k]||0)+1});
+  });
+  const sel=new Set(emerFolders()),keys=Object.keys(cnt).sort((a,b)=>a.localeCompare(b,'ja'));
+  const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  box.innerHTML=`<div style="color:var(--dim);font-size:11px;margin-bottom:4px">③ で最優先にする保存フォルダ(下の階層も含む)。この端末だけに保存</div>`+
+    (keys.length?keys.map(k=>`<label style="padding-left:${(k.split('/').length-1)*12}px">`+
+      `<input type="checkbox" value="${esc(k)}"${sel.has(k)?' checked':''}> ${esc(k.split('/').pop())} <small style="color:var(--dim)">${cnt[k]}件</small></label>`).join('')
+      :'<div style="color:var(--dim)">フォルダ付きの保存地点がありません</div>');
+  box.querySelectorAll('input').forEach(c=>c.onchange=()=>{
+    const v=[...box.querySelectorAll('input:checked')].map(x=>x.value);
+    store.set('hnav.emerFolders',v);emerUpdate(true);
+  });
+  box.style.display='block';
+};
+
+/* ───── ルート上の着陸候補(事前の検討)─────
+   ルートを0.5NMごとに見て、各点から ①飛行場 と「降りられる所」(②ヘリポート・③候補地)までの距離を出し、
+   降りられる所がしきい値(既定2NM)以内=緑 / 超えるが飛行場がしきい値(既定15NM)以内=黄 / 両方超える=赤 で線を塗る。
+   ⚠ オートローテーションで届く田畑・河川敷はどのデータにも無い。分かるのは「候補の少ない区間」まで */
+var emerRteOn=false,emerRteLayer=L.layerGroup(),emerRteT=null;
+function emerTh(){const v=store.get('hnav.emerTh')||{};return {t1:+v.t1>0?+v.t1:15,t3:+v.t3>0?+v.t3:2}}
+function emerRteRun(){
+  if(!emerRteOn)return;
+  emerRteLayer.clearLayers();
+  const body=document.getElementById('emrBody'),sum=document.getElementById('emrSum');
+  if(wps.length<2){body.innerHTML='<div class="hint">ルートを2点以上引くと検討できます</div>';sum.textContent='';return}
+  const C=emerCands(),land=C.hp.concat(C.ld),{t1,t3}=emerTh();
+  const col={g:'#38e07b',a:'#ffb000',r:'#ff4d4d'};
+  let tot={g:0,a:0,r:0},rows='';
+  const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const near=new Map();
+  for(let i=0;i<wps.length-1;i++){
+    const A=wps[i],B=wps[i+1],D=distNM(A,B),n=Math.max(1,Math.ceil(D/0.5));
+    let seg=null,worstLand=0,worstAd=0,cnt={g:0,a:0,r:0},adMid=null;
+    for(let j=0;j<=n;j++){
+      const f=j/n,p={lat:A.lat+(B.lat-A.lat)*f,lng:A.lng+(B.lng-A.lng)*f};
+      const a=emerNearest(C.ad,p),l=emerNearest(land,p);
+      const da=a?a.d:1e9,dl=l?l.d:1e9;
+      if(l&&dl<=t3)near.set(l.x,l.x);
+      if(j===Math.floor(n/2))adMid=a;
+      worstLand=Math.max(worstLand,dl);worstAd=Math.max(worstAd,da);
+      const c=dl<=t3?'g':da<=t1?'a':'r';
+      if(j<n){cnt[c]++;tot[c]++}
+      if(!seg||seg.c!==c){if(seg)seg.pts.push([p.lat,p.lng]);seg={c,pts:[[p.lat,p.lng]]};
+        L.polyline(seg.pts,{color:col[c],weight:9,opacity:.55,interactive:false}).addTo(emerRteLayer);
+        seg.line=emerRteLayer.getLayers().slice(-1)[0];}
+      else seg.pts.push([p.lat,p.lng]);
+      seg.line.setLatLngs(seg.pts);
+    }
+    const m=cnt.g+cnt.a+cnt.r||1,cl=cnt.r?'r':cnt.a?'a':'g';
+    rows+=`<tr><td>${esc(A.name)}→${esc(B.name)}<br><small>${D.toFixed(1)}NM</small></td>`+
+      `<td>${adMid?esc(adMid.x.n)+`<br><small>中間点から ${adMid.d.toFixed(1)}NM</small>`:'—'}</td>`+
+      `<td class="${cl}">最大 ${worstLand>1e8?'—':worstLand.toFixed(1)}NM<br><small>`+
+      `${Math.round(cnt.g/m*100)}% / ${Math.round(cnt.a/m*100)}% / ${Math.round(cnt.r/m*100)}%</small></td></tr>`;
+  }
+  // 線から近い候補地に小さな点を打つ(上限400)
+  [...near.values()].slice(0,400).forEach(x=>L.circleMarker([x.lat,x.lng],{radius:4,color:x.k==='hp'?'#38e07b':'#ffb000',
+    weight:2,fillOpacity:.7}).bindTooltip(`${x.sub}: ${x.n}`).addTo(emerRteLayer));
+  const all=tot.g+tot.a+tot.r||1;
+  sum.textContent=`緑 ${Math.round(tot.g/all*100)}% ・ 黄 ${Math.round(tot.a/all*100)}% ・ 赤 ${Math.round(tot.r/all*100)}%`;
+  body.innerHTML=`<table><tr><th>区間</th><th>最寄りの飛行場</th><th>降りられる所まで(緑/黄/赤)</th></tr>${rows}</table>`+
+    `<div class="hint" style="margin-top:6px">緑=ヘリポート・候補地が${t3}NM以内 / 黄=それより遠いが飛行場が${t1}NM以内 / 赤=どちらも遠い。`+
+    `地図の小さな点はルートから近い候補。⚠ 田畑・河川敷はデータに無い</div>`;
+  if(routeLine&&routeLine.bringToFront)routeLine.bringToFront();
+}
+function emerRteSchedule(){if(!emerRteOn)return;clearTimeout(emerRteT);emerRteT=setTimeout(emerRteRun,400)}
+// 見出しをタップで表を畳む(スマホだと地図の大半を覆うため。色分けの線は地図に残る)
+document.getElementById('emrHd').addEventListener('click',e=>{if(e.target.id!=='emrOff')document.getElementById('emerRtePanel').classList.toggle('min')});
+async function setEmerRte(on){
+  emerRteOn=on;
+  document.getElementById('btnEmerRte').classList.toggle('on',on);
+  document.getElementById('emerRtePanel').style.display=on?'block':'none';
+  if(!on){map.removeLayer(emerRteLayer);emerRteLayer.clearLayers();return}
+  const {t1,t3}=emerTh();
+  document.getElementById('emrT1').value=t1;document.getElementById('emrT3').value=t3;
+  document.getElementById('emrBody').innerHTML='<div class="hint">候補データを読込中…</div>';
+  emerRteLayer.addTo(map);
+  await emerLoadAll();emerRteRun();
+}
+document.getElementById('btnEmerRte').onclick=()=>setEmerRte(!emerRteOn);
+document.getElementById('emrOff').onclick=()=>setEmerRte(false);
+['emrT1','emrT3'].forEach(id=>document.getElementById(id).onchange=()=>{
+  store.set('hnav.emerTh',{t1:+document.getElementById('emrT1').value,t3:+document.getElementById('emrT3').value});
+  emerRteRun();
+});
+
 
 /* ───────── NEXTポイント表示(ルート順・GPSで自動シーケンス) ───────── */
 let nextIdx=0;
@@ -5528,7 +5855,7 @@ function fltSave(){
   if(!flt){store.del('hnav.flt');return}
   const r=fltRouteNow();
   store.set('hnav.flt',{firstOff:+flt.firstOff,legOff:flt.legOff?+flt.legOff:0,accMs:flt.accMs||0,
-    legs:flt.legs||[],trk:flt.trk||[],route:r.route,wp:r.wp,seen:Date.now()});
+    legs:flt.legs||[],trk:flt.trk||[],route:r.route,wp:r.wp,emer:flt.emer||[],seen:Date.now()});
 }
 function fltLastMs(fs){
   const t=fs.trk&&fs.trk.length?fs.trk[fs.trk.length-1][4]*1000:0;
@@ -5543,7 +5870,7 @@ function fltAutoClose(fs){
   const legs=(fs.legs||[]).slice();
   if(fs.legOff)legs.push({off:hm(new Date(fs.legOff)),on:hm(d1)});
   const rec={date:d0.toLocaleDateString('ja-JP'),off:hm(d0),on:hm(d1),dur:fmtHMS(ms).slice(0,5),
-    route:fs.route||'—',wp:fs.wp||[],legs,trk:fs.trk||[],auto:1};
+    route:fs.route||'—',wp:fs.wp||[],legs,trk:fs.trk||[],emer:fs.emer||[],auto:1};
   logs.push(rec);saveLogs();
   return rec;
 }
@@ -5611,6 +5938,7 @@ document.getElementById('btnTO').onclick=function(){
   else{flt.legOff=now;trkLast=null} // 再出発(一時着陸中の移動は記録しない)
   if(gpsWatch===null)document.getElementById('btnGPS').click(); // 軌跡記録のためGPSを自動ON
   setTrackUp(true);                    // 離陸したら進行方向を上にする
+  emerLoadAll();                       // EMER の候補データを先読み(押した瞬間に全部そろうように)
   clearInterval(timerId);timerId=setInterval(tickTimer,1000);
   fltSave();setFltButtons();renderLogs();
 };
@@ -5630,6 +5958,7 @@ document.getElementById('btnLDG').onclick=function(){
       route:wps.map(w=>w.name).join('→')||'—',
       wp:wps.map(w=>[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name]),
       legs:flt.legs,
+      emer:flt.emer||[],                 // EMER を押した時刻と位置
       trk:flt.trk||[]});                 // GPS軌跡を記録に保存
     store.del('hnav.fltTrk');store.del('hnav.flt');   // 進行中の退避を破棄
     trackShow([]);                       // 未保存の線は消す(記録側の👁で出せる)
@@ -5667,6 +5996,8 @@ function renderLogs(){
         <div><b>実績</b> T/O ${l.off} → L/D ${l.on}(飛行時間 ${l.dur}${l.legs&&l.legs.length>1?'・'+l.legs.length+'レグ':''})</div>
         ${l.legs&&l.legs.length>1?'<div><b>レグ</b> '+l.legs.map((g,k)=>(k+1)+') '+g.off+'→'+g.on).join(' / ')+'</div>':''}
         <div><b>経路</b> ${l.route}</div>
+        ${l.emer&&l.emer.length?'<div><b style="color:#ff6b6b">EMER</b> '+l.emer.map(e=>jstHM(e.t).slice(6)+
+          ` (${e.lat.toFixed(3)}, ${e.lng.toFixed(3)})`).join(' / ')+'</div>':''}
         ${ts?`<div><b>軌跡</b> ${ts.d.toFixed(1)}NM`+
              (ts.maxAlt!==null?` / 最高${ts.maxAlt}ft`:'')+
              (ts.maxSpd!==null?` / 最高${ts.maxSpd}kt`:'')+
@@ -6793,7 +7124,7 @@ function fixLogHead(){
   const fs=store.get('hnav.flt');
   if(fs&&Date.now()-fltLastMs(fs)<=fltGrace()*60000){
     flt={firstOff:new Date(fs.firstOff),legOff:fs.legOff?new Date(fs.legOff):null,
-         accMs:fs.accMs||0,legs:fs.legs||[],trk:fs.trk||[]};
+         accMs:fs.accMs||0,legs:fs.legs||[],trk:fs.trk||[],emer:fs.emer||[]};
     trkLast=null;trackShow(flt.trk,{route:fs.route,wp:fs.wp});
     if(flt.legOff){
       clearInterval(timerId);timerId=setInterval(tickTimer,1000);
