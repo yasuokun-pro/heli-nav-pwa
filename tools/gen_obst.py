@@ -14,8 +14,10 @@ AIS「4_OBSTACLE DATA / AREA1」のKML(都道府県別47ファイル)から
 AIRAC更新時: 新しい AREA1_*.kml.zip を展開して再実行。
 """
 import re, os, glob, json, zipfile, sys, datetime, tempfile
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
-SRC = os.path.expanduser('~/Downloads/AIP File Download Service/4_OBSTACLE DATA/1.AREA1')
+SRC = os.path.expanduser(AIP_ROOT + '/4_OBSTACLE DATA/1.AREA1')
 TYPES = ['BUILDING','WINDMILL','TOWER','ANTENNA','CHIMNEY','POLE','CRANE','BRIDGE','MAST','OTHER']
 
 def type_idx(t):

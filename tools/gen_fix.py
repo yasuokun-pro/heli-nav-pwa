@@ -22,6 +22,8 @@ FIX(重要地点) 生成 (fix.json)
   - 見出しの POINT(REPORTING POINT) や AIP/Civil/ENR の行は名前ではないので除く
 """
 import os, re, sys, json, glob, subprocess
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BLACK = {'POINT', 'RNAV', 'STAR', 'WAY', 'AIP', 'ENR', 'CIVIL', 'INTENTIONALLY', 'LEFT',
@@ -35,8 +37,8 @@ ABBR_RE = re.compile(r'(?:^|\s)(-|[A-Z]{3})(?=\s|$)')
 
 
 def find_pdf():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/ENR_*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/ENR_*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: return f[-1]
     return None

@@ -12,8 +12,10 @@ AIRAC更新時: 3_SUP(KML) を新しいものに差し替えて再実行。
 ※SUPは有効期限があるため、期限切れのものは表示側で判別できるよう period を保持する。
 """
 import re, os, glob, json, sys, datetime, html as htmlmod
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
-SRC = os.path.expanduser('~/Downloads/AIP File Download Service/3_SUP(KML)')
+SRC = os.path.expanduser(AIP_ROOT + '/3_SUP(KML)')
 
 def field(h, key):
     """英語SUP形式: <td>Period</td><td>値</td>"""

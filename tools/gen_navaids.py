@@ -11,15 +11,17 @@ index.html の /*NAVAIDS_GEN_START*/ ... /*NAVAIDS_GEN_END*/ 区間へ埋め込�
   python3 tools/gen_navaids.py --splice   # index.html へ埋め込み
 
 データソース(AIRAC 2026-07-09):
-  ~/Downloads/1_AIP (PDF)/<日付>/ENR_<日付>.pdf の ENR 4.1
+  aip/1_AIP (PDF)/<日付>/ENR_<日付>.pdf の ENR 4.1(置き場はリポジトリ直下の aip/・.gitignore 済み)
 AIRAC更新時: 新PDFで ENR 4.1 を pdftotext -layout し、下の PDF/範囲を差し替えて再実行。
 同一IDのVOR+DMEは VOR/DME に統合する。
 """
 import re, json, sys, os, subprocess, glob
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 def find_pdf():
     cands=[]
-    for base in ('~/Downloads/AIP File Download Service/1_AIP (PDF)','~/Downloads/1_AIP (PDF)'):
+    for base in (AIP_ROOT + '/1_AIP (PDF)',AIP_ROOT + '/1_AIP (PDF)'):
         cands+=sorted(glob.glob(os.path.expanduser(base)+'/*/ENR_*.pdf'))
     cands=sorted(cands,key=os.path.basename)
     return cands[-1] if cands else None
@@ -74,7 +76,7 @@ def parse(lines):
 
 def main():
     pdf=find_pdf()
-    if not pdf: print('AIP PDF not found under ~/Downloads',file=sys.stderr); sys.exit(1)
+    if not pdf: print('AIP PDF not found under aip/1_AIP (PDF)',file=sys.stderr); sys.exit(1)
     txt=subprocess.run(['pdftotext','-layout',pdf,'-'],capture_output=True,text=True).stdout
     lines=txt.split('\n')
     # ENR 4.1 の本文範囲(見出し行〜ENR 4.2 見出し)を切り出し

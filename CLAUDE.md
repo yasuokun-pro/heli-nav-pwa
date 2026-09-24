@@ -468,8 +468,16 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 ### データソース(旧AIS Japanは廃止済み)
 - **AIS Japanは2025年に廃止** → 現在は **SWIMポータル**(https://top.swim.mlit.go.jp/swim/、
   要ログイン)からAIP一式をダウンロードする。SWIMは要ログイン・要契約なので
-  アシスタントからは取れない。ユーザーがDLして
-  `~/Downloads/1_AIP (PDF)/<日付>/` に置く運用
+  アシスタントからは取れない。ユーザーがDLして、**リポジトリ直下の `aip/`**(`.gitignore` 済み)に置く運用
+  (2026-09-24 に ~/Downloads から移した。Downloads だと誤って消すため。約4.8GB)
+  ```
+  aip/1_AIP (PDF)/<日付>/…   AIP本体(20260709 は東京TCAの CELL 用に残す)
+  aip/2_AIC  3_SUP(KML)  4_OBSTACLE DATA  5_OTHER  README.md   … 最新のDL版
+  aip/aixm/        AIXM(SD利用者限定のパスワード付きzip。新規利用者には**パスワードが来ない**)
+  aip/docs/        DPS(データ仕様書)など
+  aip/_downloads/  落としたままのzip・旧版の残り・重複(消してよい)
+  ```
+  生成器は各ファイル冒頭の `AIP_ROOT`(= tools/../aip)を見る。⚠ **公開リポジトリには絶対に入れない**
 - **.go.jp が一律に見られないわけではない**。多くの官公庁サイトはアプリ内ブラウザ
   (Claude Browser)で普通に開ける。ただし **curl / Python の urllib は
   Cloudflareのbot判定で403** になるサイトがある(mod.go.jp など)。
@@ -483,9 +491,10 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
   `pdftoppm -png -r 300` で画像化 → 座標プロットとの重ね合わせで検証する手法が確立済み
 
 ### AIRAC更新手順(28日ごと・半自動)　※2026-09-14 に 20260903 で実施した実手順
-1. ユーザーが新AIRACのAIP一式をSWIMからDL。**zip は暗号化されていない**(2026-09 版で確認)ので
-   `unzip -q -o "AIP File Download Service (1).zip" -d ~/Downloads` で既存の
-   `~/Downloads/AIP File Download Service/1_AIP (PDF)/<日付>/` に日付フォルダが増える形で展開できる
+1. ユーザーが新AIRACのAIP一式をSWIMからDL。**zip は暗号化されていない**(2026-09 版で確認)。展開して
+   `1_AIP (PDF)/<日付>` を `aip/1_AIP (PDF)/` へ、2_AIC〜5_OTHER は `aip/` へ差し替える。zip は `aip/_downloads/`
+   ⚠ **DLした日付フォルダが発効前でも、生成器は `sorted()[-1]` でそれを読む**。発効日より前に回したものを
+     公開しないこと(ブランチで用意して発効日 00:00 UTC = 09:00 JST に出す)
 2. **生成器を順に回す**(全部 `sorted()[-1]` で最新の日付フォルダを見る):
    `gen_fix → gen_navaids --splice → gen_awy`(⚠ awy は navaids.gen.js を読むので **navaids を先に**。
    順を誤ると改名した navaid(2026-09: 高知 KRE→NAE)の直行経路が落ちる)
@@ -499,8 +508,8 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
    JSON は `git show HEAD:xxx.json` と突き合わせて追加/削除を出す(FIX 追加10/削除6、方式は高知・伊丹・石垣・宮古が改編)
 4. 関東の PCA/ACA に差があれば `tools/gen_asp.py` の SPEC / `gen_aca.py` を直す
 5. index.html の「AIP 2026-09-03現在」の文言、`sw.js` の VER / `VER_TAG` / `BUILD` を上げてコミット
-6. 置き場は `~/Downloads/AIP File Download Service/` のまま(生成器がそこを見る)。**古い日付フォルダは1つ前だけ残して消してよい**
-   (差分確認に使う)。`~/Downloads/1_AIP (PDF)` と `1_AIP (PDF).zip` は 20260709 の重複コピー
+6. 置き場は `aip/`(生成器がそこを見る)。**古い日付フォルダは1つ前だけ残して消してよい**
+   (差分確認に使う)。ただし **20260709 は東京TCA(`gen_tca.py --airac 20260709`)に要る**ので消さない
 
 ### 全国データ(2026-07追加)
 - **飛行場マスタ**: `tools/gen_ad.py` → `ad.json`(**134件**)。AIP各飛行場の

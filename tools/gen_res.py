@@ -29,6 +29,8 @@
 使い方: python3 tools/gen_res.py
 """
 import re, os, sys, math, glob, json, subprocess
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 CO = re.compile(r'(\d{6}(?:\.\d+)?)N\s*/?\s*(\d{7}(?:\.\d+)?)E')
 JPC = re.compile(r'[ぁ-んァ-ヶ一-龥]')
@@ -86,8 +88,8 @@ SPEC = {
 }
 
 def latest():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/ENR_*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/ENR_*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: return f[-1]
     return None

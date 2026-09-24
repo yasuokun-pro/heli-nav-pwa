@@ -20,6 +20,8 @@ AIPで「上空の飛行を避けること」と明記されているのはこ�
 AIRAC更新時は再実行して差分を確認する(施設の追加・廃止がある)。
 """
 import re, os, sys, glob, subprocess, json
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 SEC_START = '2.4. 原子力施設'
 SEC_END = 'ENR 5.4 航法上の障害物'
@@ -34,8 +36,8 @@ def dms(s):
 
 
 def latest_enr():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/ENR_*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/ENR_*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: return f[-1]
     return None

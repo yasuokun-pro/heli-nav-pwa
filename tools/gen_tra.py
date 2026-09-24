@@ -23,6 +23,8 @@
 使い方: python3 tools/gen_tra.py
 """
 import re, os, sys, glob, math, subprocess, json
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 # 円弧の中心。ENR 4.1に載らない飛行場の航法施設は各AD 2.19から取った
 ARC_CENTER = {
@@ -139,8 +141,8 @@ def load_ctr(icao):
 
 def main():
     pdf = None
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/ENR_*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/ENR_*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: pdf = f[-1]; break
     if not pdf:

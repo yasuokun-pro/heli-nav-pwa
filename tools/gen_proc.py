@@ -19,6 +19,8 @@ SID / STAR / 計器進入(IAC) の**名前と種別だけ**を取る。形(経�
     ミニマは別途、手で表を持つか諦める
 """
 import os, re, sys, json, glob, subprocess
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KIND = [('Standard Departure Chart', 'SID'), ('Standard Arrival Chart', 'STAR'),
@@ -27,8 +29,8 @@ TYP = re.compile(r'^(HI-ILS|HI-VOR|HI-TACAN|ILS|LOC|LDA|VOR/DME|VOR|TACAN|NDB|RN
 
 
 def pdfs():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f:
             # ⚠ 日付フォルダが複数あると全AIRACのPDFが混ざる(2026-09 に踏んだ)。最新の日付フォルダだけ

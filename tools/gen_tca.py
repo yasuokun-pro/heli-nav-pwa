@@ -30,6 +30,8 @@
 """
 import os, re, sys, glob, math, json, subprocess
 import numpy as np
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 try:
     from PIL import Image, ImageFilter
@@ -89,8 +91,8 @@ def rjtt_pdf():
     want = None
     if '--airac' in sys.argv:
         want = sys.argv[sys.argv.index('--airac')+1]
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if want: f = [x for x in f if want in x]
         if f: return f[-1]
@@ -429,8 +431,8 @@ def _legend(bbox_html):
 
 def hyakuri():
     import json as _json
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/RJAH__*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/RJAH__*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJAH__*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJAH__*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: pdf = f[-1]; break
     else:
@@ -567,8 +569,8 @@ def _tsu_dest(r_nm, brg_mag):
 
 def tsuiki():
     import json as _json
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/RJFZ__*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/RJFZ__*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJFZ__*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJFZ__*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: pdf = f[-1]; break
     else:
@@ -759,8 +761,8 @@ def fukuoka():
     import json as _json, html as _html
     from shapely.geometry import LineString, Point, MultiLineString
     from shapely.ops import unary_union, polygonize, nearest_points
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/RJFF__*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/RJFF__*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJFF__*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJFF__*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: pdf = f[-1]; break
     else:
@@ -992,8 +994,8 @@ def naha():
     import numpy as np
     from shapely.geometry import LineString, Point, MultiLineString
     from shapely.ops import unary_union, polygonize, nearest_points
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/ROAH__*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/ROAH__*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/ROAH__*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/ROAH__*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: pdf = f[-1]; break
     else:

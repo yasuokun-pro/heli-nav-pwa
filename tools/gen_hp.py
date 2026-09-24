@@ -21,6 +21,8 @@ ICAO位置指示記号を持たないので `ad.json`(AD2/AD3)には入らない
 使い方: python3 tools/gen_hp.py
 """
 import re, os, sys, glob, json, subprocess
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 def dms(la, lo):
     return (round(int(la[0:2]) + int(la[2:4])/60 + float(la[4:])/3600, 5),
@@ -105,10 +107,10 @@ def parse_glider(t):
 
 
 def main():
-    ad1 = latest('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD1_*.pdf') \
-       or latest('~/Downloads/1_AIP (PDF)/*/AD1_*.pdf')
-    enr = latest('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/ENR_*.pdf') \
-       or latest('~/Downloads/1_AIP (PDF)/*/ENR_*.pdf')
+    ad1 = latest(AIP_ROOT + '/1_AIP (PDF)/*/AD1_*.pdf') \
+       or latest(AIP_ROOT + '/1_AIP (PDF)/*/AD1_*.pdf')
+    enr = latest(AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf') \
+       or latest(AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf')
     if not ad1 or not enr:
         print('AIPのPDFが見つかりません', file=sys.stderr); sys.exit(1)
     t1, t2 = txt(ad1), txt(enr)

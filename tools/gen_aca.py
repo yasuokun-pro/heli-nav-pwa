@@ -26,6 +26,8 @@
 使い方: python3 tools/gen_aca.py
 """
 import re, os, sys, glob, json, math, subprocess
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 PT = re.compile(r'\((\d{1,3})\)\s*(\d{6}(?:\.\d+)?)N\s*/?\s*(\d{7}(?:\.\d+)?)E')
 R_EARTH = 6371.0088
@@ -48,8 +50,8 @@ def sph_area(pts):
 
 
 def ad2_dir():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine'):
         d = sorted(glob.glob(os.path.expanduser(pat)))
         if d: return d[-1]
     return None

@@ -46,6 +46,8 @@
 """
 import re, os, sys, glob, math, subprocess
 import numpy as np
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 try:
     from PIL import Image, ImageFilter, ImageDraw
@@ -67,8 +69,8 @@ SHIFT = (42, 22)
 
 
 def rjtt_pdf():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/RJTT__*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: return f[-1]
     return None

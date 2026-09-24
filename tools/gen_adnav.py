@@ -15,6 +15,8 @@ IFRの経路探索で「FIXから評定できる navaid へ飛ぶ」脚を引く
 ⚠ ENR 4.1 と重複するIDはそちらを優先(経路用の公示位置)
 """
 import os, re, sys, json, glob, subprocess
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LAT = re.compile(r'(\d{6}(?:\.\d+)?)N')
@@ -28,8 +30,8 @@ SKIP = {'VOR', 'DME', 'GP', 'ILS', 'LOC', 'NDB', 'MHz', 'KHZ', 'THR', 'RWY', 'EL
 
 
 def pdfs():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f:
             latest = max(os.path.basename(os.path.dirname(os.path.dirname(x))) for x in f)

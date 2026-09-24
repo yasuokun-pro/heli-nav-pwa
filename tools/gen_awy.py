@@ -31,6 +31,8 @@
     ⚠ "← 6000 5000 →" は方向別 MEA。大きい方を mea にして rmk に両方残す
 """
 import os, re, sys, json, glob, subprocess
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COORD = re.compile(r'(\d{6}(?:\.\d+)?)N\s*/?\s*(1\d{6}(?:\.\d+)?)E')
@@ -39,8 +41,8 @@ NAVID = re.compile(r'(VORTAC|VOR/DME|VOR|TACAN|DME|NDB)\s*\(([A-Z]{2,3})\)')
 
 
 def find_pdf():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/ENR_*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/ENR_*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: return f[-1]
     return None

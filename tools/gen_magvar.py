@@ -14,6 +14,8 @@ index.html の MAGV_C に手で貼り替える(数値6個だけなので自動�
 AIRAC更新で偏差がずれてきたら再実行して係数を更新する(年あたり数分角ずつ動く)。
 """
 import re, glob, os, json, subprocess, sys
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 def dms(s):
     m = re.match(r'(\d{2,3})(\d{2})(\d{2}(?:\.\d+)?)', s)
@@ -21,8 +23,8 @@ def dms(s):
 
 def main():
     base = None
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine'):
         d = sorted(glob.glob(os.path.expanduser(pat)))
         if d: base = d[-1]; break
     if not base:

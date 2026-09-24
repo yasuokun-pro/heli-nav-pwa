@@ -11,6 +11,8 @@
 使い方: python3 tools/gen_freq.py [--splice]
 """
 import re, glob, os, json, subprocess, sys
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 def latest(pat):
     d = sorted(glob.glob(os.path.expanduser(pat)))
@@ -38,8 +40,8 @@ def scan(pdf, sec_re):
 
 def main():
     base = None
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine'):
         base = latest(pat)
         if base: break
     if not base:

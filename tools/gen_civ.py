@@ -25,6 +25,8 @@
 AIRAC更新のたびに再実行し、区画数と上限高度の差分を確認すること。
 """
 import re, os, sys, glob, subprocess, json, math
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 # 地域コードは表の見出し(Kanto/Koshinetsu Area (KK) 等)そのまま。
 # KK=関東/甲信越、CK=中部/近畿、CS=中国/四国。字面から推測すると間違える
@@ -179,8 +181,8 @@ def apply_shape(f, nav, log):
 
 def main():
     pdf = None
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/ENR_*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/ENR_*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: pdf = f[-1]; break
     if not pdf:

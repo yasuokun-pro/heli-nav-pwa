@@ -11,11 +11,13 @@ IFR計画の気象欄に <pre> で出して、判断はパイロットに任せ�
 ⚠ 自衛隊・米軍の飛行場(立川・館山・横田など18空港)には無い → "AIPに記載なし"
 """
 import os, re, sys, json, glob, subprocess
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 def pdfs():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*/AD2_Combine/*.pdf',
-                '~/Downloads/1_AIP (PDF)/*/AD2_Combine/*.pdf'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/*.pdf',
+                AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f:
             # ⚠ 日付フォルダが複数あると全AIRACのPDFが混ざる(2026-09 に踏んだ)。最新の日付フォルダだけ

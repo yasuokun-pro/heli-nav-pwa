@@ -11,8 +11,10 @@ OVERRIDE で正確な形状に補正する(natl_ctr.json は素材データ)。
 その後  python3 tools/gen_asp.py --splice で index.html に反映。
 """
 import re, glob, os, json, subprocess, sys
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
-A = next((os.path.expanduser(x) for x in ('~/Downloads/AIP File Download Service/1_AIP (PDF)','~/Downloads/1_AIP (PDF)') if os.path.isdir(os.path.expanduser(x))), os.path.expanduser('~/Downloads/1_AIP (PDF)'))
+A = next((os.path.expanduser(x) for x in (AIP_ROOT + '/1_AIP (PDF)',AIP_ROOT + '/1_AIP (PDF)') if os.path.isdir(os.path.expanduser(x))), os.path.expanduser(AIP_ROOT + '/1_AIP (PDF)'))
 KANTO = {'RJTT','RJAA','RJAH','RJTA','RJTC','RJTJ','RJTY','RJTK','RJTL','RJTE','RJTU','RJTO'}
 # ICAO→和名(AD2から機械抽出できないものを補う)
 JP = {'RJNS':'静岡','RJNY':'静浜','RJSU':'霞目','RJFZ':'築城','RJFA':'芦屋','RJNG':'岐阜',

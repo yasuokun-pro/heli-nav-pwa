@@ -24,6 +24,8 @@
 AIRAC更新のたびに再実行して件数の差分を見る。
 """
 import re, os, sys, glob, json, subprocess
+# AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
+AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 # AIPにページが無いが載せたい飛行場。座標は国土地理院のジオコーダ/地形図から。
 # 滝ヶ原はGEN 2.4に位置指示記号だけがあり、AD 1.3にも載っていない
@@ -70,8 +72,8 @@ def dms(la, lo):
 
 
 def latest_dir():
-    for pat in ('~/Downloads/AIP File Download Service/1_AIP (PDF)/*',
-                '~/Downloads/1_AIP (PDF)/*'):
+    for pat in (AIP_ROOT + '/1_AIP (PDF)/*',
+                AIP_ROOT + '/1_AIP (PDF)/*'):
         d = sorted(glob.glob(os.path.expanduser(pat)))
         d = [x for x in d if os.path.isdir(os.path.join(x, 'AD2_Combine'))]
         if d: return d[-1]
