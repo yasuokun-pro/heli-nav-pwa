@@ -398,6 +398,15 @@
   .fav.on{background:var(--amb);color:#241500;opacity:1;cursor:default}
   /* 保存一覧は全画面(件数が千件を超えるのでポップアップでは見づらい)。IFR 計画と同じ作法 */
   #libModal{position:fixed;inset:0;z-index:2000;background:rgba(4,10,18,.85);display:none;align-items:stretch;justify-content:center}
+  /* IMOC などの外部ページをアプリ内で開く全画面シート(v6-191) */
+  #extView{position:fixed;inset:0;z-index:2100;background:rgba(4,10,18,.9);display:none}
+  #extView .sheet{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--panel);
+    padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+  #extView .evHd{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
+  #extView .evHd b{flex:1;font-size:14px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #extView .evHd .btn{padding:7px 14px}
+  #extView .evNote{font-size:10.5px;color:var(--dim);padding:4px 10px;border-bottom:1px solid var(--line)}
+  #extView iframe{flex:1;width:100%;border:0;background:#fff}
   #libModal .sheet{background:var(--panel);border:1px solid var(--line);width:100%;max-width:760px;height:100%;overflow:auto;padding:0 16px calc(40px + env(safe-area-inset-bottom))}
   #libModal .libHd{display:flex;align-items:center;gap:10px;position:sticky;top:0;background:var(--panel);z-index:2;
     padding:calc(10px + env(safe-area-inset-top)) 0 8px;border-bottom:1px solid var(--line);margin-bottom:10px}
@@ -908,6 +917,16 @@
 
 <div id="printArea"></div>
 
+<div id="extView"><div class="sheet">
+  <div class="evHd">
+    <b id="evTitle">外部ページ</b>
+    <a id="evOpen" class="imoc" href="#" target="_blank" rel="noopener noreferrer">Safariで開く ↗</a>
+    <button id="evClose" class="btn">閉じる</button>
+  </div>
+  <div class="evNote">国際気象海洋(IMOC)のページを<b>そのまま</b>表示しています(アプリはデータを取り込んでいません)。
+    表示されないときは「Safariで開く」。</div>
+  <iframe id="evFrame" referrerpolicy="no-referrer" title="外部ページ"></iframe>
+</div></div>
 <div id="libModal"><div class="sheet">
   <div class="libHd"><h3>保存一覧</h3><button class="btn" id="btnLibClose">閉じる</button></div>
   <div id="libSelBar">
@@ -985,7 +1004,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-190';
+const VER_TAG='v6-191';
 const BUILD='2026-09-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3444,6 +3463,33 @@ function ssUrl(icao){
 function extLink(url,label){
   return `<a class="imoc" href="${url}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`;
 }
+/* IMOC のページは**アプリ内の全画面シート**で開く(v6-191)。Safari に飛んで戻る手間を無くすため。
+   ⚠ 先方(国際気象海洋)からは「URLを掲載してリンクから閲覧するのは問題ない」と回答を得ている(2026-09-15)。
+     アプリ内表示もページを**加工せずそのまま**映すだけで、中身の取り込み・転載はしない(iframe は別オリジンで
+     こちらから中身は読めない)。出典と「Safariで開く」を必ず出すこと。先方が望まなければ IMOC_INAPP=false で元に戻る。
+   ⚠ 先方が埋め込みを禁止する設定(X-Frame-Options 等)を入れたら白紙になる。その時は「Safariで開く」 */
+const IMOC_INAPP=true;
+function openExtView(url,title){
+  const v=document.getElementById('extView');
+  document.getElementById('evTitle').textContent=title||'IMOC';
+  document.getElementById('evOpen').href=url;
+  document.getElementById('evFrame').src=url;
+  v.style.display='block';
+}
+document.getElementById('evClose').onclick=()=>{
+  document.getElementById('extView').style.display='none';
+  document.getElementById('evFrame').src='about:blank';     // 裏で読み込み続けないように
+};
+document.addEventListener('click',e=>{
+  const a=e.target.closest&&e.target.closest('a.imoc');
+  if(!a||!IMOC_INAPP||a.id==='evOpen')return;
+  let host='';try{host=new URL(a.href).hostname}catch(_){}
+  if(!/(^|\.)imoc\.co\.jp$/.test(host))return;               // IMOC 以外(sunny-spot 等)は従来どおり外で開く
+  e.preventDefault();
+  const port=(a.href.match(/Port=([A-Z0-9]{4})/)||[])[1];
+  const ap=port&&ASP.find(x=>x.icao===port);
+  openExtView(a.href,port?`${ap?ap.n+' ':''}(${port}) METAR/TAF — IMOC`:'IMOC METAR/TAF 一覧');
+},true);
 function imocLink(icao,label){
   const u=imocUrl(icao);
   return u?extLink(u,label||'IMOCで見る'):'';
