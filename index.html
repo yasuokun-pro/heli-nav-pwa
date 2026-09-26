@@ -766,6 +766,7 @@
         <button id="btnTfc2">他機</button>
         <button id="btnRain">雨雲</button>
         <button id="btnNtmMap" title="ルート上の飛行場のNOTAM(中継経由)。座標のあるものは円、無いものは飛行場に件数のピン。⚠ 公式ブリーフィングの代わりにはならない">NOTAM</button>
+        <button id="btnDips" title="国交省 DIPS2.0 の飛行計画の確認画面(ドローンの飛行計画・緊急用務空域)をSafariで開く。ログインは各自のアカウントで">DIPS</button>
       </div>
     </div>
     <button id="btnGPS">GPS</button>
@@ -1059,8 +1060,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-192';
-const BUILD='2026-09-24';
+const VER_TAG='v6-193';
+const BUILD='2026-09-26';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -3524,6 +3525,12 @@ function extLink(url,label){
      こちらから中身は読めない)。出典と「Safariで開く」を必ず出すこと。先方が望まなければ IMOC_INAPP=false で元に戻る。
    ⚠ 先方が埋め込みを禁止する設定(X-Frame-Options 等)を入れたら白紙になる。その時は「Safariで開く」 */
 const IMOC_INAPP=true;
+/* DIPS2.0(国交省 ドローン情報基盤システム)の飛行計画の確認画面を開くだけ。v6-193
+   ⚠ データは取り込まない。API は接続元の固定IPの登録・client_secret・申請が要り、今の無料構成では使えない
+     (BACKLOG 参照)。ログインが要るので iframe でなく外(Safari)で開く。ID はアプリに持たない。
+   ⚠ DIPS は同じアカウントでの複数端末同時ログインを禁じている。アカウントは1人1つ */
+const DIPS_URL='https://www.uafpi.dips.mlit.go.jp/fpl/?lang=ja';
+document.getElementById('btnDips').onclick=()=>window.open(DIPS_URL,'_blank','noopener');
 function openExtView(url,title){
   const v=document.getElementById('extView');
   document.getElementById('evTitle').textContent=title||'IMOC';
