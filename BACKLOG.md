@@ -402,6 +402,9 @@ N11(平成25年)の同県分は index.html 側で丸ごと差し替える。
   予約済みIP dips-proxy-ip・セキュリティリストに TCP 3129 を追加。**PAYG への切替はアカウントのプロビジョニング完了待ち**。
   固定IP **155.248.186.170** を VNIC に付与・setup.sh 実行済み。実機で確認: 送信元=固定IP / DIPS検証環境まで到達 /
   合言葉なし・違い=407 / DIPS以外=403。Vercel に入れる値は `aip/_secrets/dips-vercel-env.txt`(gitignore・600)。
+- **2026-09-28 検証環境の API 利用申請を送信済み**(申請書は aip/docs/申請書_記入済み/)。返信待ち(最大1か月)。
+  次: ①Oracle のプロビジョニング完了メール → PAYG へ切替(7日以内に) ②承認・Client ID/Secret が届いたら Vercel に
+  DIPS_PROXY / DIPS_PROXY_CA / DIPS_ENV=stg / DIPS_CLIENT_ID / DIPS_CLIENT_SECRET / DIPS_REDIRECT を利用者が入れる ③アプリの DIPS レイヤー
   ⚠ 検証で最初に確かめること: iPhone のホーム画面版(PWA)でログイン後にアプリへ戻れるか・リフレッシュトークンの実際の寿命(scope に offline_access)
 - **2026-09-26 無人航空機安全課へ問い合わせ送信済み(Gmail)**: ①個人で申請できるか ②固定IPの登録は必須か ③本人の画面にだけ出す使い方で規約上問題ないか。
   返信待ち。固定IP不要なら Vercel の中継のまま。必須なら VM(Oracle 無料)は**DIPS宛ての通信を固定IPから出すだけ**にし、
