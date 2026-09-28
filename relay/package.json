@@ -1,5 +1,8 @@
 {
   "name": "heli-nav-adsb-relay",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "undici": "^6.21.0"
+  }
 }
