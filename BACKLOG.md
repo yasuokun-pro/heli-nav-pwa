@@ -398,6 +398,8 @@ N11(平成25年)の同県分は index.html 側で丸ごと差し替える。
 - **2026-09-28 着手**: 中継 `relay/api/dips.js`(デプロイ済み・env 未設定なので 503)、VM 設定 `tools/dips-proxy/`(手順は README)、
   申請書の下書き(aip/docs/申請書_記入済み/・IP・郵便番号・住所・電話・日付が空欄)、SSH 鍵 ~/.ssh/heli_nav_oci。
   次: ①利用者が Oracle アカウント作成(東京・PAYG・予算アラート) ②VM と予約済みIP ③申請 ④アプリの DIPS レイヤー(検証環境で)
+- **2026-09-28 Oracle**: テナンシ helinav-relay(東京)・予算アラート zero-alert(1・実績100%・メール)・VM dips-proxy(E2.1.Micro・Ubuntu 24.04 Minimal)・
+  予約済みIP dips-proxy-ip・セキュリティリストに TCP 3129 を追加。**PAYG への切替はアカウントのプロビジョニング完了待ち**。
   ⚠ 検証で最初に確かめること: iPhone のホーム画面版(PWA)でログイン後にアプリへ戻れるか・リフレッシュトークンの実際の寿命(scope に offline_access)
 - **2026-09-26 無人航空機安全課へ問い合わせ送信済み(Gmail)**: ①個人で申請できるか ②固定IPの登録は必須か ③本人の画面にだけ出す使い方で規約上問題ないか。
   返信待ち。固定IP不要なら Vercel の中継のまま。必須なら VM(Oracle 無料)は**DIPS宛ての通信を固定IPから出すだけ**にし、
