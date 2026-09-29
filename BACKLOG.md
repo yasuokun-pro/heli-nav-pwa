@@ -404,6 +404,7 @@ N11(平成25年)の同県分は index.html 側で丸ごと差し替える。
   合言葉なし・違い=407 / DIPS以外=403。Vercel に入れる値は `aip/_secrets/dips-vercel-env.txt`(gitignore・600)。
 - **2026-09-28 検証環境の API 利用申請を送信済み**(申請書は aip/docs/申請書_記入済み/)。返信待ち(最大1か月)。
   **2026-09-29 受理の返信: 検証環境の設定作業は 10/14(水)予定**。完了したら DIPS 担当から連絡(Client ID/Secret 等)が来る。
+  **2026-09-29 アプリ側の DIPS レイヤーを実装(v6-194)**。中継を模したテストで ログイン戻り・refresh・描画・一覧を確認。実データでの確認は 10/14 以降。
   次: ①Oracle のプロビジョニング完了メール → PAYG へ切替(7日以内に) ②承認・Client ID/Secret が届いたら Vercel に
   DIPS_PROXY / DIPS_PROXY_CA / DIPS_ENV=stg / DIPS_CLIENT_ID / DIPS_CLIENT_SECRET / DIPS_REDIRECT を利用者が入れる ③アプリの DIPS レイヤー
   ⚠ 検証で最初に確かめること: iPhone のホーム画面版(PWA)でログイン後にアプリへ戻れるか・リフレッシュトークンの実際の寿命(scope に offline_access)
