@@ -55,10 +55,10 @@ export function preflight(request) {
    ⚠ 位置と合言葉を URL に入れると、Vercel の実行ログなどにそのまま残る。本文なら残らない(v6-178)。
      アプリは Content-Type: text/plain で送る(CORS の事前確認が要らない単純リクエストになる)。
    ⚠ GET(URL の ? 以降)は古い版のアプリのために当面残している。全端末が更新されたら外す。 */
-async function paramsOf(request) {
+async function paramsOf(request, maxLen = 4000) {
   if (request.method === 'POST') {
     const t = await request.text();
-    if (t.length > 4000) return null;
+    if (t.length > maxLen) return null;
     let o;
     try { o = JSON.parse(t || '{}'); } catch (e) { return null; }
     if (!o || typeof o !== 'object') return null;
@@ -69,12 +69,12 @@ async function paramsOf(request) {
 }
 
 /* 通れば { H, p } を、止めるなら { H, deny } を返す。p.get('lat') のように読む */
-export async function check(request, overLimit) {
+export async function check(request, overLimit, maxLen) {
   const origin = request.headers.get('origin') || '';
   const ok = ALLOW.includes(origin);
   const H = corsHeaders(origin, ok);
   if (!ok) return { H, deny: json({ error: 'origin' }, 403, H) };
-  const p = await paramsOf(request);
+  const p = await paramsOf(request, maxLen);
   if (!p) return { H, deny: json({ error: 'body' }, 400, H) };
   const key = process.env.RELAY_KEY;
   // ⚠ RELAY_KEY 未設定のときは誰も通さない(設定し忘れて素通しになるのを防ぐ)

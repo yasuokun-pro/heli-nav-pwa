@@ -529,6 +529,29 @@
   #emAsp b{font-family:var(--mono);color:var(--grn)}
   #emAsp .edge{color:var(--amb)}
   .emNote{font-size:10px;color:var(--dim);margin-top:6px}
+  /* DIPS(v6-194) ドローンの飛行計画 */
+  #dipsCard{position:absolute;z-index:974;left:56px;right:12px;top:calc(var(--ovlH) + 8px);max-width:480px;
+    background:rgba(18,8,26,.96);border:2px solid #c77dff;border-radius:10px;padding:8px 10px;display:none;
+    box-shadow:0 6px 22px rgba(0,0,0,.6);max-height:calc(100% - var(--ovlH) - 24px);overflow-y:auto}
+  #dipsCard .emHd{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  #dipsCard .emHd b{color:#c77dff;font:700 13px var(--mono)}
+  #dpHd{cursor:pointer}#dipsCard.min #dpBody{display:none}#dipsCard.min .emHd{margin-bottom:0}
+  #dipsCard.min .emrFold{display:inline-block;transform:rotate(-90deg)}
+  #dipsCard .dpRow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;margin:6px 0}
+  #dipsCard select{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:5px;padding:4px;font-size:12px}
+  #dipsCard .dpBtn{background:none;border:1px solid #c77dff;color:#c77dff;border-radius:6px;padding:6px 12px;font:700 12px var(--mono);cursor:pointer}
+  #dipsCard .dpBtn.main{background:#c77dff;color:#1a0b24}
+  #dpAuth{font-size:12px;line-height:1.5}
+  #dpMsg{font-size:11.5px;color:var(--amb);margin:4px 0}
+  #dpList{border-top:1px solid rgba(255,255,255,.1);margin-top:4px}
+  #dpList .dpIt{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06);
+    font-size:12px;cursor:pointer;align-items:center}
+  #dpList .dpIt .t{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap}
+  #dpList .dpIt.now .t{color:#ff6b6b;font-weight:700}
+  #dpList .dpIt .a{font-family:var(--mono);color:#c77dff;white-space:nowrap}
+  .dpPop h5{margin:0 0 3px;color:#c77dff}.dpPop .w{color:#ff6b6b;font-weight:700}
+  .dpPop table{border-collapse:collapse;font-size:11.5px}.dpPop td{padding:1px 6px 1px 0;vertical-align:top}
+  .dpPop td:first-child{color:var(--dim);white-space:nowrap}
   .leaflet-tooltip.emTip{background:rgba(24,8,8,.92);color:#fff;border:1px solid var(--red);font-size:11px;padding:2px 6px}
   #emSetBox{border-top:1px solid rgba(255,255,255,.12);margin-top:6px;padding-top:6px;font-size:12px}
   #emSetBox label{display:flex;gap:6px;align-items:center;padding:3px 0}
@@ -767,7 +790,7 @@
         <button id="btnTfc2">他機</button>
         <button id="btnRain">雨雲</button>
         <button id="btnNtmMap" title="ルート上の飛行場のNOTAM(中継経由)。座標のあるものは円、無いものは飛行場に件数のピン。⚠ 公式ブリーフィングの代わりにはならない">NOTAM</button>
-        <button id="btnDips" title="国交省 DIPS2.0 の飛行計画の確認画面(ドローンの飛行計画・緊急用務空域)をSafariで開く。ログインは各自のアカウントで">DIPS</button>
+        <button id="btnDips" title="国交省 DIPS2.0 に通報されたドローンの飛行計画と緊急用務空域・有人機離発着エリア(中継経由)。ログインは各自の DIPS アカウントで">DIPS</button>
       </div>
     </div>
     <button id="btnGPS">GPS</button>
@@ -787,6 +810,19 @@
     <div class="emrTh">飛行場まで <input id="emrT1" type="number" min="1" max="60" step="1">NM超 /
       降りられる所まで <input id="emrT3" type="number" min="0.5" max="10" step="0.5">NM超 を色で示す</div>
     <div id="emrBody"></div>
+  </div>
+  <div id="dipsCard">
+    <div class="emHd" id="dpHd"><b>DIPS ドローン飛行計画 <span class="emrFold">▾</span></b><span id="dpSum"></span><button id="dpOff">閉じる</button></div>
+    <div id="dpBody">
+      <div id="dpAuth"></div>
+      <div class="dpRow" id="dpQuery">範囲 <select id="dpWhere"><option value="rte">ルート沿い(±5NM)</option><option value="map">地図の表示範囲</option></select>
+        時間 <select id="dpWhen"><option value="3">今から3時間</option><option value="today">今日</option><option value="tmr">明日</option></select>
+        <button class="dpBtn main" id="dpGo">取得</button></div>
+      <div id="dpMsg"></div>
+      <div id="dpList"></div>
+      <div class="emNote">DIPSに<b>通報された</b>計画だけ。通報されない飛行・計画と違う飛行もある。<b>見張りの代わりにはならない</b>。
+        取得した計画はこの画面に出すだけで保存しない。 <a id="dpSite" target="_blank" rel="noopener" style="color:#c77dff">DIPSのサイトで見る↗</a></div>
+    </div>
   </div>
   <div id="dctCard">
     <h4>D→ <span id="dctName" style="margin-left:6px"></span><button id="dctOff">解除</button></h4>
@@ -1061,8 +1097,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-193';
-const BUILD='2026-09-26';
+const VER_TAG='v6-194';
+const BUILD='2026-09-29';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -3536,12 +3572,210 @@ function extLink(url,label){
      こちらから中身は読めない)。出典と「Safariで開く」を必ず出すこと。先方が望まなければ IMOC_INAPP=false で元に戻る。
    ⚠ 先方が埋め込みを禁止する設定(X-Frame-Options 等)を入れたら白紙になる。その時は「Safariで開く」 */
 const IMOC_INAPP=true;
-/* DIPS2.0(国交省 ドローン情報基盤システム)の飛行計画の確認画面を開くだけ。v6-193
-   ⚠ データは取り込まない。API は接続元の固定IPの登録・client_secret・申請が要り、今の無料構成では使えない
-     (BACKLOG 参照)。ログインが要るので iframe でなく外(Safari)で開く。ID はアプリに持たない。
-   ⚠ DIPS は同じアカウントでの複数端末同時ログインを禁じている。アカウントは1人1つ */
+/* ───────── DIPS レイヤー(v6-194) ─────────
+   DIPS2.0 に通報されたドローンの飛行計画と、緊急用務空域・有人機離発着エリアを地図に重ねる。
+   中継 relay/api/dips.js → 固定IPの VM(tools/dips-proxy/) → DIPS。仕組みと申請の経緯は BACKLOG の DIPS 項目。
+   ⚠ ログインは**各自の DIPS アカウント**(OIDC 認可コード)。ID・パスワードはアプリに持たない。
+     ログイン画面から戻ってきた ?code=&state= を中継に渡してトークンに替える。state は hnav.dipsState で照合(15分)。
+   ⚠ トークン(hnav.dipsTok)はこの端末の localStorage だけ。端末データの書出(BK_KEYS)には**入れない**。
+     アクセストークンは5分。切れる30秒前か 401 expired で refresh する。refresh も切れたら(401 relogin)ログインし直し。
+   ⚠ **取得した計画は保存しない**(メモリの dipsData だけ)。他人の計画なので、ログインした本人の画面に出すだけにする
+     (DIPS 担当に説明済み・2026-09-28)。中継側で氏名・連絡先などは落としてある。
+   ⚠ DIPS は同じアカウントでの複数端末同時ログインを禁じている。アカウントは1人1つ。
+   ⚠ 中継の DIPS 設定(環境変数)が無いうちは 503 key。そのときは DIPS のサイトを開く従来の動きを案内する */
 const DIPS_URL='https://www.uafpi.dips.mlit.go.jp/fpl/?lang=ja';
-document.getElementById('btnDips').onclick=()=>window.open(DIPS_URL,'_blank','noopener');
+const DIPS_TOK='hnav.dipsTok',DIPS_ST='hnav.dipsState';
+var dipsOn=false,dipsLayer=L.layerGroup(),dipsData=null,dipsAt=0,dipsBusy=false,dipsTimer=null;
+const DIPS_POP={maxWidth:290,autoPanPaddingBottomRight:L.point(8,90)};
+/* ⚠ 吹き出しがカード(z-index 974)の下に隠れる。開いたらカードを畳み、それでも重なる分だけ地図を下へずらす
+   (autoPanPadding は地図の枠からの余白なので、上に重なっている諸元の帯とカードの高さを知らない) */
+map.on('popupopen',e=>{
+  const el=e.popup.getElement();if(!dipsOn||!el||!el.querySelector('.dpPop'))return;
+  const card=document.getElementById('dipsCard');card.classList.add('min');
+  requestAnimationFrame(()=>{const top=el.getBoundingClientRect().top,cb=card.getBoundingClientRect().bottom+8;
+    if(top<cb)map.panBy([0,-(cb-top)])});
+});
+document.getElementById('dpSite').href=DIPS_URL;
+function dipsTok(){const t=store.get(DIPS_TOK);return t&&t.rt?t:null}
+function dipsLoggedIn(){const t=dipsTok();return !!t&&(!t.rtExp||t.rtExp>Date.now()+5000)}
+function dipsErrText(e){
+  const m=String((e&&e.message)||e);
+  if(/中継が未設定/.test(m))return '中継が未設定です(他機情報タブの中継設定)';
+  if(/^503 key/.test(m))return '中継側の DIPS 設定がまだです(航空局の設定作業のあとで有効になります)';
+  if(/^401 relogin|^login$/.test(m))return 'DIPS のログインが切れました。もう一度ログインしてください';
+  if(/^429/.test(m))return '取得の回数が多すぎます。1分ほど待ってください';
+  return m;
+}
+function dipsMsg(t){document.getElementById('dpMsg').textContent=t||''}
+function dipsJst(d){const j=new Date(d.getTime()+9*3600e3),p=n=>String(n).padStart(2,'0');
+  return `${j.getUTCFullYear()}${p(j.getUTCMonth()+1)}${p(j.getUTCDate())} ${p(j.getUTCHours())}${p(j.getUTCMinutes())}`}
+/* DIPS の時刻は2通り: 飛行計画 'yyyyMMdd HHmm' / 飛行禁止エリア 'yyyy-MM-ddTHH:mm:ss'(どちらも日本時間) */
+function dipsTime(s){
+  let m=String(s||'').match(/^(\d{4})(\d\d)(\d\d) (\d\d)(\d\d)$/)||String(s||'').match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/);
+  return m?new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4]-9,+m[5])):null;
+}
+function dipsFmt(s){const d=dipsTime(s);if(!d)return '?';const j=new Date(d.getTime()+9*3600e3),p=n=>String(n).padStart(2,'0');
+  return `${j.getUTCMonth()+1}/${j.getUTCDate()} ${p(j.getUTCHours())}:${p(j.getUTCMinutes())}`}
+function dipsWindow(){
+  const v=document.getElementById('dpWhen').value,now=new Date();
+  if(v==='3')return {from:dipsJst(now),to:dipsJst(new Date(now.getTime()+3*3600e3))};
+  const d0=dipsJst(new Date(now.getTime()+(v==='tmr'?86400e3:0))).slice(0,8);
+  return {from:d0+' 0000',to:d0+' 2359'};
+}
+/* 探す範囲: ルート沿いは円を並べて左右5NMの帯を覆う(最大8円)。無ければ地図の表示範囲(半径27NMまで) */
+function dipsCircles(){
+  if(document.getElementById('dpWhere').value==='rte'&&wps.length>=2){
+    const seg=[];let L0=0;
+    for(let i=0;i<wps.length-1;i++){const d=distNM(wps[i],wps[i+1]);seg.push([wps[i],wps[i+1],L0,d]);L0+=d}
+    const n=Math.min(8,Math.max(2,Math.ceil(L0/8)+1)),step=L0/(n-1),r=Math.min(27,Math.sqrt(25+(step/2)**2));
+    const out=[];
+    for(let k=0;k<n;k++){
+      const s=k*step,g=seg.find(x=>s<=x[2]+x[3]+1e-9)||seg[seg.length-1],f=g[3]?Math.min(1,(s-g[2])/g[3]):0;
+      out.push({lat:g[0].lat+(g[1].lat-g[0].lat)*f,lon:g[0].lng+(g[1].lng-g[0].lng)*f,r});
+    }
+    return out;
+  }
+  const b=map.getBounds(),c=b.getCenter();
+  return [{lat:c.lat,lon:c.lng,r:Math.max(1,Math.min(27,distNM({lat:c.lat,lng:c.lng},{lat:b.getNorth(),lng:b.getEast()})))}];
+}
+async function dipsCall(body){return relayPost('/api/dips',body)}
+async function dipsAccess(force){
+  const t=dipsTok();if(!t)throw new Error('login');
+  if(!force&&t.at&&t.atExp-Date.now()>30000)return t.at;
+  try{const n=await dipsCall({op:'refresh',rt:t.rt});store.set(DIPS_TOK,n);return n.at}
+  catch(e){if(/^401/.test(e.message))store.del(DIPS_TOK);throw e}
+}
+async function dipsApi(body){
+  let at=await dipsAccess(false);
+  try{return await dipsCall(Object.assign({},body,{at}))}
+  catch(e){if(/^401 expired/.test(e.message)){at=await dipsAccess(true);return dipsCall(Object.assign({},body,{at}))}throw e}
+}
+async function dipsLogin(){
+  dipsMsg('DIPS のログイン画面を開いています…');
+  try{
+    const c=await dipsCall({op:'cfg'});
+    const st=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
+    store.set(DIPS_ST,{s:st,t:Date.now()});
+    location.href=c.authUrl+'?'+new URLSearchParams({response_type:'code',client_id:c.clientId,redirect_uri:c.redirect,
+      scope:'openid offline_access',state:st,ui_locales:'ja'});
+  }catch(e){dipsMsg(dipsErrText(e))}
+}
+/* ログイン画面から戻ってきたとき(init から呼ぶ)。コードは1回しか使えないので、まず URL から消す */
+async function dipsCallback(){
+  let q;try{q=new URLSearchParams(location.search)}catch(e){return}
+  const code=q.get('code'),st=q.get('state'),err=q.get('error');
+  if(!st||(!code&&!err))return;
+  try{history.replaceState(null,'',location.pathname)}catch(e){}
+  const s=store.get(DIPS_ST);store.del(DIPS_ST);
+  if(err){toast('DIPS のログインが中止されました('+err+')');return}
+  if(!s||s.s!==st||Date.now()-s.t>15*60000){
+    toast('DIPS のログインを確かめられませんでした(時間が経ちすぎたか、別の画面で開いた)。もう一度ログインしてください');return}
+  try{store.set(DIPS_TOK,await dipsCall({op:'token',code}));toast('DIPS にログインしました');setDips(true)}
+  catch(e){toast('DIPS のログインに失敗しました: '+dipsErrText(e))}
+}
+function dipsLogout(){store.del(DIPS_TOK);dipsData=null;dipsLayer.clearLayers();dipsRender();dipsMsg('ログアウトしました(この端末のトークンを消しました)')}
+async function dipsFetch(){
+  if(dipsBusy)return;
+  if(!dipsLoggedIn()){dipsRender();return}
+  dipsBusy=true;dipsMsg('取得中…');
+  try{
+    const w=dipsWindow(),cs=dipsCircles(),plans=new Map();let areas=[],trunc=false;
+    for(const c of cs){                                         // 中継の回数制限(1分20回)があるので順に投げる
+      const o=await dipsApi({op:'plans',lat:c.lat.toFixed(5),lon:c.lon.toFixed(5),r:c.r.toFixed(2),from:w.from,to:w.to});
+      (o.plans||[]).forEach(x=>plans.set(x.id||JSON.stringify(x.c||x.p),x));
+      if(o.n>(o.plans||[]).length)trunc=true;
+    }
+    // 緊急用務空域・有人機離発着エリアは広いので、範囲全体を1回で(中心と半径は円の外接)
+    const la=cs.reduce((s,c)=>s+c.lat,0)/cs.length,lo=cs.reduce((s,c)=>s+c.lon,0)/cs.length;
+    const R=Math.min(27,Math.max(...cs.map(c=>distNM({lat:la,lng:lo},{lat:c.lat,lng:c.lon})+c.r)));
+    areas=(await dipsApi({op:'areas',lat:la.toFixed(5),lon:lo.toFixed(5),r:R.toFixed(2),from:w.from,to:w.to})).areas||[];
+    dipsData={plans:[...plans.values()],areas,w,trunc};dipsAt=Date.now();
+    dipsMsg(trunc?'⚠ 件数が多く一部だけ表示しています。範囲を狭めてください':'');
+  }catch(e){dipsMsg(dipsErrText(e));if(!dipsTok())dipsData=null}
+  finally{dipsBusy=false;dipsDraw();dipsRender()}
+}
+function dipsPlanNow(x){const a=dipsTime(x.from),b=dipsTime(x.to),t=Date.now();return a&&b&&a<=t&&t<=b}
+const DIPS_TYP={3:'夜間',4:'目視外',5:'危険物輸送',6:'物件投下',1:'人・物件から30m未満',2:'催し場所上空'};
+function dipsPlanPop(x){
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const ft=x.altM?Math.round(x.altM*3.281/10)*10:null;
+  const flags=[...(x.asp||[]).map(n=>({1:'DID上空',2:'150m以上',3:'空港等周辺'})[n]),...(x.typ||[]).map(n=>DIPS_TYP[n])].filter(Boolean);
+  const rows=[['時間',`${dipsFmt(x.from)} 〜 ${dipsFmt(x.to)}`+(dipsPlanNow(x)?' <span class="w">飛行予定時間中</span>':'')],
+    ['高度',x.altM?`${x.altM}m (約${ft}ft) AGL`:'—'],['目的',(x.pur||[]).join('・')||'—'],
+    ['形態',flags.join('・')||'—'],['速度',x.kmh?`${x.kmh}km/h (約${Math.round(x.kmh/1.852)}kt)`:'—'],
+    ['範囲',x.c?`半径${Math.round(x.r)}m`:'多角形'],['出発/到着',[x.dep,x.dst].filter(Boolean).map(esc).join(' → ')||'—']];
+  if(x.moor)rows.push(['','係留飛行']);
+  return `<div class="dpPop"><h5>${esc(x.nm||'(名称なし)')}</h5><table>`+
+    rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')+'</table>'+
+    '<div style="font-size:10px;color:var(--dim);margin-top:3px">DIPS に通報された計画(実際の飛行とは違うことがある)</div></div>';
+}
+function dipsDraw(){
+  dipsLayer.clearLayers();
+  if(!dipsOn||!dipsData)return;
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  dipsData.areas.forEach(a=>{
+    const col=a.t===9?'#ff3b30':'#4dabf7',opt={color:col,weight:2,dashArray:a.t===9?null:'6,4',fillColor:col,fillOpacity:.1};
+    const pop=`<div class="dpPop"><h5 style="color:${col}">${esc(a.tn)}</h5>${esc(a.nm)}<br>`+
+      `<span style="color:var(--dim)">${dipsFmt(a.from)} 〜 ${dipsFmt(a.to)}</span>`+
+      (a.url?`<br><a href="${esc(a.url)}" target="_blank" rel="noopener">詳しく↗</a>`:'')+'</div>';
+    (a.c?L.circle(a.c,Object.assign({radius:a.r},opt)):L.polygon(a.p,opt)).bindPopup(pop,DIPS_POP).addTo(dipsLayer);
+  });
+  dipsData.plans.forEach(x=>{
+    const now=dipsPlanNow(x),col=now?'#ff5ad8':'#c77dff';
+    const opt={color:col,weight:now?2.5:1.5,dashArray:now?null:'4,3',fillColor:col,fillOpacity:now?.22:.1};
+    const lyr=x.c?L.circle(x.c,Object.assign({radius:Math.max(x.r,20)},opt)):L.polygon(x.p,opt);
+    lyr.bindPopup(dipsPlanPop(x),DIPS_POP).addTo(dipsLayer);
+    // 範囲が数十mだと引いた地図では見えないので、中心に点も打つ
+    const ctr=x.c||lyr.getBounds().getCenter();
+    L.circleMarker(ctr,{radius:now?6:4.5,color:col,weight:2,fillColor:'#1a0b24',fillOpacity:1})
+      .bindPopup(dipsPlanPop(x),DIPS_POP).addTo(dipsLayer);
+  });
+  if(routeLine&&routeLine.bringToFront)routeLine.bringToFront();
+}
+function dipsRender(){
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const au=document.getElementById('dpAuth'),li=dipsLoggedIn();
+  au.innerHTML=li?`DIPS にログイン中 <button class="dpBtn" id="dpOut" style="margin-left:6px">ログアウト</button>`
+    :`各自の <b>DIPS アカウント</b>でログインすると、通報されたドローンの飛行計画を地図に出します。`+
+     `ID・パスワードはアプリに保存しません。<br><button class="dpBtn main" id="dpIn" style="margin-top:6px">DIPS にログイン</button>`;
+  if(li)document.getElementById('dpOut').onclick=dipsLogout; else document.getElementById('dpIn').onclick=dipsLogin;
+  document.getElementById('dpQuery').style.display=li?'':'none';
+  const sum=document.getElementById('dpSum'),list=document.getElementById('dpList');
+  if(!li||!dipsData){sum.textContent='';list.innerHTML='';return}
+  const P=dipsData.plans.slice().sort((a,b)=>(dipsTime(a.from)||0)-(dipsTime(b.from)||0));
+  const nNow=P.filter(dipsPlanNow).length,ar=dipsData.areas;
+  sum.textContent=`計画 ${P.length}件`+(nNow?`(うち時間中 ${nNow})`:'')+(ar.length?` ・ 空域 ${ar.length}`:'')+
+    ` ・ ${new Date(dipsAt).toTimeString().slice(0,5)}取得`;
+  list.innerHTML=(ar.map((a,i)=>`<div class="dpIt" data-a="${i}"><span class="t">${dipsFmt(a.from)}〜</span>`+
+      `<span style="color:${a.t===9?'#ff6b6b':'#74c0fc'}">${esc(a.tn)}: ${esc(a.nm)}</span><span></span></div>`).join('')+
+    P.slice(0,60).map((x,i)=>`<div class="dpIt${dipsPlanNow(x)?' now':''}" data-p="${i}"><span class="t">${dipsFmt(x.from)}〜${dipsFmt(x.to).slice(-5)}</span>`+
+      `<span>${esc(x.nm||'(名称なし)')}<small style="color:var(--dim)"> ${esc((x.pur||[]).join('・'))}</small></span>`+
+      `<span class="a">${x.altM?Math.round(x.altM*3.281/10)*10+'ft':''}</span></div>`).join(''))||
+    '<div style="color:var(--dim);font-size:12px;padding:6px 0">この範囲・時間に通報された計画はありません(DIPS に通報されたものの中では)</div>';
+  list.querySelectorAll('.dpIt').forEach(el=>el.onclick=()=>{
+    const x=el.dataset.p!=null?P[+el.dataset.p]:ar[+el.dataset.a];if(!x)return;
+    const c=x.c||L.polygon(x.p).getBounds().getCenter();
+    map.setView(c,Math.max(map.getZoom(),13),{animate:false});
+    L.popup(DIPS_POP).setLatLng(c).setContent(el.dataset.p!=null?dipsPlanPop(x):
+      `<div class="dpPop"><h5>${esc(x.tn)}</h5>${esc(x.nm)}</div>`).openOn(map);
+    document.getElementById('dipsCard').classList.add('min');
+  });
+}
+function setDips(on){
+  dipsOn=on;
+  document.getElementById('btnDips').classList.toggle('on',on);
+  document.getElementById('dipsCard').style.display=on?'block':'none';
+  clearInterval(dipsTimer);dipsTimer=null;
+  if(!on){map.removeLayer(dipsLayer);dipsLayer.clearLayers();return}
+  dipsLayer.addTo(map);dipsRender();
+  if(dipsLoggedIn()&&(!dipsData||Date.now()-dipsAt>5*60000))dipsFetch(); else dipsDraw();
+  // 出している間は10分ごとに取り直す(画面が隠れているときはしない)
+  dipsTimer=setInterval(()=>{if(dipsOn&&!document.hidden&&dipsLoggedIn())dipsFetch()},10*60000);
+}
+document.getElementById('btnDips').onclick=()=>setDips(!dipsOn);
+document.getElementById('dpOff').onclick=e=>{e.stopPropagation();setDips(false)};
+document.getElementById('dpHd').addEventListener('click',e=>{if(e.target.id!=='dpOff')document.getElementById('dipsCard').classList.toggle('min')});
+document.getElementById('dpGo').onclick=dipsFetch;
 function openExtView(url,title){
   const v=document.getElementById('extView');
   document.getElementById('evTitle').textContent=title||'IMOC';
@@ -7117,6 +7351,7 @@ function fixLogHead(){
 (function init(){
   setScreen('main');applyHud(); // 起動はメイン(地図)画面+前回選んだ段
   pinFromParams();               // 共有・URLパラメータで渡された地点にピン
+  dipsCallback();                // DIPS のログイン画面から戻ってきたとき(?code=&state=)
   const va=store.get('hnav.varAuto');
   varAuto=(va===null||va===undefined)?true:!!va;
   document.getElementById('btnVarAuto').classList.toggle('on',varAuto);
