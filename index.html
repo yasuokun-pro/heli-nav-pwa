@@ -1097,7 +1097,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-203';
+const VER_TAG='v6-204';
 const BUILD='2026-10-01';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7031,7 +7031,12 @@ function wxLine(icao){
 let PROC=null;
 async function loadProc(){if(PROC)return PROC;try{const r=await fetch('proc.json?v='+VER_TAG);PROC=await r.json()}catch(e){PROC={f:[]}}return PROC}
 
-document.getElementById('ifrPlan').onclick=async function(){
+/* SID を選び直したら、その SID から始まる経路に組み直す(v6-204)。ifrForceSid = {dep, n(方式名)}。
+   「計画を作る」を押し直すと自動の選択に戻る */
+let ifrForceSid=null;
+document.getElementById('ifrPlan').onclick=()=>ifrRunPlan(false);
+async function ifrRunPlan(keepForce){
+  if(!keepForce)ifrForceSid=null;
   ifrSaveInputs();
   const out=document.getElementById('ifrOut');out.innerHTML='<div class="hint">計算中…</div>';
   const ac=acftGet(),mn=ifrMinGet();
@@ -7048,10 +7053,23 @@ document.getElementById('ifrPlan').onclick=async function(){
   if(badVia.length){out.innerHTML=`<div class="ifrWarn">経由FIXが航空路上に無い: ${badVia.join(' ')}(航空路に乗っていない点は経由に使えない)</div>`;return}
   const sid=procList(dep.icao,'SID',ac),star=procList(dst.icao,'STAR',ac),iac=procList(dst.icao,'IAC',ac),iacA=alt?procList(alt.icao,'IAC',ac):[];
   const starA=alt?procList(alt.icao,'STAR',ac):[];
-  let kd=ifrLinkAp(G,dep,'SID',sid,ac),kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);
+  // 選び直した SID があれば、出発飛行場はその方式だけで経路網に繋ぐ
+  const fs=ifrForceSid&&ifrForceSid.dep===dep.icao?sid.filter(x=>x.p.n===ifrForceSid.n):null;
+  let forceMsg='';
+  const sidUse=fs&&fs.length?fs:sid;
+  let kd=ifrLinkAp(G,dep,'SID',sidUse,ac),kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);
   let R=ifrRoute(G,kd,kt,vias);
   if(R.err&&cap){          // 上限内では繋がらない → 上限を外してもう一度(高度の警告で知らせる)
-    G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
+    G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sidUse,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
+  }
+  if(fs&&fs.length){
+    const via=R.legs&&R.legs[0]&&R.legs[0].e.proc&&R.legs[0].e.proc.p.n===ifrForceSid.n;
+    if(R.err||!via){        // その SID の終点が経路網に繋がっていない(横田 TIMAP など) → 自動に戻す
+      forceMsg=`<div class="ifrWarn">⚠ 選んだ SID「${ifrForceSid.n}」の終点から先の経路が作れないので、自動の選択に戻した</div>`;
+      ifrForceSid=null;G=ifrGraph(ac,cap);capOff=false;
+      kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
+      if(R.err&&cap){G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias)}
+    }else forceMsg=`<div class="hint" style="color:var(--cyn)">SID「${ifrForceSid.n}」から始まる経路に組み直した(自動の選択に戻すには「計画を作る」)</div>`;
   }
   if(R.err){out.innerHTML=`<div class="ifrWarn">${R.err}</div>`;return}
   // 経路の最後が IAF ならその進入方式を選ぶ(そうでなければ ILS>RNP>… の優先順)。代替の起点に使うので先に決める
@@ -7091,8 +7109,9 @@ document.getElementById('ifrPlan').onclick=async function(){
   ifrPlanRes={dep,dst,alt,legs:R.legs,legsA:RA?RA.legs:null,G,CA,wind,asg:sv.asg||0,sidD:sv.sidD||0,sidTrack,rwy:rwySel,sel:{sid:sidSel,
     star:(pr(R.legs[R.legs.length-1])&&pr(R.legs[R.legs.length-1]).p.k==='STAR')?pr(R.legs[R.legs.length-1]):(star.find(x=>x.ok===1)||null),iac:selIac,iacA:selIacA}};
   renderIfrOut({ac,mn,dep,dst,alt,R,RA,CA,ff,fob,tas,sid,star,iac,iacA});
+  if(forceMsg)document.getElementById('ifrOut').insertAdjacentHTML('afterbegin',forceMsg);
   document.getElementById('ifrToMap').disabled=false;
-};
+}
 function fixBrg(n){const f=FIX&&FIX._ix[n];return f&&f.brg?f.brg.replace(/, /g,'<br>'):''}
 /* ── レグごとの風・WCA・MH・CH・GS・ETE(IFRログ) ──
    風は「共通の風」を土台に、レグごとに上書きできる。上書きしないレグ(＝前)は前のレグの風を継ぐ。
@@ -7228,8 +7247,13 @@ function renderIfrOut(P){
   </div>`;
   document.querySelectorAll('#ifrOut .ifrProc span').forEach(sp=>{sp.onclick=()=>{
     const k=sp.dataset.k,i=+sp.dataset.i,list={sid,star,iac,iacA}[k][i];
-    if(list.ok!==1)return;ifrPlanRes.sel[k]=list;
-    if(k==='sid')ifrPlanRes.sidTrack=sidTrackOf(P.dep.icao,list.p.n,ifrPlanRes.rwy,ac,P.G.nodes[P.legs[0].to].n);   // SIDを変えたら形も組み直す
+    if(list.ok!==1)return;
+    // SID を選び直したら、その SID から始まる経路に組み直す。
+    // ⚠ ここの P は renderIfrOut の引数で G・legs を持たない。v6-196〜203 は P.G を読んで例外になり、
+    //   SID のチップが反応せず、次に進入方式を押した時の描き直しで SID だけ変わって見えていた
+    if(k==='sid'){const cur=ifrPlanRes.sel.sid;if(cur&&cur.p===list.p)return;
+      ifrForceSid={dep:ifrPlanRes.dep.icao,n:list.p.n};ifrRunPlan(true);return}
+    ifrPlanRes.sel[k]=list;
     renderIfrOut(P);
   }});
   // 風の入力: change で確定して表を作り直す(input だと1文字ごとに作り直してフォーカスが切れる)
