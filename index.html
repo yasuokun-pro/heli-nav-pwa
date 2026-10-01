@@ -1097,7 +1097,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-195';
+const VER_TAG='v6-196';
 const BUILD='2026-10-01';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7071,7 +7071,7 @@ document.getElementById('ifrPlan').onclick=async function(){
   const pr=l=>l&&l.e.proc?l.e.proc:null;
   const sidSel=pr(R.legs[0])||sid.find(x=>x.ok===1)||null;
   const rwySel=document.getElementById('ifrRwy').value||'';
-  const sidTrack=sidSel?sidTrackOf(dep.icao,sidSel.p.n,rwySel,ac):null;
+  const sidTrack=sidSel?sidTrackOf(dep.icao,sidSel.p.n,rwySel,ac,G.nodes[R.legs[0].to].n):null;
   const sv=(store.get('hnav.sidDist')||{})[dep.icao+':'+(sidSel?sidSel.p.n:'-')]||{};
   ifrPlanRes={dep,dst,alt,legs:R.legs,legsA:RA?RA.legs:null,G,CA,wind,asg:sv.asg||0,sidD:sv.sidD||0,sidTrack,rwy:rwySel,sel:{sid:sidSel,
     star:(pr(R.legs[R.legs.length-1])&&pr(R.legs[R.legs.length-1]).p.k==='STAR')?pr(R.legs[R.legs.length-1]):(star.find(x=>x.ok===1)||null),iac:selIac,iacA:selIacA}};
@@ -7178,7 +7178,7 @@ function renderIfrOut(P){
     <div style="margin:4px 0 6px;font-size:12px">共通の風 <input type="number" id="ifrWd" class="n5" style="width:60px" value="${W.base.d}" min="0" max="360">°T / <input type="number" id="ifrWs" class="n5" style="width:54px" value="${W.base.s}" min="0">kt
       　Assigned ALT <input type="number" id="ifrAsg" class="n5" step="500" value="${ifrPlanRes.asg||CA.alt}" title="SID終点までに到達する高度(初期上昇の指示高度)。空なら巡航高度">ft
       　SID実距離 <input type="number" id="ifrSidD" class="n5" step="0.1" value="${ifrPlanRes.sidD||''}" placeholder="${ifrPlanRes.sidTrack?ifrPlanRes.sidTrack.len.toFixed(1):R.legs[0].e.d.toFixed(1)}" title="図から読んだSIDの経路長。空なら${ifrPlanRes.sidTrack?'SIDの形から算出':'飛行場→終点の直線'}">NM
-      ${ifrPlanRes.sidTrack?`<span style="color:var(--cyn)">SIDの形: ${ifrPlanRes.sidTrack.name} RWY${ifrPlanRes.sidTrack.rwy} ${ifrPlanRes.sidTrack.len.toFixed(1)}NM${ifrPlanRes.sidTrack.assumed?'(会合針路は30°会合と仮定)':''}</span>`:''}
+      ${ifrPlanRes.sidTrack?`<span style="color:var(--cyn)">SIDの形: ${ifrPlanRes.sidTrack.name} RWY${ifrPlanRes.sidTrack.rwy} ${ifrPlanRes.sidTrack.len.toFixed(1)}NM${ifrPlanRes.sidTrack.assumed?'(会合針路は30°会合と仮定)':''}</span>${sidGradHtml(ifrPlanRes.sidTrack,ac)}`:''}
       <span class="hint" style="display:inline;margin-left:8px">レグごとに変えるときは行の「＝前」を外して入力。以後のレグは「＝前」でそれを継ぐ</span></div>
     <div style="overflow:auto"><table class="ifrLog">${ifrTable(rows,'main',W.main,ac,dep,CA.alt,dep)}</table></div>
     <div class="hint">MC/MH は区間中点の偏差(AUTO)。CH は機体の自差表(装備欄)。評定 = ENR 4.3 のnavaid方位/距離(磁方位)、<span style="color:#6fc3ff">RNAV専用</span>の点は navaid では評定できない。(RCA) は出発標高→巡航高度の上昇に要る距離/時間で、そのレグの内数</div>
@@ -7214,7 +7214,7 @@ function renderIfrOut(P){
   document.querySelectorAll('#ifrOut .ifrProc span').forEach(sp=>{sp.onclick=()=>{
     const k=sp.dataset.k,i=+sp.dataset.i,list={sid,star,iac,iacA}[k][i];
     if(list.ok!==1)return;ifrPlanRes.sel[k]=list;
-    if(k==='sid')ifrPlanRes.sidTrack=sidTrackOf(P.dep.icao,list.p.n,ifrPlanRes.rwy,ac);   // SIDを変えたら形も組み直す
+    if(k==='sid')ifrPlanRes.sidTrack=sidTrackOf(P.dep.icao,list.p.n,ifrPlanRes.rwy,ac,P.G.nodes[P.legs[0].to].n);   // SIDを変えたら形も組み直す
     renderIfrOut(P);
   }});
   // 風の入力: change で確定して表を作り直す(input だと1文字ごとに作り直してフォーカスが切れる)
@@ -7231,11 +7231,17 @@ function renderIfrOut(P){
 /* Assigned ALT と SID実距離は 出発空港+SID名 ごとに覚える(同じSIDなら次回も使える) */
 function ifrSidKey(){const P=ifrPlanRes;return P.dep.icao+':'+(P.sel.sid?P.sel.sid.p.n:'-')}
 function ifrSaveSid(){const m=store.get('hnav.sidDist')||{};m[ifrSidKey()]={asg:ifrPlanRes.asg||0,sidD:ifrPlanRes.sidD||0};store.set('hnav.sidDist',m)}
-/* ── SIDの形(Stage 3・当面は立川だけ) ──
+/* ── SIDの形(Stage 3・立川 → 近くの自衛隊飛行場から順に) ──
    図の文章("Climb RWY HDG to 800FT, turn right HDG197° … to intercept and proceed via TNT R152 to EDARR")を
    手で写した定義から、上昇率・上昇速度(装備欄)で経路の折れ線を組み立てる。標準旋回(3°/s)の半径 = TAS/188.5 NM。
    ⚠ 図で "turn right..." と会合針路が省略されているものは **30°会合** と仮定した(EDARR RWY19=122°、OMIYA RWY01=076°)。
-   ⚠ 滑走路の真方位・両端は OSM(01/19 = 000.2°T)。AD 2.12 は "To be issued"。TNT は AD 2.19、VAR 8°W(2025) */
+   ⚠ 滑走路の真方位・両端は OSM(01/19 = 000.2°T)。AD 2.12 は "To be issued"。TNT は AD 2.19、VAR 8°W(2025)
+   ⚠ rwy の end は**離陸する側の滑走路端(DER)**、elev はその端の標高(反対側の THR elev)。
+   then: SID 終点(fix)のあとに続く区間(v6-196・入間で追加)。{to:'名前'} は fix.json の FIX か nav の局。
+     turn:'R'|'L' があれば**その向きに**旋回して相手に向いてから直進(反転・大きな旋回の距離を入れるため)。
+   grad: 図の Note の要求上昇勾配 {pct, to:ft}。画面に必要な上昇率を出し、装備欄の上昇率が足りなければ赤
+   ⚠ AIP の索引は**複数の SID を1枚の図にまとめる**(入間 "SUPAX, HATAR")。名前の頭だけで選ぶと常に先頭の SID になるので、
+     ルートの最初の FIX(= SID の終点)で選ぶ(sidTrackOf の endFix) */
 const SID_DEF={
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
@@ -7248,8 +7254,34 @@ const SID_DEF={
         '01':[{climbTo:800},{turn:'R',hdg:76,assumed:1},{intercept:1}],
         '19':[{climbTo:900},{turn:'L',hdg:1},{intercept:1}]},
     }
-  }
+  },
+  /* 入間(RJTJ AD2.24-SID-1〜3・EFF 19 MAR 2026)。どの SID も「RWY HDG で 700FT → YLT R020 に会合して SUPAX」までは同じ。
+     RWY17: turn left HDG 335° / RWY35: "turn right ..." と針路の記載なし → 30°会合(HDG 050)と仮定。
+     滑走路は OSM(17/35 = 159.9°/339.9°T、AD 2.12 は "To be issued later")。THR elev 17=285 / 35=268。
+     YLT は AD 2.19(355022.78N/1392454.58E)。VAR は ENR 4.3 の評定(SUPAX 020°/10.0 等)から 7.5〜8.0°W → 8°W */
+  RJTJ:(()=>{
+    const b={nav:'YLT',fix:'SUPAX',rad:20,dme:10.0,
+      '17':[{climbTo:700},{turn:'L',hdg:335},{intercept:1}],
+      '35':[{climbTo:700},{turn:'R',hdg:50,assumed:1},{intercept:1}]};
+    const g3={pct:5.5,to:3000},g5={pct:5.5,to:5000};
+    return {
+      rwy:{'17':{end:[35.833745,139.41442],brgT:159.9,elev:268},'35':{end:[35.85056,139.406842],brgT:339.9,elev:285}},
+      nav:{YLT:{lat:35.839661,lng:139.415161,var:8}},
+      sids:{
+        SUPAX:Object.assign({name:'SUPAX ONE',grad:g3},b),
+        HATAR:Object.assign({name:'HATAR ONE',grad:g3,then:[{to:'HATAR',turn:'R'}]},b),
+        IRUMA:Object.assign({name:'IRUMA REVERSAL ONE',grad:g5,then:[{to:'YLT',turn:'R'}]},b),
+        BUSYU:Object.assign({name:'BUSYU ONE',grad:g5,then:[{to:'YLT',turn:'R'},{to:'BUSYU'}]},b),
+        HATSU:Object.assign({name:'HATSU ONE',grad:g5,then:[{to:'YLT',turn:'R'},{to:'HATSU'}]},b),
+      }};
+  })(),
 };
+/* 要求上昇勾配(%)を上昇率に直す: ft/min = 勾配% × GS(kt) × 6076/6000。GS は上昇速度(装備欄)で近似 */
+function sidGradHtml(T,ac){
+  if(!T||!T.grad)return '';
+  const gs=ac.vcl||80,need=Math.ceil(T.grad.pct*gs*6076/6000/10)*10,ng=ac.roc&&ac.roc<need;
+  return ` <span style="color:${ng?'var(--red)':'var(--amb)'}">要求上昇勾配 ${T.grad.pct}%(${T.grad.to.toLocaleString()}ftまで)= ${gs}kt で約${need}ft/min${ng?` ⚠ 装備欄の上昇率 ${ac.roc}ft/min では足りない`:''}</span>`;
+}
 function lineRadialX(p,hdg,nav,radT){   // 現在地からの針路の直線と nav からのラジアル(真方位)の交点(局所平面NM)。前方に無ければ null
   const k=Math.cos(nav.lat*D);
   const px=(p.lng-nav.lng)*60*k,py=(p.lat-nav.lat)*60;
@@ -7259,9 +7291,11 @@ function lineRadialX(p,hdg,nav,radT){   // 現在地からの針路の直線と 
   if(t<0||sv<0)return null;
   return {lat:nav.lat+(py+t*uy)/60,lng:nav.lng+(px+t*ux)/(60*k)};
 }
-function sidTrackOf(icao,sidName,rwy,ac){
+function sidTrackOf(icao,sidName,rwy,ac,endFix){
   const A=SID_DEF[icao];if(!A||!sidName)return null;
-  const key=Object.keys(A.sids).find(k=>sidName.toUpperCase().startsWith(k));if(!key)return null;
+  const nm=sidName.toUpperCase(),keys=Object.keys(A.sids).filter(k=>nm.includes(k));
+  const endOf=k=>{const t=A.sids[k].then;return t?t[t.length-1].to:A.sids[k].fix};
+  const key=(endFix&&keys.find(k=>endOf(k)===endFix))||keys.find(k=>nm.startsWith(k))||keys[0];if(!key)return null;
   const S=A.sids[key];if(!A.rwy[rwy])rwy=Object.keys(A.rwy)[0];
   const R=A.rwy[rwy],steps=S[rwy];if(!steps)return null;
   const nav=A.nav[S.nav],vr=nav.var||0,vcl=ac.vcl||80,roc=ac.roc||500,rad=vcl/188.5;
@@ -7282,10 +7316,25 @@ function sidTrackOf(icao,sidName,rwy,ac){
     }
   }
   const fx=FIX&&FIX._ix[S.fix];
-  const end=fx?{lat:fx.lat,lng:fx.lng}:destLL(nav.lat,nav.lng,(S.rad-vr+360)%360,S.dme);
+  let end=fx?{lat:fx.lat,lng:fx.lng}:destLL(nav.lat,nav.lng,(S.rad-vr+360)%360,S.dme),fin=S.fix;
   pts.push(end);
+  if(S.then){
+    hdg=trueBrg(pts[pts.length-2],end);p=end;
+    for(const t of S.then){
+      const f2=FIX&&FIX._ix[t.to],n2=A.nav[t.to],tgt=f2?{lat:f2.lat,lng:f2.lng}:n2?{lat:n2.lat,lng:n2.lng}:null;
+      if(!tgt)return null;
+      // 指定の向きに 10° ずつ旋回し、相手の方位に向いたら直進(標準旋回の半径)
+      for(let i=0;i<40;i++){
+        const bb=trueBrg(p,tgt),dR=(bb-hdg+360)%360,dL=(hdg-bb+360)%360;
+        const dir=t.turn||(dR<=dL?'R':'L'),dd=dir==='R'?dR:dL;
+        if(dd<5||dd>355)break;
+        const st=Math.min(10,dd)*(dir==='R'?1:-1);hdg=(hdg+st+360)%360;go(2*rad*Math.sin(Math.abs(st)*D/2));
+      }
+      pts.push(tgt);hdg=trueBrg(p,tgt);p=tgt;end=tgt;fin=t.to;
+    }
+  }
   let len=0;for(let i=1;i<pts.length;i++)len+=distNM(pts[i-1],pts[i]);
-  return {pts,len,sid:key,name:S.name,rwy,end,fix:S.fix,assumed};
+  return {pts,len,sid:key,name:S.name,rwy,end,fix:fin,assumed,grad:S.grad||null};
 }
 /* SIDの折れ線に沿った RCA: 区間ごとの針路で風込みの上昇GSを出し、上昇時間に達した位置 */
 function rcaOnTrack(track,ac,dep,asg,w){

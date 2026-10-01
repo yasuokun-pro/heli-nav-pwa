@@ -12,13 +12,17 @@
 | Stage 1-3 方式索引 | ✅ | `tools/gen_proc.py` → `proc.json`(**113空港 SID 418/STAR 193/IAC 665**・77KB。索引の grep 数と完全一致) |
 | Stage 1-4 IACミニマ | ✅ **取れた**(v6-156)。数字の文字化けは差し替えで戻る。表は原文のまま `iacmin.json`(548図) | `gen_proc.py` → `iacmin.json` |
 | Stage 1-5 地図レイヤー | ✅ | 地物グループに **FIX** と **航空路** ボタン(`btnFix`/`btnAwy`。index.html の「FIXレイヤー」「航空路レイヤー」のブロック) |
-| Stage 3 | 🔶 立川のみ(v6-152) | `SID_DEF` に図の文章を写す方式。空港を足すときは `sidTrackOf` のコメント参照 |
+| Stage 3 | 🔶 立川(v6-152)・入間(v6-196) | `SID_DEF` に図の文章を写す方式。空港を足すときは `sidTrackOf` のコメント参照。**次は 厚木 → 下総 → 木更津 → 館山 → 宇都宮 → 百里**(立川から近い自衛隊飛行場の順) |
 | Stage 2 | ✅ 第1版(v6-143) | **別画面**(タブ列の `IFR` ボタン → `#ifrModal`)。機体プロファイル(`hnav.acft`)・出発/目的/代替・経由FIX・経路探索(Dijkstra)・巡航高度・方式候補・METAR突合・燃料・「地図に反映」まで動く。残りは下の「Stage 2 の未了」 |
 
 ### Stage 2 の未了(次にやること)
 - [x] **風**: レグごとに入力(共通の風+「＝前」で継ぐ)。WCA/MH/CH/GS/ETE を表に出す(v6-150)
 - [x] **RCA** = SID終点までにAssigned ALTへ到達する点(v6-151)。SID実距離は図の値を手入力。「地図に反映」で飛行ログの注記点(括弧の内数)になり印刷にも載る。TOD(降下開始点)は未実装
 - [x] **Stage 3(SIDの形)**: 立川 EDARR ONE / OMIYA ONE を `SID_DEF` に(v6-152)。RCA は折れ線上、SID線を地図に、経路長を飛行ログへ。次は館山・横田など使う空港から
+- [x] **入間 5本**(SUPAX/HATAR/IRUMA REVERSAL/BUSYU/HATSU ONE・v6-196)。`then`(SID 終点のあとの区間・旋回の向き指定)と
+  `grad`(図の Note の要求上昇勾配 → 必要な上昇率を表示、装備の上昇率が足りなければ赤)を追加。
+  ⚠ 入間の索引は**1枚の図に複数の SID**("SUPAX, HATAR")。ルートの最初の FIX で SID を選ぶ(`sidTrackOf` の `endFix`)。
+  ⚠ 自衛隊飛行場の AD 2.12 は真方位が "To be issued" のことが多い → 滑走路は OSM の aeroway=runway から(Overpass は maps.mail.ru のミラーが通る)
 - [x] 最低気象条件の目安の表は廃止。離陸ミニマは AD 2.22 原文(`tomin.json`)、進入ミニマは図参照(v6-152)
 - [x] ILS CAT I/II/III を装備に(v6-152)
 - [x] **TAF の表示**(v6-176): 中継 `relay/api/wx.js` でその場取得し、IFR 画面の気象欄に出発・目的・代替の TAF を表示
