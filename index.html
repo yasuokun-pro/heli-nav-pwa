@@ -1097,7 +1097,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-201';
+const VER_TAG='v6-202';
 const BUILD='2026-10-01';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7387,6 +7387,38 @@ const SID_DEF={
           '19':[{climbTo:800},{turn:'L',hdg:345},{intercept:30},{climbTo:4000},{to:'JDT',turn:'R'}]},
       }};
   })(),
+  /* 百里(RJAH AD2.24-SID-1〜7・EFF 14 MAY 2026)。平行滑走路 03L/21R・03R/21L、AD 2.12 に真方位 019°と THR 座標
+     (座標から 019.8°、RNAV 表の真コースとも一致)、THR elev 107ft。HUC は TACAN の位置(AD 2.19 361114.81N/1402447.53E)。
+     VAR は AD 2.19 の 8°W(2024)、RNAV 表は 7.8°W。H1R00 は RNAV 表の座標(fix.json に無い)。
+     ⚠ 03R/03L・21R/21L は在来の SID では同じ手順(図も "RWY03R/03L")。HITAKA(RNAV1)は 03L と 21R だけ
+     ⚠ 針路の記載が無い "turn right/left,..." は30°会合と仮定: GOPVU RWY03 HDG 077 / NAKAH RWY03 HDG 332
+     ⚠ OGITU RWY03 "Climb RWY HDG to 600FT, via HUC R033" は旋回の記載が無い(滑走路 028°M と 5°差)→ 600FT から OGITU への直線
+     ⚠ 25 OCT 2026 発効の AD2 が同じ AIP 一式に入っているが、SID の図は同一(違いは CAB OPS の時間だけ) */
+  RJAH:(()=>{
+    const both=(o3,o21)=>({'03L':o3,'03R':o3,'21L':o21,'21R':o21});
+    const g3={pct:4.4,to:2000};
+    return {
+      rwy:{'03L':{end:[36.193244,140.418458],brgT:19.8,elev:107},'03R':{end:[36.192608,140.420658],brgT:19.8,elev:107},
+           '21R':{end:[36.170358,140.408258],brgT:199.8,elev:107},'21L':{end:[36.169714,140.410456],brgT:199.8,elev:107}},
+      nav:{HUC:{lat:36.187447,lng:140.413203,var:8},H1R00:{lat:36.236972,lng:140.33175,var:8}},
+      sids:{
+        GOPVU:Object.assign({name:'GOPVU ONE',nav:'HUC',fix:'GOPVU',grad:{'03L':g3,'03R':g3}},
+          both([{climbTo:600},{turn:'R',hdg:77,assumed:1},{intercept:47},{to:'GOPVU'}],
+               [{climbTo:600},{turn:'L',hdg:2},{intercept:47},{to:'GOPVU'}])),
+        NAKAH:Object.assign({name:'NAKAH FIVE',nav:'HUC',fix:'NAKAH'},
+          both([{climbTo:600},{turn:'L',hdg:332,assumed:1},{intercept:2},{to:'NAKAH'}],
+               [{climbTo:600},{turn:'R',hdg:47},{intercept:2},{to:'NAKAH'}])),
+        'OGITU E':Object.assign({name:'OGITU EAST ONE',nav:'HUC',fix:'OGITU'},
+          both([{climbTo:600},{to:'OGITU'}],
+               [{climbTo:600},{turn:'L',hdg:348},{intercept:33},{to:'OGITU'}])),
+        'OGITU W':Object.assign({name:'OGITU WEST ONE',nav:'HUC',fix:'OGITU'},
+          both([{climbTo:600},{to:'OGITU'}],
+               [{climbTo:600},{turn:'R',hdg:63},{intercept:33},{to:'OGITU'}])),
+        HITAKA:{name:'HITAKA ONE (RNAV1)',nav:'HUC',fix:'OGITU',grad:{'03L':{pct:4.1,to:600}},
+          '03L':[{climbTo:600},{to:'LICEN'},{to:'OGITU'}],
+          '21R':[{climbTo:600},{to:'H1R00',turn:'R'},{to:'LICEN'},{to:'OGITU'}]},
+      }};
+  })(),
 };
 /* 要求上昇勾配(%)を上昇率に直す: ft/min = 勾配% × GS(kt) × 6076/6000。GS は上昇速度(装備欄)で近似 */
 function sidGradHtml(T,ac){
@@ -7414,7 +7446,11 @@ function sidEndOf(A,k){const t=A.sids[k].then;return t?t[t.length-1].to:A.sids[k
 function sidTrackOf(icao,sidName,rwy,ac,endFix){
   const A=SID_DEF[icao];if(!A||!sidName)return null;
   const nm=sidName.toUpperCase(),keys=Object.keys(A.sids).filter(k=>nm.includes(k));
-  const key=(endFix&&keys.find(k=>sidEndOf(A,k)===endFix))||keys.find(k=>nm.startsWith(k))||keys[0];if(!key)return null;
+  // 同じ終点の SID が図に複数(百里 OGITU EAST / WEST)あれば、その滑走路で短い方
+  const cand=endFix?keys.filter(k=>sidEndOf(A,k)===endFix):[];
+  if(cand.length>1)return cand.map(k=>sidTrackOf(icao,k,rwy,ac,endFix)).filter(Boolean)
+    .sort((a,b)=>(a.rwyNote?1:0)-(b.rwyNote?1:0)||a.len-b.len)[0]||null;
+  const key=cand[0]||keys.find(k=>nm.startsWith(k))||keys[0];if(!key)return null;
   const S=A.sids[key];if(!A.rwy[rwy])rwy=Object.keys(A.rwy)[0];
   let R=A.rwy[rwy],steps=S[rwy],rwyNote='';
   // 図で "(Not established)" の滑走路(木更津 KOSKA の RWY20 など)は、ある方の滑走路で描いて断り書きを出す
