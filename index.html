@@ -1097,7 +1097,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-200';
+const VER_TAG='v6-201';
 const BUILD='2026-10-01';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -6779,10 +6779,13 @@ function procEnd(G,ap,x){
   const A=x.p.k==='SID'&&ap.icao&&SID_DEF[ap.icao];
   if(A){
     const nm=x.p.n.toUpperCase(),ks=Object.keys(A.sids).filter(k=>nm.includes(k));
-    const e=[...new Set(ks.map(k=>sidEndOf(A,k)))].filter(t=>{
-      if(!G.nodes[t]&&!(FIX&&FIX._ix[t]))navNode(G,t);
-      const n=G.nodes[t]||(FIX&&FIX._ix[t]);return n&&distNM(ap,n)>8});
-    if(e.length)return e;
+    const all=[...new Set(ks.map(k=>sidEndOf(A,k)))].filter(t=>{
+      if(!G.nodes[t]&&!(FIX&&FIX._ix[t]))navNode(G,t);return G.nodes[t]||(FIX&&FIX._ix[t])});
+    const far=all.filter(t=>distNM(ap,G.nodes[t]||FIX._ix[t])>8);
+    if(far.length)return far;
+    // 終点が全部飛行場の近く(反転 SID の終点 = 自分の TACAN)なら、その局に繋ぐ。8NM で捨てると、
+    // 館山は SID が無い扱いで最寄りの FIX へ仮の直線になり、宇都宮は図の文の抽出が REVERSAL を MIKRA に繋いでいた
+    if(all.length)return all;
   }
   const ch=(x.p.to||[]).filter(t=>{const n=G.nodes[t]||(FIX&&FIX._ix[t]);return n&&distNM(ap,n)>8});
   return ch.length?[ch[ch.length-1]]:procTokens(x.p.n);
@@ -6853,7 +6856,9 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   (procs||[]).filter(x=>x.ok===1).forEach(x=>procEnd(G,ap,x).forEach(t=>{
     if(!join(t,tag+'→航空路(仮)'))return;
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
-    add(k,t,{d:distNM(ap,G.nodes[t]),tr:1,tag,proc:x});linked++;
+    // SID の形がある方式は、その経路長を辺の長さにする(直線だと反転 SID が 0.4NM で「ただ」に見える)
+    const sl=x.p.k==='SID'&&ap.icao?sidLenMin(ap.icao,x.p.n,t):0;
+    add(k,t,{d:sl||distNM(ap,G.nodes[t]),tr:1,tag,proc:x});linked++;
   }));
   // 進入方式の IAF(進入図の "TOHNE(IAF)" から拾ったもの)。STAR が無い飛行場でも IAF へ向かう経路になる
   (iacs||[]).filter(x=>x.ok===1&&x.p.iaf).forEach(x=>x.p.iaf.forEach(t=>{
@@ -7358,6 +7363,30 @@ const SID_DEF={
         '27':[{climbTo:500},{turn:'R',hdg:341,assumed:1},{intercept:311},{to:{rad:311,dme:6.4}},{to:'TET',turn:'L'}]},
     }
   },
+  /* 宇都宮(RJTU AD2.24-SID-1〜3・EFF 10 AUG 2023)。AD 2.12 に THR 座標(01: 363024.99N/1395213.17E 309ft、
+     19: 363119.96N/1395218.68E 335ft)。真方位は座標から 004.7°。MAG VAR 8°W(2022・AD 2.2)。JDT は ENR 4.1。
+     ⚠ SID-3(UTSUNOMIYA REVERSAL)は文字コードがずれたフォントで、gen_proc.dec() で戻して読んだ。
+     ⚠ 針路の記載が無い "turn right/left,..." は30°会合と仮定: KOGAR RWY19 HDG 239 / MIKRA RWY01 HDG 330・RWY19 HDG 030 /
+       REVERSAL RWY01 HDG 060。
+     ⚠ KOGAR RWY01 の "turn left HDG 164° to intercept R209" は、上昇率500ft/minだと会合点が局の北側になり前方で交わらない
+       → 旋回後そのまま KOGAR へ向かう線で近似(局のすぐ西を通る)。REVERSAL RWY19 も同様に R030 へは平行に近い線になる */
+  RJTU:(()=>{
+    const arcM=[{to:{rad:360,dme:17.6}},{arc:'R',dme:17.6,to:{rad:22,dme:17.6}},{to:'MIKRA'}];
+    return {
+      rwy:{'01':{end:[36.522211,139.871856],brgT:4.7,elev:335},'19':{end:[36.506942,139.870325],brgT:184.7,elev:309}},
+      nav:{JDT:{lat:36.51684,lng:139.87553,var:8}},
+      sids:{
+        KOGAR:{name:'KOGAR FIVE',nav:'JDT',fix:'KOGAR',grad:{'01':{pct:4.3,to:1000},'19':{pct:4.4,to:800}},
+          '01':[{climbTo:1000},{turn:'L',hdg:164},{intercept:209},{to:'KOGAR'}],
+          '19':[{climbTo:800},{turn:'R',hdg:239,assumed:1},{intercept:209},{to:'KOGAR'}]},
+        MIKRA:{name:'MIKRA FOUR',nav:'JDT',fix:'MIKRA',grad:{'01':{pct:4.1,to:3600},'19':{pct:4.4,to:4100}},
+          '01':[{climbTo:1000},{turn:'L',hdg:330,assumed:1},{intercept:360},...arcM],
+          '19':[{climbTo:800},{turn:'R',hdg:30,assumed:1},{intercept:360},...arcM]},
+        UTSUNOMIYA:{name:'UTSUNOMIYA REVERSAL ONE',nav:'JDT',fix:'JDT',grad:{'01':{pct:4.1,to:1000},'19':{pct:4.4,to:800}},
+          '01':[{climbTo:1000},{turn:'R',hdg:60,assumed:1},{intercept:30},{climbTo:4000},{to:'JDT',turn:'R'}],
+          '19':[{climbTo:800},{turn:'L',hdg:345},{intercept:30},{climbTo:4000},{to:'JDT',turn:'R'}]},
+      }};
+  })(),
 };
 /* 要求上昇勾配(%)を上昇率に直す: ft/min = 勾配% × GS(kt) × 6076/6000。GS は上昇速度(装備欄)で近似 */
 function sidGradHtml(T,ac){
@@ -7373,6 +7402,13 @@ function lineRadialX(p,hdg,nav,radT){   // 現在地からの針路の直線と 
   const t=(vx*py-vy*px)/den,sv=(ux*py-uy*px)/den;
   if(t<0||sv<0)return null;
   return {lat:nav.lat+(py+t*uy)/60,lng:nav.lng+(px+t*ux)/(60*k)};
+}
+/* その SID でその終点まで行くときの経路長(滑走路のうち短い方。装備欄の上昇率・上昇速度で)。形が無ければ 0 */
+function sidLenMin(icao,name,end){
+  const A=SID_DEF[icao];if(!A)return 0;
+  const ac=acftGet();let m=0;
+  for(const r of Object.keys(A.rwy)){const t=sidTrackOf(icao,name,r,ac,end);if(t&&t.fix===end&&!t.rwyNote&&(!m||t.len<m))m=t.len}
+  return m;
 }
 function sidEndOf(A,k){const t=A.sids[k].then;return t?t[t.length-1].to:A.sids[k].fix}
 function sidTrackOf(icao,sidName,rwy,ac,endFix){
@@ -7404,7 +7440,11 @@ function sidTrackOf(icao,sidName,rwy,ac,endFix){
     hdg=trueBrg(p,tgt);pts.push(tgt);p=tgt;
   };
   for(const st of steps){
-    if(st.climbTo!=null){go(Math.max(0,(st.climbTo-alt)/roc)*vcl/60);alt=st.climbTo}
+    if(st.climbTo!=null){
+      // その時点の高度 = 離陸端の標高 + ここまでの経路長を上昇速度・上昇率で上った分(旋回中も上昇は続く)
+      let L0=0;for(let i=1;i<pts.length;i++)L0+=distNM(pts[i-1],pts[i]);
+      const now=Math.max(alt,R.elev+L0/vcl*60*roc);
+      go(Math.max(0,(st.climbTo-now)/roc)*vcl/60);alt=st.climbTo}
     else if(st.dme!=null){                                       // その針路のまま nav から dme NM になるまで
       const n=A.nav[st.nav||S.nav];let k=0;
       while(k++<600&&distNM(p,n)<st.dme){p=destLL(p.lat,p.lng,hdg,0.05)}
