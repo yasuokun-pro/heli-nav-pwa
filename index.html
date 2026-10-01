@@ -1097,7 +1097,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-196';
+const VER_TAG='v6-197';
 const BUILD='2026-10-01';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -6774,6 +6774,16 @@ function procTokens(n){
 /* 方式(SID/STAR)の到達点。図から取れた `to` を優先し、無ければ方式名の語。
    ⚠ 飛行場自身の navaid("to SHT TACAN")が混ざるので 8NM 以内は捨てる */
 function procEnd(G,ap,x){
+  // 手で起こした SID の形(SID_DEF)がある飛行場は、その終点を正とする。図の文からの自動抽出(to)は
+  // 同じページの別の文の局まで拾うことがあり、厚木 YOKOTA TWO は終点 YOK でなく途中の NJA に繋がっていた
+  const A=x.p.k==='SID'&&ap.icao&&SID_DEF[ap.icao];
+  if(A){
+    const nm=x.p.n.toUpperCase(),ks=Object.keys(A.sids).filter(k=>nm.includes(k));
+    const e=[...new Set(ks.map(k=>sidEndOf(A,k)))].filter(t=>{
+      if(!G.nodes[t]&&!(FIX&&FIX._ix[t]))navNode(G,t);
+      const n=G.nodes[t]||(FIX&&FIX._ix[t]);return n&&distNM(ap,n)>8});
+    if(e.length)return e;
+  }
   const ch=(x.p.to||[]).filter(t=>{const n=G.nodes[t]||(FIX&&FIX._ix[t]);return n&&distNM(ap,n)>8});
   return ch.length?[ch[ch.length-1]]:procTokens(x.p.n);
 }
@@ -7275,6 +7285,23 @@ const SID_DEF={
         HATSU:Object.assign({name:'HATSU ONE',grad:g5,then:[{to:'YLT',turn:'R'},{to:'HATSU'}]},b),
       }};
   })(),
+  /* 厚木(RJTA AD2.24-SID-1/2・EFF 11 JUL 2024)。滑走路は AD 2.12(真方位 359.13°/179.13°・THR 座標あり)。
+     NJA は AD 2.19(352644N1392714E。adnav.json に無い)、YOK は adnav.json。VAR は ZUSHI 179°/23.6・YOK 352° から 7.5°W。
+     RWY01 は「RWY HDG で NJA 6.0DME → R352」、RWY19 は「600FT → R190 で 9.0DME」から分かれる。
+     ⚠ "via NJA R352 to YOK" は 6.0DME の点から YOK への直線で近似(R352 との差は1.5NM以内)。
+     ⚠ YOKOTA RWY19 の "turn left, via NJA R155 to NJA" は R155/9.0DME の点へ左旋回してから NJA へ、で近似 */
+  RJTA:{
+    rwy:{'01':{end:[35.465625,139.4499],brgT:359.13,elev:205},'19':{end:[35.443644,139.450303],brgT:179.13,elev:172}},
+    nav:{NJA:{lat:35.445556,lng:139.453889,var:7.5},YOK:{lat:35.748986,lng:139.350261,var:7.5}},
+    sids:{
+      YOKOTA:{name:'YOKOTA TWO',nav:'NJA',fix:'YOK',grad:{pct:4.0,to:500,rwy:'01'},
+        '01':[{dme:6.0},{to:'YOK'}],
+        '19':[{climbTo:600},{to:{rad:190,dme:9.0}},{to:{rad:155,dme:9.0},turn:'L'},{to:'NJA'},{to:'YOK'}]},
+      ZUSHI:{name:'ZUSHI ONE',nav:'NJA',fix:'ZUSHI',grad:{pct:4.0,to:500,rwy:'01'},
+        '01':[{dme:6.0},{to:{rad:352,dme:13.0}},{to:'NJA',turn:'R'},{to:'ZUSHI'}],
+        '19':[{climbTo:600},{to:{rad:190,dme:9.0}},{to:'ZUSHI'}]},
+    }
+  },
 };
 /* 要求上昇勾配(%)を上昇率に直す: ft/min = 勾配% × GS(kt) × 6076/6000。GS は上昇速度(装備欄)で近似 */
 function sidGradHtml(T,ac){
@@ -7291,50 +7318,66 @@ function lineRadialX(p,hdg,nav,radT){   // 現在地からの針路の直線と 
   if(t<0||sv<0)return null;
   return {lat:nav.lat+(py+t*uy)/60,lng:nav.lng+(px+t*ux)/(60*k)};
 }
+function sidEndOf(A,k){const t=A.sids[k].then;return t?t[t.length-1].to:A.sids[k].fix}
 function sidTrackOf(icao,sidName,rwy,ac,endFix){
   const A=SID_DEF[icao];if(!A||!sidName)return null;
   const nm=sidName.toUpperCase(),keys=Object.keys(A.sids).filter(k=>nm.includes(k));
-  const endOf=k=>{const t=A.sids[k].then;return t?t[t.length-1].to:A.sids[k].fix};
-  const key=(endFix&&keys.find(k=>endOf(k)===endFix))||keys.find(k=>nm.startsWith(k))||keys[0];if(!key)return null;
+  const key=(endFix&&keys.find(k=>sidEndOf(A,k)===endFix))||keys.find(k=>nm.startsWith(k))||keys[0];if(!key)return null;
   const S=A.sids[key];if(!A.rwy[rwy])rwy=Object.keys(A.rwy)[0];
   const R=A.rwy[rwy],steps=S[rwy];if(!steps)return null;
   const nav=A.nav[S.nav],vr=nav.var||0,vcl=ac.vcl||80,roc=ac.roc||500,rad=vcl/188.5;
-  let p={lat:R.end[0],lng:R.end[1]},hdg=R.brgT,alt=R.elev,assumed=false;const pts=[p];
+  let p={lat:R.end[0],lng:R.end[1]},hdg=R.brgT,alt=R.elev,assumed=false,fin=null;const pts=[p];
   const go=nm=>{if(nm<=0)return;p=destLL(p.lat,p.lng,hdg,nm);pts.push(p)};
+  const tru=m=>(m-vr+360)%360;
+  // 点の指定: 'FIX名' / 'navの局' / {rad,dme[,nav]}(磁方位のラジアルと DME)
+  const ptOf=t=>{
+    if(typeof t==='string'){const f=FIX&&FIX._ix[t],n=A.nav[t];return f?{lat:f.lat,lng:f.lng}:n?{lat:n.lat,lng:n.lng}:null}
+    const n=A.nav[t.nav||S.nav];return n?destLL(n.lat,n.lng,tru(t.rad),t.dme):null;
+  };
+  // 相手に向かう: 指定の向き(無ければ近い方)に 10° ずつ旋回し、相手の方位に向いたら直進(標準旋回の半径)
+  const toward=(tgt,turn)=>{
+    for(let i=0;i<40;i++){
+      const bb=trueBrg(p,tgt),dR=(bb-hdg+360)%360,dL=(hdg-bb+360)%360;
+      const dir=turn||(dR<=dL?'R':'L'),dd=dir==='R'?dR:dL;
+      if(dd<5||dd>355)break;
+      const st=Math.min(10,dd)*(dir==='R'?1:-1);hdg=(hdg+st+360)%360;go(2*rad*Math.sin(Math.abs(st)*D/2));
+    }
+    hdg=trueBrg(p,tgt);pts.push(tgt);p=tgt;
+  };
   for(const st of steps){
     if(st.climbTo!=null){go(Math.max(0,(st.climbTo-alt)/roc)*vcl/60);alt=st.climbTo}
-    else if(st.turn){
+    else if(st.dme!=null){                                       // その針路のまま nav から dme NM になるまで
+      const n=A.nav[st.nav||S.nav];let k=0;
+      while(k++<600&&distNM(p,n)<st.dme){p=destLL(p.lat,p.lng,hdg,0.05)}
+      pts.push(p);
+    }
+    else if(st.turn&&st.hdg!=null){
       if(st.assumed)assumed=true;
-      const tgt=(st.hdg-vr+360)%360;
+      const tgt=tru(st.hdg);
       const diff=st.turn==='R'?((tgt-hdg+360)%360):-((hdg-tgt+360)%360);
       const n=Math.max(1,Math.round(Math.abs(diff)/10));
       for(let i=0;i<n;i++){hdg=(hdg+diff/n+360)%360;go(2*rad*Math.sin(Math.abs(diff/n)*D/2))}
-    }else if(st.intercept){
-      const radT=(S.rad-vr+360)%360,q=lineRadialX(p,hdg,nav,radT);
+    }else if(st.intercept){                                      // intercept:1 は S.rad、数字ならそのラジアル
+      const radT=tru(st.intercept===1?S.rad:st.intercept),q=lineRadialX(p,hdg,nav,radT);
       if(q){p=q;pts.push(p)}
       hdg=radT;
+    }else if(st.to!=null){
+      const tgt=ptOf(st.to);if(!tgt)return null;
+      if(st.assumed)assumed=true;
+      toward(tgt,st.turn);fin=typeof st.to==='string'?st.to:null;
     }
   }
-  const fx=FIX&&FIX._ix[S.fix];
-  let end=fx?{lat:fx.lat,lng:fx.lng}:destLL(nav.lat,nav.lng,(S.rad-vr+360)%360,S.dme),fin=S.fix;
-  pts.push(end);
-  if(S.then){
-    hdg=trueBrg(pts[pts.length-2],end);p=end;
-    for(const t of S.then){
-      const f2=FIX&&FIX._ix[t.to],n2=A.nav[t.to],tgt=f2?{lat:f2.lat,lng:f2.lng}:n2?{lat:n2.lat,lng:n2.lng}:null;
-      if(!tgt)return null;
-      // 指定の向きに 10° ずつ旋回し、相手の方位に向いたら直進(標準旋回の半径)
-      for(let i=0;i<40;i++){
-        const bb=trueBrg(p,tgt),dR=(bb-hdg+360)%360,dL=(hdg-bb+360)%360;
-        const dir=t.turn||(dR<=dL?'R':'L'),dd=dir==='R'?dR:dL;
-        if(dd<5||dd>355)break;
-        const st=Math.min(10,dd)*(dir==='R'?1:-1);hdg=(hdg+st+360)%360;go(2*rad*Math.sin(Math.abs(st)*D/2));
-      }
-      pts.push(tgt);hdg=trueBrg(p,tgt);p=tgt;end=tgt;fin=t.to;
-    }
+  // 手順が点で終わっていなければ、S.fix(無ければ S.rad/S.dme の点)へ。続きは S.then
+  let end=p;
+  if(fin==null){
+    const fx=FIX&&FIX._ix[S.fix];
+    end=fx?{lat:fx.lat,lng:fx.lng}:destLL(nav.lat,nav.lng,tru(S.rad),S.dme);fin=S.fix;
+    pts.push(end);
+    if(S.then){hdg=trueBrg(pts[pts.length-2],end);p=end;
+      for(const t of S.then){const tgt=ptOf(t.to);if(!tgt)return null;toward(tgt,t.turn);end=tgt;fin=t.to}}
   }
   let len=0;for(let i=1;i<pts.length;i++)len+=distNM(pts[i-1],pts[i]);
-  return {pts,len,sid:key,name:S.name,rwy,end,fix:fin,assumed,grad:S.grad||null};
+  return {pts,len,sid:key,name:S.name,rwy,end,fix:fin,assumed,grad:(S.grad&&(!S.grad.rwy||S.grad.rwy===rwy))?S.grad:null};
 }
 /* SIDの折れ線に沿った RCA: 区間ごとの針路で風込みの上昇GSを出し、上昇時間に達した位置 */
 function rcaOnTrack(track,ac,dep,asg,w){
