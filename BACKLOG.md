@@ -417,7 +417,8 @@ N11(平成25年)の同県分は index.html 側で丸ごと差し替える。
   申請書の下書き(aip/docs/申請書_記入済み/・IP・郵便番号・住所・電話・日付が空欄)、SSH 鍵 ~/.ssh/heli_nav_oci。
   次: ①利用者が Oracle アカウント作成(東京・PAYG・予算アラート) ②VM と予約済みIP ③申請 ④アプリの DIPS レイヤー(検証環境で)
 - **2026-09-28 Oracle**: テナンシ helinav-relay(東京)・予算アラート zero-alert(1・実績100%・メール)・VM dips-proxy(E2.1.Micro・Ubuntu 24.04 Minimal)・
-  予約済みIP dips-proxy-ip・セキュリティリストに TCP 3129 を追加。**PAYG への切替はアカウントのプロビジョニング完了待ち**。
+  予約済みIP dips-proxy-ip・セキュリティリストに TCP 3129 を追加。**2026-10-01 PAYG に切替済み**(アイドル回収の対象外に。支払方法=カード・個人アカウント)。
+  ⚠ 3129番にはネットの走査が来ている(squid のログに TLS 前で切れた接続)。TLS+合言葉+宛先限定で弾けている。気になるなら fail2ban。
   固定IP **155.248.186.170** を VNIC に付与・setup.sh 実行済み。実機で確認: 送信元=固定IP / DIPS検証環境まで到達 /
   合言葉なし・違い=407 / DIPS以外=403。Vercel に入れる値は `aip/_secrets/dips-vercel-env.txt`(gitignore・600)。
 - **2026-09-28 検証環境の API 利用申請を送信済み**(申請書は aip/docs/申請書_記入済み/)。返信待ち(最大1か月)。
