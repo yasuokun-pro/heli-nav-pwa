@@ -1097,7 +1097,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-199';
+const VER_TAG='v6-200';
 const BUILD='2026-10-01';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7342,6 +7342,20 @@ const SID_DEF={
       TSUGA:{name:'TSUGA TWO',nav:'KZT',fix:'TSUGA',
         '02':[{dme:1.1},{to:{rad:35,dme:7.8}},{to:'TSUGA',turn:'R'}],
         '20':[{to:{rad:188,dme:7.4}},{to:'KZT',turn:'R'},{to:'TSUGA'}]},
+    }
+  },
+  /* 館山(RJTE AD2.24-SID-1・EFF 7 SEP 2023)。滑走路は 300m。AD 2.12 の THR 座標(真方位は "To be issued later")から
+     085.1°T、THR elev 09=7.9ft / 27=7ft。TET は図の 34°58′15″N/139°50′17″E(滑走路の南南東 約1NM)。
+     VAR は LULKU 340°/10.0・SAPIM 190°/11.0 など6点で 7.1〜7.7°W → 7.3°W。
+     ⚠ RWY27 は "turn right..." と針路の記載なし → R311 に30°会合(HDG 341)と仮定
+     ⚠ 終点は飛行場自身の TET。経路網(procEnd)では 8NM 以内なので使わず、従来どおり TATEYAMA(=TET)に繋がる */
+  RJTE:{
+    rwy:{'09':{end:[34.987089,139.830786],brgT:85.1,elev:7},'27':{end:[34.986858,139.827511],brgT:265.1,elev:8}},
+    nav:{TET:{lat:34.970833,lng:139.838056,var:7.3}},
+    sids:{
+      TATEYAMA:{name:'TATEYAMA REVERSAL THREE',nav:'TET',fix:'TET',grad:{'09':{pct:6.0,to:500},'27':{pct:4.0,to:800}},
+        '09':[{climbTo:500},{turn:'L',hdg:266},{intercept:311},{to:{rad:311,dme:6.4}},{to:'TET',turn:'L'}],
+        '27':[{climbTo:500},{turn:'R',hdg:341,assumed:1},{intercept:311},{to:{rad:311,dme:6.4}},{to:'TET',turn:'L'}]},
     }
   },
 };
