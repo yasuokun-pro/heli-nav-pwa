@@ -681,9 +681,16 @@ def main():
     for k in sorted(P): print(f'    {k:12}{len(P[k]):4}点')
 
     out, ng = [], 0
+    # ⚠ 検算に落ちた空域は**黙って消さない**。アプリの一覧に「改正未反映」として出すため pending に残す
+    #   (2026-10-01: 大分ACAが福岡ACAに統合され図の点番号が振り直された → 福岡ACAがここに落ちる)
+    pending = []
+    def fail(key, sp, why):
+        icao, kind = key.split('/')
+        pending.append(dict(k=kind, icao=icao, jp=sp['jp'], why=why))
     for key, sp in SPEC.items():
         pts = {int(a): b for a, b in P.get(key, {}).items()}
-        if not pts: print(f'  ⚠ {key} の座標表が無い', file=sys.stderr); ng += 1; continue
+        if not pts:
+            print(f'  ⚠ {key} の座標表が無い', file=sys.stderr); ng += 1; fail(key, sp, '図の座標表が読めない'); continue
         ring = lambda r: build(r, pts, sp.get('ctr'))
         oa = sph_area(ring(sp['outer']))
         # ⚠ dup=1 は「同じ外形にもう1枚の高度帯を重ねる」区画(築城の 6000 と
@@ -696,7 +703,7 @@ def main():
             print(f"  {key}: 副区画{len(sp['sub'])} 合計{tot:.1f} / 外形{oa:.1f} km² 差{d:.4f}%")
             if d > 0.01:
                 print(f'  ⚠ {key} は区画の読み違い(合計が外形と一致しない)', file=sys.stderr)
-                ng += 1; continue
+                ng += 1; fail(key, sp, '図が改正されて区画の定義が合わない(改正未反映)'); continue
         else:
             # 残りは外形から引いて作る。**区画同士が重なっていないこと**を
             # shapelyで確かめる(合計面積の一致だけでは、どこが違うか分からない)
@@ -714,7 +721,8 @@ def main():
             print(f"  {key}: 副区画{len(sp['sub'])} 合計{tot:.1f}/外形{oa:.1f} km² "
                   f"最大重なり{ov:.1f} 外形はみ出し{outside:.1f} km²")
             if ov > 2.0 or outside > 2.0:
-                print(f'  ⚠ {key} は区画の読み違い', file=sys.stderr); ng += 1; continue
+                print(f'  ⚠ {key} は区画の読み違い', file=sys.stderr); ng += 1
+                fail(key, sp, '図が改正されて区画の定義が合わない(改正未反映)'); continue
             r = og.difference(unary_union(gs))
             parts = [r] if r.geom_type == 'Polygon' else list(r.geoms)
             parts = [q for q in parts if q.area * 111.32**2 / K > 1.0]
@@ -851,7 +859,7 @@ def main():
     for f in out: f.pop('_late', None); f.pop('_dup', None)
     dst = os.path.join(here, '..', 'aca.json')
     eff = os.path.basename(os.path.dirname(base))
-    json.dump({'eff': eff, 'src': 'AIP Japan AD 2.17 添付チャート', 'f': out},
+    json.dump({'eff': eff, 'src': 'AIP Japan AD 2.17 添付チャート', 'f': out, 'pending': pending},
               open(dst, 'w'), ensure_ascii=False, separators=(',', ':'))
     print(f'{len(out)} 区画 → aca.json ({os.path.getsize(dst)/1024:.0f}KB) AIRAC:{eff}')
 

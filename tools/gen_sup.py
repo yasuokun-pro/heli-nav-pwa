@@ -17,6 +17,12 @@ AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file_
 
 SRC = os.path.expanduser(AIP_ROOT + '/3_SUP(KML)')
 
+# 配布元の誤りで KML に残っているが**無効**な SUP(ファイル名の番号)。理由を必ず書くこと
+# ⚠ 2026-09-24 SWIM 通知「AIP SUPに係るファイルの差替について」: 10/1発行分に本来無効の SUP164/25 が含まれていた
+#   (164/24 が欠落。164/24 は種子島のヘリ用計器進入方式の試行で空域ではないので KML は無い)。10/29発行分で再発行予定。
+#   KML フォルダには 164/25(百里の臨時訓練空域)が残ったままなので、ここで落とす。10/29版で消えたらこの行も消す
+EXCLUDE = {'SUP_164_25': '2026-09-24 SWIM通知: 10/1版では無効'}
+
 def field(h, key):
     """英語SUP形式: <td>Period</td><td>値</td>"""
     m = re.search(r'<td>' + key + r'[^<]*</td>\s*<td>(.*?)</td>', h, re.S)
@@ -37,6 +43,10 @@ def main():
         print('SUP KML が見つかりません:', SRC, file=sys.stderr); sys.exit(1)
     out = []
     for fp in files:
+        base = os.path.basename(fp)
+        why = next((v for k, v in EXCLUDE.items() if base.startswith(k)), None)
+        if why:
+            print(f'  除外: {base} ({why})', file=sys.stderr); continue
         cat = os.path.basename(os.path.dirname(fp))
         doc = open(fp, encoding='utf8', errors='ignore').read()
         for pm in re.finditer(r'<Placemark>(.*?)</Placemark>', doc, re.S):
