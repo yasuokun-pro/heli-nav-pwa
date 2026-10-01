@@ -1097,7 +1097,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-198';
+const VER_TAG='v6-199';
 const BUILD='2026-10-01';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7188,7 +7188,7 @@ function renderIfrOut(P){
     <div style="margin:4px 0 6px;font-size:12px">共通の風 <input type="number" id="ifrWd" class="n5" style="width:60px" value="${W.base.d}" min="0" max="360">°T / <input type="number" id="ifrWs" class="n5" style="width:54px" value="${W.base.s}" min="0">kt
       　Assigned ALT <input type="number" id="ifrAsg" class="n5" step="500" value="${ifrPlanRes.asg||CA.alt}" title="SID終点までに到達する高度(初期上昇の指示高度)。空なら巡航高度">ft
       　SID実距離 <input type="number" id="ifrSidD" class="n5" step="0.1" value="${ifrPlanRes.sidD||''}" placeholder="${ifrPlanRes.sidTrack?ifrPlanRes.sidTrack.len.toFixed(1):R.legs[0].e.d.toFixed(1)}" title="図から読んだSIDの経路長。空なら${ifrPlanRes.sidTrack?'SIDの形から算出':'飛行場→終点の直線'}">NM
-      ${ifrPlanRes.sidTrack?`<span style="color:var(--cyn)">SIDの形: ${ifrPlanRes.sidTrack.name} RWY${ifrPlanRes.sidTrack.rwy} ${ifrPlanRes.sidTrack.len.toFixed(1)}NM${ifrPlanRes.sidTrack.assumed?'(会合針路は30°会合と仮定)':''}</span>${sidGradHtml(ifrPlanRes.sidTrack,ac)}`:''}
+      ${ifrPlanRes.sidTrack?`<span style="color:var(--cyn)">SIDの形: ${ifrPlanRes.sidTrack.name} RWY${ifrPlanRes.sidTrack.rwy} ${ifrPlanRes.sidTrack.len.toFixed(1)}NM${ifrPlanRes.sidTrack.assumed?'(会合針路は30°会合と仮定)':''}</span>${ifrPlanRes.sidTrack.rwyNote?` <span style="color:var(--amb)">⚠ ${ifrPlanRes.sidTrack.rwyNote}</span>`:''}${sidGradHtml(ifrPlanRes.sidTrack,ac)}`:''}
       <span class="hint" style="display:inline;margin-left:8px">レグごとに変えるときは行の「＝前」を外して入力。以後のレグは「＝前」でそれを継ぐ</span></div>
     <div style="overflow:auto"><table class="ifrLog">${ifrTable(rows,'main',W.main,ac,dep,CA.alt,dep)}</table></div>
     <div class="hint">MC/MH は区間中点の偏差(AUTO)。CH は機体の自差表(装備欄)。評定 = ENR 4.3 のnavaid方位/距離(磁方位)、<span style="color:#6fc3ff">RNAV専用</span>の点は navaid では評定できない。(RCA) は出発標高→巡航高度の上昇に要る距離/時間で、そのレグの内数</div>
@@ -7328,6 +7328,22 @@ const SID_DEF={
           '19':[{dme:2.5},{to:'SHT',turn:'L'},{to:'OMIYA'}]},
       }};
   })(),
+  /* 木更津(RJTK AD2.24-SID-1/2・EFF 19 MAY 2022)。滑走路は OSM(02/20 = 015.4°T。AD 2.12 は "To be issued later")、
+     標高は AD elev 10ft。KZT は adnav.json(図の 35°23′49″N/139°54′16″E と一致)。
+     VAR は KOSKA 248°/17.7(6.5°W)・TSUGA 053°/17.8(7.2°W)→ 7°W。
+     KOSKA ONE は RWY20 "(Not established)"。要求上昇勾配の Note は無い(障害物の注記だけ)。
+     ⚠ TSUGA RWY02 の "turn right to intercept and proceed via KZT R-053" は R035/7.8DME から TSUGA への右旋回+直線で近似 */
+  RJTK:{
+    rwy:{'02':{end:[35.406249,139.912706],brgT:15.4,elev:10},'20':{end:[35.390318,139.907325],brgT:195.4,elev:10}},
+    nav:{KZT:{lat:35.397056,lng:139.904497,var:7}},
+    sids:{
+      KOSKA:{name:'KOSKA ONE',nav:'KZT',fix:'KOSKA',
+        '02':[{dme:1.1},{to:{rad:35,dme:7.8}},{to:'KZT',turn:'R'},{to:'KOSKA'}]},
+      TSUGA:{name:'TSUGA TWO',nav:'KZT',fix:'TSUGA',
+        '02':[{dme:1.1},{to:{rad:35,dme:7.8}},{to:'TSUGA',turn:'R'}],
+        '20':[{to:{rad:188,dme:7.4}},{to:'KZT',turn:'R'},{to:'TSUGA'}]},
+    }
+  },
 };
 /* 要求上昇勾配(%)を上昇率に直す: ft/min = 勾配% × GS(kt) × 6076/6000。GS は上昇速度(装備欄)で近似 */
 function sidGradHtml(T,ac){
@@ -7350,7 +7366,10 @@ function sidTrackOf(icao,sidName,rwy,ac,endFix){
   const nm=sidName.toUpperCase(),keys=Object.keys(A.sids).filter(k=>nm.includes(k));
   const key=(endFix&&keys.find(k=>sidEndOf(A,k)===endFix))||keys.find(k=>nm.startsWith(k))||keys[0];if(!key)return null;
   const S=A.sids[key];if(!A.rwy[rwy])rwy=Object.keys(A.rwy)[0];
-  const R=A.rwy[rwy],steps=S[rwy];if(!steps)return null;
+  let R=A.rwy[rwy],steps=S[rwy],rwyNote='';
+  // 図で "(Not established)" の滑走路(木更津 KOSKA の RWY20 など)は、ある方の滑走路で描いて断り書きを出す
+  if(!steps){const r2=Object.keys(A.rwy).find(r=>S[r]);if(!r2)return null;
+    rwyNote=`RWY${rwy} はこの SID が設定されていない。RWY${r2} で表示`;rwy=r2;R=A.rwy[rwy];steps=S[rwy];}
   const nav=A.nav[S.nav],vr=nav.var||0,vcl=ac.vcl||80,roc=ac.roc||500,rad=vcl/188.5;
   let p={lat:R.end[0],lng:R.end[1]},hdg=R.brgT,alt=R.elev,assumed=false,fin=null;const pts=[p];
   const go=nm=>{if(nm<=0)return;p=destLL(p.lat,p.lng,hdg,nm);pts.push(p)};
@@ -7411,7 +7430,7 @@ function sidTrackOf(icao,sidName,rwy,ac,endFix){
   let len=0;for(let i=1;i<pts.length;i++)len+=distNM(pts[i-1],pts[i]);
   // grad は {pct,to[,rwy]} か 滑走路ごとの {'01':{pct,to},…}
   const gd=S.grad&&(S.grad[rwy]||(S.grad.pct!=null&&(!S.grad.rwy||S.grad.rwy===rwy)?S.grad:null));
-  return {pts,len,sid:key,name:S.name,rwy,end,fix:fin,assumed,grad:gd||null};
+  return {pts,len,sid:key,name:S.name,rwy,end,fix:fin,assumed,grad:gd||null,rwyNote};
 }
 /* SIDの折れ線に沿った RCA: 区間ごとの針路で風込みの上昇GSを出し、上昇時間に達した位置 */
 function rcaOnTrack(track,ac,dep,asg,w){
