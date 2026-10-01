@@ -1097,7 +1097,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-197';
+const VER_TAG='v6-198';
 const BUILD='2026-10-01';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7302,6 +7302,32 @@ const SID_DEF={
         '19':[{climbTo:600},{to:{rad:190,dme:9.0}},{to:'ZUSHI'}]},
     }
   },
+  /* 下総(RJTL AD2.24-SID-1〜4)。滑走路は OSM(01/19 = 359.0°T。AD 2.12 は "To be issued later")、
+     THR elev は 19 が 91ft(進入図)、01 は不明なので AD elev 96ft。SHT は AD 2.19(354807N/1400035E)、JDT は ENR 4.1。
+     VAR は KOGAR 329°/24.6・GAMAR 016°/23.5・TSUGA 155°/14.1・OMIYA 297°/21.3 から 7.3〜7.9°W → 7.7°W。
+     ⚠ RWY01 の "Climb RWY HDG to SHT 2.0DME, ... via SHT R016" は 2.0DME から R016 上の点へ直線で近似(ずれ0.2NM程度)
+     ⚠ TSUGA RWY19 は "turn left..." と針路の記載なし → R155 に30°会合(HDG 125)と仮定 */
+  RJTL:(()=>{
+    const r16={'01':[{dme:2.0},{to:{rad:16,dme:23.5}}],'19':[{dme:2.5},{turn:'L',hdg:331},{intercept:16}]};
+    const g67={'01':{pct:5.0,to:600},'19':{pct:5.0,to:700}};
+    return {
+      rwy:{'01':{end:[35.809061,140.011953],brgT:359.0,elev:91},'19':{end:[35.788877,140.012409],brgT:179.0,elev:96}},
+      nav:{SHT:{lat:35.801944,lng:140.009722,var:7.7},JDT:{lat:36.51684,lng:139.87553,var:7.7}},
+      sids:{
+        KOGAR:{name:'KOGAR TWO',nav:'SHT',fix:'KOGAR',grad:g67,
+          '01':[...r16['01'],{to:{rad:16,dme:24.6}},{arc:'L',dme:24.6,to:'KOGAR'}],
+          '19':[...r16['19'],{to:{rad:16,dme:24.6}},{arc:'L',dme:24.6,to:'KOGAR'}]},
+        UTSUNOMIYA:{name:'UTSUNOMIYA ONE',nav:'SHT',fix:'JDT',grad:g67,
+          '01':[...r16['01'],{to:'GAMAR'},{to:'JDT',turn:'L'}],
+          '19':[...r16['19'],{to:'GAMAR'},{to:'JDT',turn:'L'}]},
+        TSUGA:{name:'TSUGA FOUR',nav:'SHT',fix:'TSUGA',grad:{pct:5.0,to:600},
+          '01':[{dme:2.0},{turn:'R',hdg:200},{intercept:155},{to:'TSUGA'}],
+          '19':[{climbTo:600},{turn:'L',hdg:125,assumed:1},{intercept:155},{to:'TSUGA'}]},
+        WEST:{name:'WEST FIVE',nav:'SHT',fix:'OMIYA',grad:{'01':{pct:5.0,to:2000},'19':{pct:5.0,to:700}},
+          '01':[{climbTo:2000},{turn:'L',hdg:252},{intercept:297},{to:'OMIYA'}],
+          '19':[{dme:2.5},{to:'SHT',turn:'L'},{to:'OMIYA'}]},
+      }};
+  })(),
 };
 /* 要求上昇勾配(%)を上昇率に直す: ft/min = 勾配% × GS(kt) × 6076/6000。GS は上昇速度(装備欄)で近似 */
 function sidGradHtml(T,ac){
@@ -7361,6 +7387,12 @@ function sidTrackOf(icao,sidName,rwy,ac,endFix){
       const radT=tru(st.intercept===1?S.rad:st.intercept),q=lineRadialX(p,hdg,nav,radT);
       if(q){p=q;pts.push(p)}
       hdg=radT;
+    }else if(st.arc){                                            // DME アーク: arc 'L'=反時計回り 'R'=時計回り。to の点のラジアルまで
+      const n=A.nav[st.nav||S.nav],tgt=ptOf(st.to);if(!tgt)return null;
+      const a0=trueBrg(n,p),a1=trueBrg(n,tgt),sg=st.arc==='R'?1:-1,sw=sg>0?((a1-a0+360)%360):((a0-a1+360)%360);
+      const k=Math.max(1,Math.round(sw/2));
+      for(let i=1;i<=k;i++){p=destLL(n.lat,n.lng,(a0+sg*sw*i/k+360)%360,st.dme);pts.push(p)}
+      hdg=(trueBrg(n,p)+sg*90+360)%360;fin=typeof st.to==='string'?st.to:null;
     }else if(st.to!=null){
       const tgt=ptOf(st.to);if(!tgt)return null;
       if(st.assumed)assumed=true;
@@ -7377,7 +7409,9 @@ function sidTrackOf(icao,sidName,rwy,ac,endFix){
       for(const t of S.then){const tgt=ptOf(t.to);if(!tgt)return null;toward(tgt,t.turn);end=tgt;fin=t.to}}
   }
   let len=0;for(let i=1;i<pts.length;i++)len+=distNM(pts[i-1],pts[i]);
-  return {pts,len,sid:key,name:S.name,rwy,end,fix:fin,assumed,grad:(S.grad&&(!S.grad.rwy||S.grad.rwy===rwy))?S.grad:null};
+  // grad は {pct,to[,rwy]} か 滑走路ごとの {'01':{pct,to},…}
+  const gd=S.grad&&(S.grad[rwy]||(S.grad.pct!=null&&(!S.grad.rwy||S.grad.rwy===rwy)?S.grad:null));
+  return {pts,len,sid:key,name:S.name,rwy,end,fix:fin,assumed,grad:gd||null};
 }
 /* SIDの折れ線に沿った RCA: 区間ごとの針路で風込みの上昇GSを出し、上昇時間に達した位置 */
 function rcaOnTrack(track,ac,dep,asg,w){
