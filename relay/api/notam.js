@@ -40,7 +40,7 @@
 */
 import { check, preflight, json, makeLimiter } from '../lib/guard.js';
 
-export const maxDuration = 30;    // 区域の分割取得で SWIM を最大28回引く(7本並列)
+export const maxDuration = 45;    // 区域の分割取得で SWIM を最大28回引く(3本並列+失敗分の取り直し)
 const UP_TTL_MS = 600_000;        // NOTAMは分単位で変わるものではないので10分使い回す
 const MAX_IDS = 8;
 const PAGE = 100;
@@ -53,6 +53,13 @@ const iso = (sec) => new Date(sec * 1000).toISOString();
 
 /* ───────── SWIM(国交省 デジタルノータム) ───────── */
 let swimCookie = null;            // 'MSMSI=…; MSMAI=…'
+let swimLoginP = null;            // 並列の要求が同時にログインし直さないよう1本にまとめる
+// used: 403 を返されたときに使っていた Cookie。他の要求が既にログインし直していればそれを使う
+function swimRelogin(used) {
+  if (swimCookie && swimCookie !== used) return Promise.resolve(swimCookie);
+  if (!swimLoginP) swimLoginP = swimLogin().finally(() => { swimLoginP = null; });
+  return swimLoginP;
+}
 
 async function swimLogin() {
   const r = await fetch(process.env.SWIM_LOGIN_URL, {
@@ -126,8 +133,9 @@ async function swimSearch(cond, days) {
   });
   const url = `${process.env.SWIM_SEARCH_URL}?${q.toString().replace(/%20/g, '+')}`;
   const call = c => fetch(url, { headers: { Cookie: c, Accept: 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(20000) });
-  let r = await call(swimCookie || await swimLogin());
-  if (r.status === 403 || r.status === 401 || (r.status >= 300 && r.status < 400)) r = await call(await swimLogin());   // セッション切れ
+  const c0 = swimCookie || await swimRelogin(null);
+  let r = await call(c0);
+  if (r.status === 403 || r.status === 401 || (r.status >= 300 && r.status < 400)) r = await call(await swimRelogin(c0));   // セッション切れ
   if (!r.ok) throw new Error(`SWIM ${r.status}`);
   const o = await r.json();
   const e = o.error_info || {};
@@ -201,12 +209,22 @@ async function swimArea(box) {
   } catch (e) {
     if (e.code !== '14') throw e;
     const jobs = [{ location: 'RJJJ' }, ...AREA_SUBJ.map(c => ({ fir: 'RJJJ', notamCode: c }))];
-    const got = await pool(jobs, 7, c => swimSearch(c, days));
+    // ⚠ 7本並列では28種中11種が失敗した(2026-10-07 実機)。3本に減らし、失敗分は最後に1本ずつ取り直す
+    const got = await pool(jobs, 3, c => swimSearch(c, days));
+    for (let k = 0; k < jobs.length; k++) {
+      if (got[k].e && got[k].e.code !== '14') {
+        try { got[k] = { ok: await swimSearch(jobs[k], days) }; } catch (e) { got[k] = { e }; }
+      }
+    }
     const seen = new Set(), trunc = [], fail = [];
     rows = [];
     got.forEach((g, k) => {
       const name = jobs[k].notamCode || 'RJJJ名義';
-      if (g.e) { (g.e.code === '14' ? trunc : fail).push(name); return; }
+      if (g.e) {
+        if (g.e.code === '14') trunc.push(name);
+        else fail.push(`${name}(${String(g.e.message || g.e).replace(/^SWIM /, '').slice(0, 40)})`);
+        return;
+      }
       g.ok.forEach(v => { const key = `${v.icao}|${v.no}`; if (!seen.has(key)) { seen.add(key); rows.push(v); } });
     });
     if (fail.length === jobs.length) throw got[0].e;
