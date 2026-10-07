@@ -68,7 +68,7 @@ async function swimLogin() {
     if (m) jar[m[1]] = m[2];
   });
   if (!jar.MSMSI && !jar.MSMAI)
-    throw new Error(r.status === 401 || r.status === 403 ? 'SWIM のログインに失敗(ID・パスワードを確認)' : `SWIM login ${r.status}(Cookie なし)`);
+    throw new Error([400, 401, 403].includes(r.status) ? `SWIM のログインに失敗(${r.status}。ID・パスワードを確認)` : `SWIM login ${r.status}(Cookie なし)`);   // 誤りは 400 で返る(実測)
   swimCookie = Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
   return swimCookie;
 }
