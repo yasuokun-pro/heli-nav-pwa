@@ -595,6 +595,16 @@
   .ntmJaNote{font-size:10px;color:var(--amb);margin-top:3px}
   .ntmJaBtn{background:none;border:1px solid var(--line);color:var(--txt);border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;margin-left:6px}
   .ntmPopTx{font-size:11px}
+  /* 📌(v6-208)。残したい NOTAM に付け、地図を「📌のみ」にすると他は消える */
+  .ntmPinBtn{background:none;border:1px solid var(--line);color:var(--dim);border-radius:5px;padding:1px 6px;font-size:11px;cursor:pointer;margin-left:6px;filter:grayscale(1);opacity:.7}
+  .ntmPinBtn.on{border-color:#ff9500;color:#ff9500;filter:none;opacity:1;background:rgba(255,149,0,.12)}
+  .ntmIt.pinned{background:rgba(255,149,0,.07)}
+  .ntmBar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 8px;font-size:12px;color:var(--dim)}
+  .ntmBar .seg button{background:none;border:1px solid var(--line);color:var(--dim);padding:4px 10px;font-size:12px;cursor:pointer}
+  .ntmBar .seg button:first-child{border-radius:6px 0 0 6px}.ntmBar .seg button:last-child{border-radius:0 6px 6px 0;border-left:none}
+  .ntmBar .seg button.on{color:#ff9500;border-color:#ff9500;background:rgba(255,149,0,.1)}
+  .ntmBar .lnk{background:none;border:none;color:var(--cyn);font-size:12px;cursor:pointer;padding:4px}
+  .ntmGeo{font-size:10px;color:#ff9500;font-family:var(--mono);margin-left:4px}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{color:var(--dim);font-weight:500;text-align:left;padding:6px 5px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.04em}
   td{padding:6px 5px;border-bottom:1px solid var(--line);font-family:var(--mono);white-space:nowrap}
@@ -1000,7 +1010,8 @@
       <button class="btn ntmJaBtn" title="NOTAM の略語を日本語に置き換えた参考訳と、原文を切り替える">日本語</button>
       <span id="ntmStatus" class="hint" style="align-self:center"></span>
     </div>
-    <div class="hint">ルート上の飛行場のNOTAM(中継経由)。
+    <div class="ntmBar" id="ntmBar"></div>
+    <div class="hint">ルート上の飛行場のNOTAMと、ルートにかかる<b>区域のNOTAM</b>(FIR RJJJ 名義など・座標のあるもの)(中継経由)。
       ⚠ <b>公式ブリーフィングの代わりにはなりません</b>。国内の正式な情報源はAIS Japan・部隊のブリーフィングです。
       自衛隊飛行場や国内限定の通知は流れてこないことがあり、<b>出ない＝異常なしではありません</b>。</div>
     <div id="ntmBody"></div>
@@ -1104,7 +1115,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-207';
+const VER_TAG='v6-208';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3898,7 +3909,18 @@ document.getElementById('btnMetR').onclick=()=>loadMetar(true);
    中継(/api/notam)経由でFAAのICAO配信から取る。⚠ **公式ブリーフィングの代わりにはならない**。
    国内限定の通知や自衛隊飛行場の分は流れてこないことがあるので「出ない=異常なし」ではない。
    ⚠ 位置は送らない(飛行場のICAOだけ)。取りに行くのは**押したときだけ**(自動更新しない)。 */
-let NTM=null,ntmFetched=0,ntmErr='',ntmIds=[],ntmOpen={};
+let NTM=null,ntmFetched=0,ntmErr='',ntmIds=[],ntmOpen={},ntmBoxSent='';
+/* 区域の NOTAM を引く矩形(v6-208)。ルートの外接矩形+約9NM を**0.1度単位に外側へ丸めて**送る。
+   ⚠ ルートそのものは送らない(中継は矩形で粗く絞るだけ。ルートからの距離は ntmAreaList が端末の中で見る) */
+const NTM_AREA_NM=5;
+function ntmBox(){
+  let pts=wps.map(w=>[w.lat,w.lng]),m=0.15;
+  if(!pts.length){const c=ownPos||map.getCenter();pts=[[c.lat,c.lng]];m=0.45}
+  const la=pts.map(p=>p[0]),lo=pts.map(p=>p[1]);
+  const f=v=>Math.floor(v*10)/10,c=v=>Math.ceil(v*10)/10;
+  const b=[f(Math.min(...la)-m),f(Math.min(...lo)-m),c(Math.max(...la)+m),c(Math.max(...lo)+m)];
+  return b.map(v=>v.toFixed(1)).join(',');
+}
 /* ルートの線から10NM以内の飛行場(始点・終点まわりは15NM)。多い順ではなく**通る順**に並べる */
 function ntmPickIcaos(){
   const air=ASP.filter(a=>a.icao&&/^[A-Z0-9]{4}$/.test(a.icao));
@@ -3940,13 +3962,14 @@ async function loadNotam(force){
   const st=document.getElementById('ntmStatus');
   const ids=ntmPickIcaos();
   if(!ids.length){ntmErr='ルートも現在地も無いので飛行場を決められません';renderNotam();return}
-  if(NTM&&!force&&Date.now()-ntmFetched<600000&&ids.join()===ntmIds.join()){renderNotam();drawNtmMap();return}
+  const box=ntmBox();
+  if(NTM&&!force&&Date.now()-ntmFetched<600000&&ids.join()===ntmIds.join()&&box===ntmBoxSent){renderNotam();drawNtmMap();return}
   if(!relayBase()){ntmErr='中継が未設定です(他機情報タブの中継設定)';renderNotam();return}
   if(st)st.textContent='取得中…';
   ntmErr='';
   try{
-    NTM=await relayPost('/api/notam',{ids:ids.join(',')});
-    ntmIds=ids;ntmFetched=Date.now();
+    NTM=await relayPost('/api/notam',{ids:ids.join(','),box});
+    ntmIds=ids;ntmFetched=Date.now();ntmBoxSent=box;ntmGeoCache=new WeakMap();
   }catch(e){
     const m=String(e.message||e);
     ntmErr=/503 key/.test(m)?'中継に取得元の設定が入っていません(Vercelの環境変数 AR_USER / AR_PASS)'
@@ -3955,38 +3978,180 @@ async function loadNotam(force){
   renderNotam();
   drawNtmMap();
 }
+function ntmFl(x){        // Q 行の下限/上限(FL)。000=SFC・999=UNL
+  if(!isFinite(x.lo)&&!isFinite(x.up))return '';
+  const f=(v,lo)=>!isFinite(v)?'?':lo&&v===0?'SFC':v>=999?'UNL':'FL'+String(v).padStart(3,'0');
+  return ` ${f(x.lo,1)}-${f(x.up)}`;
+}
+function ntmItemHtml(x,showLoc){
+  const k=ntmKey(x),pin=ntmPinned(k),g=ntmGeo(x);
+  const gl=g.polys.length?`多角形${g.polys.length>1?'×'+g.polys.length:''}`:g.circles.length?`${g.circles.every(c=>c.pt)?'地点':'円'}${g.circles.length>1?'×'+g.circles.length:''}`:g.lines.length?'線':'';
+  return `<div class="ntmIt${pin?' pinned':''}" data-k="${wxEsc(k)}"><div class="ntmMeta">${wxEsc(x.no)}`+
+    (showLoc?` <b>${wxEsc(x.icao)}</b>`:'')+
+    `${x.cls?` <span class="ntmCls">${wxEsc(x.cls)}</span>`:''}`+
+    ` ${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST${ntmFl(x)}`+
+    (gl?`<span class="ntmGeo">◇${gl}</span>`:'')+
+    `<button class="ntmPinBtn${pin?' on':''}" data-k="${wxEsc(k)}" title="地図に残す(📌のみ表示のとき、これ以外は消える)">📌</button></div>`+
+    (x.sch?`<div class="ntmMeta">時間帯 ${wxEsc(x.sch)}(UTC)</div>`:'')+
+    ntmTxtHtml(x.txt)+`</div>`;
+}
+function renderNtmBar(){
+  const el=document.getElementById('ntmBar');if(!el)return;
+  const n=Object.keys(ntmPins).length;
+  el.innerHTML=`地図に出す <span class="seg"><button data-m="all" class="${ntmPinOnly?'':'on'}">全部</button>`+
+    `<button data-m="pin" class="${ntmPinOnly?'on':''}">📌のみ (${n})</button></span>`+
+    (n?`<button class="lnk" data-m="clr">📌を全部外す</button>`:'');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    const m=b.dataset.m;
+    if(m==='clr'){if(!confirm('📌を全部外しますか?'))return;ntmPins={};ntmPinSave()}
+    else ntmPinOnlySet(m==='pin');
+    renderNotam();drawNtmMap();
+  });
+}
 function renderNotam(){
+  renderNtmBar();
   const b=document.getElementById('ntmBody'),st=document.getElementById('ntmStatus');
   if(!b)return;
   const srcName={swim:'SWIM(国交省 デジタルノータム)',autorouter:'autorouter(EAD)',faa:'FAA'};
   if(st)st.innerHTML=NTM?`${NTM.updated} 取得(UTC) / ${ntmIds.length}飛行場`+
     (srcName[NTM.src]?` / ${srcName[NTM.src]}`:''):'';
   if(ntmErr&&!NTM){b.innerHTML=`<div class="ifrNa">${wxEsc(ntmErr)}</div>`;return}
-  if(!NTM){b.innerHTML='<div class="hint">「↻ 取得」でルート上の飛行場のNOTAMを取ります。</div>';return}
-  const now=Date.now();
+  if(!NTM){b.innerHTML='<div class="hint">「↻ 取得」でルート上の飛行場と、ルートにかかる区域のNOTAMを取ります。</div>';return}
+  const ar=ntmAreaList(),aOpen=ntmOpen.AREA!==false,ai=NTM.areaInfo;
+  const areaHtml=NTM.src!=='swim'?'':
+    `<div class="ntmAd"><div class="ntmHd" data-ic="AREA"><b>区域</b> <span class="jp">${wps.length?`ルートから${NTM_AREA_NM}NM以内`:'付近'}</span>`+
+    `<small>${NTM.areaErr?'取得できず':ar.length+'件'}</small><i>${aOpen?'▾':'▸'}</i></div>`+
+    (aOpen?(NTM.areaErr?`<div class="ifrNa">${wxEsc(NTM.areaErr)}</div>`:
+      `<div class="ntmIt"><div class="ntmMeta" style="white-space:normal">FIR RJJJ の NOTAM のうち、座標(Q行の円・本文の多角形)がルートにかかるもの。今から${ai?ai.days*24:48}時間に有効な分。`+
+      (ai&&ai.mode==='rjjj'?'<br><span style="color:var(--amb)">⚠ 件数が多すぎたので RJJJ 名義のものだけ。他の飛行場名義の区域は入っていません</span>':'')+
+      `<br>座標の無い区域の通知は地図に出せないので入っていません。</div></div>`+
+      (ar.length?ar.map(x=>ntmItemHtml(x,true)).join(''):'<div class="ifrNa">ルートにかかる区域のNOTAMはありません(この配信で見える範囲では)</div>')):'')+
+    `</div>`;
   b.innerHTML=ntmIds.map(ic=>{
     const nm=(ASP.find(a=>a.icao===ic)||{}).n||'';
     const err=NTM.err&&NTM.err[ic];
-    let list=(NTM.n&&NTM.n[ic])||[];
-    // 期限切れは落とす(取得から時間が経っていても混ざらないように)
-    list=list.filter(x=>!/^\d{4}-/.test(x.to)||Date.parse(x.to)>now);
+    const list=ntmLive((NTM.n&&NTM.n[ic])||[]);
     const open=ntmOpen[ic]!==false;
     return `<div class="ntmAd"><div class="ntmHd" data-ic="${ic}">`+
       `<b>${ic}</b> <span class="jp">${wxEsc(nm)}</span>`+
       `<small>${err?'取得できず':list.length+'件'}</small><i>${open?'▾':'▸'}</i></div>`+
       (open?(err?`<div class="ifrNa">${wxEsc(err)}</div>`
-        :(list.length?list.map(x=>
-            `<div class="ntmIt"><div class="ntmMeta">${wxEsc(x.no)}`+
-            `${x.cls?` <span class="ntmCls">${wxEsc(x.cls)}</span>`:''}`+
-            ` ${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST</div>`+
-            (x.sch?`<div class="ntmMeta">時間帯 ${wxEsc(x.sch)}(UTC)</div>`:'')+
-            ntmTxtHtml(x.txt)+`</div>`).join('')
+        :(list.length?list.map(x=>ntmItemHtml(x)).join('')
           :'<div class="ifrNa">有効なNOTAMはありません(この配信で見える範囲では)</div>')):'')+
       `</div>`;
-  }).join('')+(ntmErr?`<div class="ifrNa">${wxEsc(ntmErr)}</div>`:'');
+  }).join('')+areaHtml+(ntmErr?`<div class="ifrNa">${wxEsc(ntmErr)}</div>`:'');
   b.querySelectorAll('.ntmHd').forEach(h=>h.onclick=()=>{
     const ic=h.dataset.ic;ntmOpen[ic]=ntmOpen[ic]===false;renderNotam()});
 }
+// 期限切れは落とす(取得から時間が経っていても混ざらないように)
+function ntmLive(list){const now=Date.now();return list.filter(x=>!/^\d{4}-/.test(x.to)||Date.parse(x.to)>now)}
+
+/* ── NOTAM の範囲(v6-208) ──
+   本文の座標の並びから 多角形 / 線 / 円 を起こす。Q 行の円は「その NOTAM を含む大まかな円」なので、
+   本文に形があればそちらを描く。
+   ・座標と座標の間が「-」「,」「TO」だけなら同じ図形の頂点。間に文が入れば別の図形((1)(2)… の区域ごと)
+   ・「CENTERED ON <座標>」「<座標> RADIUS 2NM」の座標は円の中心(頂点にしない)
+   ・弧(ARC)を含む区域は弧を直線で結ぶ近似になる(ポップアップに出す)
+   ⚠ 本文の読み取りなので取り違えはあり得る。正式な範囲は原文で */
+const NTM_CRD=/(\d{2})(\d{2})(\d{2}(?:\.\d+)?)?\s*([NS])\s*\/?\s*(\d{3})(\d{2})(\d{2}(?:\.\d+)?)?\s*([EW])/g;
+let ntmGeoCache=new WeakMap();
+function ntmRadNM(v,u){u=(u||'NM').toUpperCase();return u==='KM'?v/1.852:u==='M'?v/1852:u==='FT'?v/6076:v}
+function ntmGeo(x){
+  if(ntmGeoCache.has(x))return ntmGeoCache.get(x);
+  const t=String(x.txt||'').toUpperCase(),ms=[...t.matchAll(NTM_CRD)];
+  const g={polys:[],lines:[],circles:[],arc:false};
+  let run=[],prevEnd=-1;
+  const flush=()=>{
+    if(run.length>=3){if(run.length>3&&Math.abs(run[0][0]-run.at(-1)[0])<1e-6&&Math.abs(run[0][1]-run.at(-1)[1])<1e-6)run.pop();g.polys.push(run)}
+    else if(run.length===2)g.lines.push(run);
+    else if(run.length===1)g.circles.push({c:run[0],r:+x.rad>0&&+x.rad<=5?+x.rad:0.5,pt:1});
+    run=[];
+  };
+  ms.forEach(m=>{
+    const lat=(+m[1]+m[2]/60+(m[3]?+m[3]/3600:0))*(m[4]==='S'?-1:1);
+    const lng=(+m[5]+m[6]/60+(m[7]?+m[7]/3600:0))*(m[8]==='W'?-1:1);
+    if(!(lat>=15&&lat<=50&&lng>=115&&lng<=165))return;
+    const before=t.slice(Math.max(0,m.index-70),m.index),after=t.slice(m.index+m[0].length,m.index+m[0].length+50);
+    // 円の中心か(前に CENTERED ON、または前後に RADIUS)
+    let rm=before.match(/(?:RADIUS|RAD)\s*(?:OF\s*)?([\d.]+)\s*(NM|KM|M|FT)\b[^0-9]{0,40}$/);
+    const ctr=/(?:CENTERED|CENTRED|CENTER|CENTRE)\s*(?:ON|AT)?\s*:?\s*$/.test(before);
+    if(!rm)rm=after.match(/^\s*(?:\)|,)?\s*(?:WITH\s*)?(?:A\s*)?(?:RADIUS|RAD)\s*(?:OF\s*)?([\d.]+)\s*(NM|KM|M|FT)\b/);
+    if(rm||ctr){
+      const r=rm?ntmRadNM(+rm[1],rm[2]):(+x.rad>0&&+x.rad<=50?+x.rad:1);
+      // 多角形の途中の弧の中心なら、頂点の並びは切らずに弧のしるしだけ付ける
+      if(run.length&&/ARC/.test(t.slice(prevEnd,m.index))){g.arc=true;return}
+      flush();g.circles.push({c:[lat,lng],r});prevEnd=m.index+m[0].length;return;
+    }
+    if(run.length){
+      const gap=t.slice(prevEnd,m.index);
+      if(/ARC/.test(gap))g.arc=true;
+      else if(!/^[\s\-–—,/.:;]*(?:(?:TO|AND|THEN)[\s\-–—,/.:;]*)*$/.test(gap))flush();
+    }
+    run.push([lat,lng]);prevEnd=m.index+m[0].length;
+  });
+  flush();
+  ntmGeoCache.set(x,g);
+  return g;
+}
+// ルート(なければ現在地・地図中心)からの距離(NM)。図形の内側なら0
+function ntmGeoDist(x){
+  const g=ntmGeo(x);
+  const ref=wps.length?wps.map(w=>[w.lat,w.lng]):[(()=>{const c=ownPos||map.getCenter();return [c.lat,c.lng]})()];
+  const KY=110540/1852,kx=111320*Math.cos(ref[0][0]*Math.PI/180)/1852;
+  const P=ref.map(p=>[p[1]*kx,p[0]*KY]);
+  const xy=p=>[p[1]*kx,p[0]*KY];
+  const segD=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],L=dx*dx+dy*dy;let t=L?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L:0;t=Math.max(0,Math.min(1,t));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy)};
+  const toRoute=p=>{if(P.length===1)return Math.hypot(p[0]-P[0][0],p[1]-P[0][1]);let d=1e9;for(let i=0;i<P.length-1;i++)d=Math.min(d,segD(p,P[i],P[i+1]));return d};
+  const inPoly=(p,R)=>{let c=false;for(let i=0,j=R.length-1;i<R.length;j=i++){const a=R[i],b=R[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c}return c};
+  let best=1e9;
+  const shapes=[...g.polys.map(r=>({r,closed:1})),...g.lines.map(r=>({r,closed:0}))];
+  shapes.forEach(({r,closed})=>{
+    const R=r.map(xy);
+    if(closed&&P.some(p=>inPoly(p,R))){best=0;return}
+    R.forEach(q=>best=Math.min(best,toRoute(q)));
+    const n=closed?R.length:R.length-1;
+    for(let i=0;i<n;i++)P.forEach(p=>best=Math.min(best,segD(p,R[i],R[(i+1)%R.length])));
+  });
+  g.circles.forEach(c=>best=Math.min(best,Math.max(0,toRoute(xy(c.c))-c.r)));
+  if(!shapes.length&&!g.circles.length&&isFinite(x.lat)&&isFinite(x.lon)&&+x.rad>0&&+x.rad<=100)
+    best=Math.max(0,toRoute(xy([x.lat,x.lon]))-(+x.rad));
+  return best;
+}
+// 区域の NOTAM のうちルートにかかるもの。飛行場の欄に同じものがあれば除く
+function ntmAreaList(){
+  if(!NTM||!Array.isArray(NTM.area))return [];
+  const seen=new Set();ntmIds.forEach(ic=>((NTM.n&&NTM.n[ic])||[]).forEach(x=>seen.add(ntmKey(x))));
+  const lim=wps.length?NTM_AREA_NM:25;
+  return ntmLive(NTM.area).filter(x=>!seen.has(ntmKey(x))&&ntmGeoDist(x)<=lim);
+}
+
+/* ── 📌(v6-208) ──
+   残したい NOTAM に📌を付け、「📌のみ」にすると地図には📌の付いたものだけ出る(ユーザー要望)。
+   鍵は「位置指示記号|番号」。値は終わりの時刻で、過ぎたら次に読むときに捨てる。端末の中だけ(hnav.ntmPin) */
+const ntmKey=x=>`${x.icao}|${x.no}`;
+let ntmPins=(()=>{const o=store.get('hnav.ntmPin')||{},now=Date.now(),r={};
+  for(const k in o){const t=Date.parse(o[k]);if(!/^\d{4}-/.test(o[k])||!isFinite(t)||t>now)r[k]=o[k]}return r})();
+let ntmPinOnly=!!store.get('hnav.ntmPinOnly');
+const ntmPinned=k=>!!ntmPins[k];
+function ntmPinSave(){store.set('hnav.ntmPin',ntmPins)}
+function ntmPinOnlySet(on){ntmPinOnly=!!on;store.set('hnav.ntmPinOnly',ntmPinOnly?1:0)}
+function ntmFind(k){
+  if(!NTM)return null;
+  for(const ic in (NTM.n||{}))for(const x of NTM.n[ic])if(ntmKey(x)===k)return x;
+  return (NTM.area||[]).find(x=>ntmKey(x)===k)||null;
+}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.ntmPinBtn');if(!b)return;
+  e.preventDefault();e.stopPropagation();
+  const k=b.dataset.k,x=ntmFind(k);
+  if(ntmPins[k])delete ntmPins[k];else ntmPins[k]=x?x.to||'PERM':'PERM';
+  ntmPinSave();
+  const on=!!ntmPins[k];
+  document.querySelectorAll('.ntmPinBtn').forEach(z=>{if(z.dataset.k===k)z.classList.toggle('on',on)});
+  document.querySelectorAll('.ntmIt').forEach(z=>{if(z.dataset.k===k)z.classList.toggle('pinned',on)});
+  renderNtmBar();
+  // 地図: 📌のみなら描き直す(外したものは消える)。全部表示なら線の太さだけ変える(描き直すと吹き出しが閉じる)
+  if(ntmPinOnly&&!on)drawNtmMap();else ntmRestyle(k);
+},true);
 document.getElementById('btnNtmR').onclick=()=>loadNotam(true);
 
 /* ───────── 地図のNOTAM(情報グループ) ─────────
@@ -4046,42 +4211,73 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
 const ntmPopOpt=()=>{const o=parseFloat(getComputedStyle(document.querySelector('.mapwrap')||document.body).getPropertyValue('--ovlH'))||0;
   return {maxHeight:Math.max(160,Math.round((innerHeight-o)*0.45)),maxWidth:300,
     autoPanPaddingTopLeft:L.point(10,o+44),autoPanPaddingBottomRight:L.point(10,90)}};
+/* ⚠ autoPan だけでは足りない(v6-208)。余白は bindPopup の時点の --ovlH で決まり、その後に画面を切り替えると古いまま。
+   回転地図(leaflet-rotate)では図形の吹き出しの autoPan がほとんど動かないこともあった。
+   開いたあとに実際の位置を測って、諸元の帯の下・右下のボタンの上に収まるよう地図をずらす */
+function ntmPopFit(e){
+  setTimeout(()=>{
+    const el=e.popup&&e.popup.getElement();if(!el||!map.hasLayer(e.popup))return;
+    const r=el.getBoundingClientRect(),m=map.getContainer().getBoundingClientRect();
+    const o=parseFloat(getComputedStyle(document.querySelector('.mapwrap')||document.body).getPropertyValue('--ovlH'))||0;
+    const top=m.top+o+44,bot=m.bottom-90;
+    let dy=0;
+    if(r.top<top)dy=r.top-top; else if(r.bottom>bot)dy=Math.min(r.bottom-bot,r.top-top);
+    if(Math.abs(dy)>2)map.panBy([0,dy],{animate:true});
+  },320);
+}
 function ntmPopHtml(x){
   const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  const on=document.body.classList.contains('ntmJa');
-  return `<div class="apPop"><h5>${esc(x.no)} ${esc(x.icao)}<button class="ntmJaBtn">${on?'原文':'日本語'}</button></h5>`+
-    `<div style="font-size:11px;color:var(--dim)">${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST</div>`+
+  const on=document.body.classList.contains('ntmJa'),k=ntmKey(x),g=ntmGeo(x);
+  return `<div class="apPop"><h5>${esc(x.no)} ${esc(x.icao)}<button class="ntmJaBtn">${on?'原文':'日本語'}</button>`+
+    `<button class="ntmPinBtn${ntmPinned(k)?' on':''}" data-k="${esc(k)}" title="地図に残す">📌</button></h5>`+
+    `<div style="font-size:11px;color:var(--dim)">${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST${ntmFl(x)}</div>`+
     (x.sch?`<div style="font-size:11px;color:var(--dim)">時間帯 ${esc(x.sch)}(UTC)</div>`:'')+
+    ((g.polys.length||g.lines.length||g.circles.length)?
+      `<div style="font-size:10px;color:#ff9500">範囲は本文の座標から描いたもの${g.arc?'(弧は直線で近似)':''}。正式な範囲は原文で</div>`:'')+
     ntmTxtHtml(x.txt,true)+`</div>`;
+}
+let ntmShapes={};          // 鍵 → 地図の図形(📌で太さを変えるため)
+const ntmStyle=pin=>({color:'#ff9500',weight:pin?3:1.5,dashArray:pin?null:'5,4',fillOpacity:pin?.12:.06});
+function ntmRestyle(k){(ntmShapes[k]||[]).forEach(l=>l.setStyle&&l.setStyle(ntmStyle(ntmPinned(k))))}
+// 1件の NOTAM の図形。本文に形があればそれ、無ければ Q 行の円。どちらも無ければ false
+function ntmDrawOne(x){
+  const k=ntmKey(x),g=ntmGeo(x),st=ntmStyle(ntmPinned(k)),ls=[];
+  g.polys.forEach(r=>ls.push(L.polygon(r,st)));
+  g.lines.forEach(r=>ls.push(L.polyline(r,{...st,fill:false})));
+  g.circles.forEach(c=>ls.push(L.circle(c.c,{...st,radius:c.r*1852})));
+  if(!ls.length&&isFinite(x.lat)&&isFinite(x.lon)&&(x.lat||x.lon)&&!(+x.rad>100))
+    ls.push(L.circle([x.lat,x.lon],{...st,radius:(+x.rad>0?+x.rad:2)*1852}));
+  if(!ls.length)return false;
+  ls.forEach(l=>l.bindPopup(()=>ntmPopHtml(x),ntmPopOpt()).on('popupopen',ntmPopFit).addTo(ntmLayer));
+  ntmShapes[k]=ls;
+  return true;
 }
 function drawNtmMap(){
   if(!ntmMapOn)return;
   if(ntmLayer)map.removeLayer(ntmLayer);
-  ntmLayer=L.layerGroup().addTo(map);
+  ntmLayer=L.layerGroup().addTo(map);ntmShapes={};
   if(!NTM)return;
   const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const want=x=>!ntmPinOnly||ntmPinned(ntmKey(x));
   ntmIds.forEach(ic=>{
-    const list=(NTM.n&&NTM.n[ic])||[];
-    const noGeo=[];
-    list.forEach(x=>{
-      if(!isFinite(x.lat)||!isFinite(x.lon)||(!x.lat&&!x.lon)){noGeo.push(x);return}
-      const r=(+x.rad>0?+x.rad:2)*1852;
-      L.circle([x.lat,x.lon],{radius:r,color:'#ff9500',weight:1.5,dashArray:'5,4',fillOpacity:.06})
-        .bindPopup(()=>ntmPopHtml(x),ntmPopOpt()).addTo(ntmLayer);
-    });
+    const all=ntmLive((NTM.n&&NTM.n[ic])||[]).filter(want);
+    const noGeo=all.filter(x=>!ntmDrawOne(x));
     const a=ASP.find(z=>z.icao===ic);
     if(!a)return;
-    const n=list.length;
+    if(ntmPinOnly&&!noGeo.length)return;           // 📌のみ: 📌の付いた座標なしの通知が無い飛行場はピンも出さない
+    const n=ntmPinOnly?noGeo.length:all.length,list=ntmPinOnly?noGeo:all;
     L.marker([a.lat,a.lng],{icon:L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,15],
       html:`<div class="ntmPin${n?'':' zero'}">N${n?'<b>'+n+'</b>':''}</div>`})})
       .bindPopup(()=>`<div class="apPop"><h5>${ic} ${esc(a.n)}`+
         (n?`<button class="ntmJaBtn">${document.body.classList.contains('ntmJa')?'原文':'日本語'}</button>`:'')+`</h5>`+
         (n?list.map(x=>`<div style="margin:3px 0"><span style="color:var(--dim);font-family:var(--mono);font-size:10px">`+
-             `${esc(x.no)} ${ntmTime(x.from)}〜${ntmTime(x.to)}${x.est?'(EST)':''}</span>`+ntmTxtHtml(x.txt,true)+`</div>`).join('')
+             `${esc(x.no)} ${ntmTime(x.from)}〜${ntmTime(x.to)}${x.est?'(EST)':''}${ntmFl(x)}</span>`+
+             `<button class="ntmPinBtn${ntmPinned(ntmKey(x))?' on':''}" data-k="${esc(ntmKey(x))}">📌</button>`+ntmTxtHtml(x.txt,true)+`</div>`).join('')
            :'<div style="color:var(--dim)">有効なNOTAMはありません(この配信で見える範囲では)</div>')+
         `</div>`,ntmPopOpt())
-      .addTo(ntmLayer);
+      .on('popupopen',ntmPopFit).addTo(ntmLayer);
   });
+  ntmAreaList().filter(want).forEach(x=>ntmDrawOne(x));
 }
 document.getElementById('btnNtmMap').onclick=toggleNtmMap;
 document.getElementById('btnNtmMap2').onclick=()=>{if(!ntmMapOn)toggleNtmMap();setScreen('main')};

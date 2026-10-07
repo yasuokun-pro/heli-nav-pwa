@@ -31,9 +31,10 @@
    ⚠ **公式ブリーフィングの代わりにはならない**。日本の正式な情報源は AIS Japan / 部隊のブリーフィング。
      取れなかったことを「異常なし」と読まないこと。
 
-   POST /api/notam  本文 {"ids":"RJTT,RJAA,...","k":"合言葉"}
+   POST /api/notam  本文 {"ids":"RJTT,RJAA,...","box":"s,w,n,e"(任意・SWIM のみ),"k":"合言葉"}
      → { updated, src:'swim'|'autorouter'|'faa', n:{ICAO:[{no,txt,from,to,iss,cls,type,q,lat,lon,rad,est,sch}]}, err:{ICAO:"理由"} }
-     est=1 は終わりが見込み(EST)、sch は時間帯(D項)。SWIM のときだけ付く
+     est=1 は終わりが見込み(EST)、sch は時間帯(D項)、lo/up は Q 行の下限/上限(FL)。SWIM のときだけ付く
+     box があれば area:[同じ形の行] / areaInfo:{mode:'fir'|'rjjj',total,kept,days} / areaErr も返す(区域の NOTAM)
    ⚠ lat/lon/rad(NM) は**あるときだけ**。EADのNOTAMは大半が飛行場そのものへの通知で座標を持たない。
      アプリは座標があれば円、無ければ飛行場にピンを出す。
 */
@@ -111,13 +112,16 @@ function swimRow(xml) {
     ...(/EST/i.test(tag(n, 'effectiveEnd')) ? { est: 1 } : {}),
     cls: tag(n, 'scope'), type: tag(n, 'type'), q: tag(n, 'selectionCode') ? `Q${tag(n, 'selectionCode')}` : '',
     ...(tag(n, 'schedule') ? { sch: tag(n, 'schedule') } : {}),
+    ...(/^\d{3}$/.test(tag(n, 'minimumFL')) ? { lo: +tag(n, 'minimumFL') } : {}),
+    ...(/^\d{3}$/.test(tag(n, 'maximumFL')) ? { up: +tag(n, 'maximumFL') } : {}),
   };
 }
-async function swimFetch(ids) {
+// 検索1回。cond は location / fir など。今から days 日の間に有効なもの
+async function swimSearch(cond, days) {
   const now = new Date();
   const q = new URLSearchParams({
-    userId: process.env.SWIM_ID, location: ids.join(' '), display: '0',
-    validDatetimeStart: ymdhm(now), validDatetimeEnd: ymdhm(new Date(now.getTime() + 7 * 86400e3)),   // 今から7日の間に有効なもの
+    userId: process.env.SWIM_ID, ...cond, display: '0',
+    validDatetimeStart: ymdhm(now), validDatetimeEnd: ymdhm(new Date(now.getTime() + days * 86400e3)),
   });
   const url = `${process.env.SWIM_SEARCH_URL}?${q.toString().replace(/%20/g, '+')}`;
   const call = c => fetch(url, { headers: { Cookie: c, Accept: 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(20000) });
@@ -126,16 +130,65 @@ async function swimFetch(ids) {
   if (!r.ok) throw new Error(`SWIM ${r.status}`);
   const o = await r.json();
   const e = o.error_info || {};
-  if (e.error_code && String(e.error_code) !== '0') throw new Error(`SWIM error ${e.error_code} ${e.error_description || ''}`.trim());
+  if (e.error_code && String(e.error_code) !== '0') {
+    const err = new Error(`SWIM error ${e.error_code} ${e.error_description || ''}`.trim());
+    err.code = String(e.error_code);
+    throw err;
+  }
   const d = Array.isArray(o.data) ? o.data[0] || {} : o.data || {};
+  return [].concat(d.digitalNotam || []).map(x => swimRow(String(x))).filter(Boolean);
+}
+async function swimFetch(ids) {
+  const rows = await swimSearch({ location: ids.join(' ') }, 7);
   const out = {};
   ids.forEach(i => { out[i] = []; });
-  [].concat(d.digitalNotam || []).forEach(xml => {
-    const v = swimRow(String(xml));
-    if (v) (out[v.icao] || (out[v.icao] = [])).push(v);
-  });
+  rows.forEach(v => { (out[v.icao] || (out[v.icao] = [])).push(v); });
   for (const k of Object.keys(out)) out[k].sort((a, b) => String(b.from).localeCompare(String(a.from)));
   return out;
+}
+
+/* ── 区域の NOTAM(v6-208) ──
+   ⚠ 飛行場の名義(location)で引くだけだと、**FIR(RJJJ)名義の区域の通知**(無人機・空域制限・射撃・落下傘…)や、
+     ルートから遠い飛行場の名義でもルートにかかる通知(羽田の名義で出る東京湾の区域など)が取れない。
+   ⚠ SWIM の検索は場所(緯度経度)で絞れない。fir=RJJJ でまとめて引いて、**ここで外接矩形に当たるものだけ**残す。
+     アプリは丸めた矩形(0.1度単位)しか送らない。ルートそのものとの距離はアプリが端末の中で見る。
+   ⚠ 件数が検索上限を超えると error 14。そのときは location=RJJJ(FIR 名義だけ)に絞って取り直す */
+// 本文の座標 "354703N1391338E" / "3547N13913E"(区切りに空白・/ が入ることがある)
+const TXT_COORD = /(\d{2})(\d{2})(\d{2}(?:\.\d+)?)?\s*([NS])\s*\/?\s*(\d{3})(\d{2})(\d{2}(?:\.\d+)?)?\s*([EW])/g;
+function txtPts(t) {
+  const o = [];
+  for (const m of String(t || '').matchAll(TXT_COORD)) {
+    const lat = (+m[1] + m[2] / 60 + (m[3] ? +m[3] / 3600 : 0)) * (m[4] === 'S' ? -1 : 1);
+    const lon = (+m[5] + m[6] / 60 + (m[7] ? +m[7] / 3600 : 0)) * (m[8] === 'W' ? -1 : 1);
+    if (lat >= 15 && lat <= 50 && lon >= 115 && lon <= 165) o.push([lat, lon]);
+  }
+  return o;
+}
+// 矩形 [s,w,n,e] に当たるか。本文に座標があればそれ(多角形・円の中心)、無ければ Q 行の円
+function hitBox(v, b) {
+  const pts = txtPts(v.txt);
+  const m = 0.1;                                  // 線や円の縁が矩形のすぐ外にあるものも拾う
+  if (pts.length) {
+    const la = pts.map(p => p[0]), lo = pts.map(p => p[1]);
+    const r = (v.rad && v.rad <= 100 ? v.rad : 5) / 60;
+    return Math.min(...la) - r <= b[2] + m && Math.max(...la) + r >= b[0] - m &&
+           Math.min(...lo) - r <= b[3] + m && Math.max(...lo) + r >= b[1] - m;
+  }
+  if (!Number.isFinite(v.lat) || !v.rad || v.rad > 100) return false;   // 999(FIR 全体)や座標なしは区域として描けない
+  const r = v.rad / 60;
+  return v.lat - r <= b[2] + m && v.lat + r >= b[0] - m && v.lon - r <= b[3] + m && v.lon + r >= b[1] - m;
+}
+async function swimArea(box) {
+  let rows, mode = 'fir';
+  try { rows = await swimSearch({ fir: 'RJJJ' }, 2); }
+  catch (e) {
+    if (e.code !== '14') throw e;
+    mode = 'rjjj';                                // 多すぎる → FIR 名義の通知だけ
+    rows = await swimSearch({ location: 'RJJJ' }, 2);
+  }
+  const hit = rows.filter(v => hitBox(v, box));
+  hit.sort((a, b) => String(b.from).localeCompare(String(a.from)));
+  return { rows: hit, info: { mode, total: rows.length, kept: hit.length, days: 2 } };
 }
 
 /* ───────── autorouter ───────── */
@@ -257,16 +310,24 @@ export async function GET(request) {
     .map(s => s.trim()).filter(s => /^[A-Z0-9]{4}$/.test(s)).sort();
   if (!ids.length || ids.length > MAX_IDS) return json({ error: 'ids' }, 400, H);
 
+  // 区域の矩形 "s,w,n,e"(0.1度単位に丸めてある)。SWIM のときだけ使う
+  const bx = String(p.get('box') || '').split(',').map(Number);
+  const box = bx.length === 4 && bx.every(Number.isFinite) && bx[0] < bx[2] && bx[1] < bx[3] &&
+    bx[2] - bx[0] <= 12 && bx[3] - bx[1] <= 15 ? bx.map(v => Math.round(v * 10) / 10) : null;
+
   const now = Date.now();
   for (const [k, v] of cache) if (now - v.t > UP_TTL_MS) cache.delete(k);
-  const ck = (sw ? 'S:' : ar ? 'A:' : 'F:') + ids.join(',');
+  const ck = (sw ? 'S:' : ar ? 'A:' : 'F:') + ids.join(',') + (sw && box ? '|' + box.join(',') : '');
   const hit = cache.get(ck);
   if (hit) return new Response(hit.body, { status: 200, headers: H });
 
   const out = { updated: new Date(now).toISOString().slice(0, 16) + 'Z', src: sw ? 'swim' : ar ? 'autorouter' : 'faa', n: {}, err: {} };
   if (sw) {
-    try { out.n = await swimFetch(ids); }
-    catch (e) { return json({ error: 'upstream', detail: String((e && e.message) || e) }, 502, H); }
+    const [a, b] = await Promise.allSettled([swimFetch(ids), box ? swimArea(box) : Promise.resolve(null)]);
+    if (a.status === 'rejected') return json({ error: 'upstream', detail: String((a.reason && a.reason.message) || a.reason) }, 502, H);
+    out.n = a.value;
+    if (b.status === 'fulfilled' && b.value) { out.area = b.value.rows; out.areaInfo = b.value.info; }
+    else if (b.status === 'rejected') out.areaErr = String((b.reason && b.reason.message) || b.reason);
   } else if (ar) {
     try { out.n = await arFetch(ids); }
     catch (e) { return json({ error: 'upstream', detail: String((e && e.message) || e) }, 502, H); }
