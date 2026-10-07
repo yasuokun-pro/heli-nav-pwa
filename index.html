@@ -1097,8 +1097,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-205';
-const BUILD='2026-10-01';
+const VER_TAG='v6-206';
+const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -3951,7 +3951,7 @@ async function loadNotam(force){
 function renderNotam(){
   const b=document.getElementById('ntmBody'),st=document.getElementById('ntmStatus');
   if(!b)return;
-  const srcName={autorouter:'autorouter(EAD)',faa:'FAA'};
+  const srcName={swim:'SWIM(国交省 デジタルノータム)',autorouter:'autorouter(EAD)',faa:'FAA'};
   if(st)st.innerHTML=NTM?`${NTM.updated} 取得(UTC) / ${ntmIds.length}飛行場`+
     (srcName[NTM.src]?` / ${srcName[NTM.src]}`:''):'';
   if(ntmErr&&!NTM){b.innerHTML=`<div class="ifrNa">${wxEsc(ntmErr)}</div>`;return}
@@ -3971,7 +3971,8 @@ function renderNotam(){
         :(list.length?list.map(x=>
             `<div class="ntmIt"><div class="ntmMeta">${wxEsc(x.no)}`+
             `${x.cls?` <span class="ntmCls">${wxEsc(x.cls)}</span>`:''}`+
-            ` ${ntmTime(x.from)} 〜 ${ntmTime(x.to)} JST</div>`+
+            ` ${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST</div>`+
+            (x.sch?`<div class="ntmMeta">時間帯 ${wxEsc(x.sch)}(UTC)</div>`:'')+
             `<div class="ntmTx">${wxEsc(x.txt)}</div></div>`).join('')
           :'<div class="ifrNa">有効なNOTAMはありません(この配信で見える範囲では)</div>')):'')+
       `</div>`;

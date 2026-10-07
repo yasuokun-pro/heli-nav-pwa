@@ -1,6 +1,15 @@
 /* NOTAM中継 (Vercel Functions / Node.js ランタイム)
    ================================================
-   取得元は**環境変数で切り替わる**。両方入っていれば autorouter を使う。
+   取得元は**環境変数で切り替わる**。優先は SWIM → autorouter → FAA。
+
+   S) SWIM デジタルノータムリクエストサービス(Web API・国交省 航空情報センター。2026-10-07 承認)
+      env: SWIM_ID(SWIM ポータルのアカウントID=メール) / SWIM_PW / SWIM_LOGIN_URL / SWIM_SEARCH_URL
+      ⚠ URL の途中(仕様書の公開版で「******」の部分)は**承認者にだけ通知される**。リポジトリに書かず env に置く。
+      ⚠ 流れ: ログイン API に {"id","password"} を POST → Set-Cookie の MSMSI・MSMAI を保存 → 検索 API に Cookie を付けて GET。
+        無通信・強制のセッションタイムアウトがある(時間は非公開)。403 なら1回だけログインし直して再試行。
+      ⚠ 応答は {error_info, query, data:{totalCount, digitalNotam:[AIXM の XML 文字列…]}}。
+        XML の event:textNOTAM/event:NOTAM から 番号・種別・Q コード・座標/半径・有効期間・E項 を拾う。
+      ⚠ 日本の NOTAM の正式な出どころ。自衛隊飛行場・国内限定の通知もここに入る(EAD 由来の autorouter には来ないことがある)。
 
    A) autorouter.aero (既定) … Eurocontrol EAD(INO)由来。世界中のNOTAMが入っている。
       env: AR_USER(アカウントのメール) / AR_PASS(そのアカウントのパスワード)
@@ -23,7 +32,8 @@
      取れなかったことを「異常なし」と読まないこと。
 
    POST /api/notam  本文 {"ids":"RJTT,RJAA,...","k":"合言葉"}
-     → { updated, src:'autorouter'|'faa', n:{ICAO:[{no,txt,from,to,iss,cls,type,q,lat,lon,rad}]}, err:{ICAO:"理由"} }
+     → { updated, src:'swim'|'autorouter'|'faa', n:{ICAO:[{no,txt,from,to,iss,cls,type,q,lat,lon,rad,est,sch}]}, err:{ICAO:"理由"} }
+     est=1 は終わりが見込み(EST)、sch は時間帯(D項)。SWIM のときだけ付く
    ⚠ lat/lon/rad(NM) は**あるときだけ**。EADのNOTAMは大半が飛行場そのものへの通知で座標を持たない。
      アプリは座標があれば円、無ければ飛行場にピンを出す。
 */
@@ -38,6 +48,95 @@ const cache = new Map();          // ids -> { t, body }
 const PERM_AFTER = Date.now() / 1000 + 10 * 365 * 86400;   // これより先の終わりは PERM 扱い
 
 const iso = (sec) => new Date(sec * 1000).toISOString();
+
+/* ───────── SWIM(国交省 デジタルノータム) ───────── */
+let swimCookie = null;            // 'MSMSI=…; MSMAI=…'
+
+async function swimLogin() {
+  const r = await fetch(process.env.SWIM_LOGIN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ id: process.env.SWIM_ID, password: process.env.SWIM_PW }),
+    redirect: 'manual',
+    signal: AbortSignal.timeout(15000),
+  });
+  // Set-Cookie から MSMSI・MSMAI だけ取り出す(属性 Path/Secure などは捨てる)
+  const raw = typeof r.headers.getSetCookie === 'function' ? r.headers.getSetCookie() : [r.headers.get('set-cookie') || ''];
+  const jar = {};
+  raw.join('\n').split(/\n|,(?=\s*MS)/).forEach(c => {
+    const m = c.match(/^\s*(MSMSI|MSMAI)=([^;]*)/);
+    if (m) jar[m[1]] = m[2];
+  });
+  if (!jar.MSMSI && !jar.MSMAI)
+    throw new Error(r.status === 401 || r.status === 403 ? 'SWIM のログインに失敗(ID・パスワードを確認)' : `SWIM login ${r.status}(Cookie なし)`);
+  swimCookie = Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
+  return swimCookie;
+}
+
+const ymdhm = d => d.toISOString().replace(/[-:T]/g, '').slice(0, 12);   // YYYYMMDDhhmm(UTC)
+// YYMMDDhhmm → ISO。"PERM"・"…EST" はそのまま扱う
+function swimTime(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  if (/^PERM/i.test(s)) return 'PERM';
+  const m = s.match(/^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+  if (!m) return s;
+  return `20${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00Z`;          // 末尾の EST(終わりは見込み)は est で別に返す
+}
+function tag(xml, name) {
+  const m = xml.match(new RegExp(`<event:${name}(?:\\s[^>]*)?>([\\s\\S]*?)</event:${name}>`));
+  return m ? m[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim() : '';
+}
+// "3536N13946E" 形式(度分。秒つきもある)→ 10進
+function swimCoord(s) {
+  const m = String(s || '').match(/^(\d{2})(\d{2})(\d{2})?([NS])(\d{3})(\d{2})(\d{2})?([EW])$/);
+  if (!m) return null;
+  const lat = (+m[1] + m[2] / 60 + (m[3] ? m[3] / 3600 : 0)) * (m[4] === 'S' ? -1 : 1);
+  const lon = (+m[5] + m[6] / 60 + (m[7] ? m[7] / 3600 : 0)) * (m[8] === 'W' ? -1 : 1);
+  return { lat: +lat.toFixed(5), lon: +lon.toFixed(5) };
+}
+function swimRow(xml) {
+  const i = xml.search(/<event:NOTAM[\s>]/);
+  if (i < 0) return null;
+  const n = xml.slice(i);
+  const txt = tag(n, 'text');
+  if (!txt) return null;
+  const series = tag(n, 'series'), num = tag(n, 'number'), year = tag(n, 'year');
+  const c = swimCoord(tag(n, 'coordinates')), rad = Number(tag(n, 'radius'));
+  return {
+    no: `${series}${String(num).padStart(4, '0')}/${String(year).slice(-2)}`,
+    icao: tag(n, 'location'), txt,
+    ...(c ? c : {}), ...(Number.isFinite(rad) && rad > 0 && rad < 999 ? { rad } : {}),
+    iss: swimTime(tag(n, 'issued')), from: swimTime(tag(n, 'effectiveStart')), to: swimTime(tag(n, 'effectiveEnd')) || 'PERM',
+    ...(/EST/i.test(tag(n, 'effectiveEnd')) ? { est: 1 } : {}),
+    cls: tag(n, 'scope'), type: tag(n, 'type'), q: tag(n, 'selectionCode') ? `Q${tag(n, 'selectionCode')}` : '',
+    ...(tag(n, 'schedule') ? { sch: tag(n, 'schedule') } : {}),
+  };
+}
+async function swimFetch(ids) {
+  const now = new Date();
+  const q = new URLSearchParams({
+    userId: process.env.SWIM_ID, location: ids.join(' '), display: '0',
+    validDatetimeStart: ymdhm(now), validDatetimeEnd: ymdhm(new Date(now.getTime() + 7 * 86400e3)),   // 今から7日の間に有効なもの
+  });
+  const url = `${process.env.SWIM_SEARCH_URL}?${q.toString().replace(/%20/g, '+')}`;
+  const call = c => fetch(url, { headers: { Cookie: c, Accept: 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(20000) });
+  let r = await call(swimCookie || await swimLogin());
+  if (r.status === 403 || r.status === 401 || (r.status >= 300 && r.status < 400)) r = await call(await swimLogin());   // セッション切れ
+  if (!r.ok) throw new Error(`SWIM ${r.status}`);
+  const o = await r.json();
+  const e = o.error_info || {};
+  if (e.error_code && String(e.error_code) !== '0') throw new Error(`SWIM error ${e.error_code} ${e.error_description || ''}`.trim());
+  const d = Array.isArray(o.data) ? o.data[0] || {} : o.data || {};
+  const out = {};
+  ids.forEach(i => { out[i] = []; });
+  [].concat(d.digitalNotam || []).forEach(xml => {
+    const v = swimRow(String(xml));
+    if (v) (out[v.icao] || (out[v.icao] = [])).push(v);
+  });
+  for (const k of Object.keys(out)) out[k].sort((a, b) => String(b.from).localeCompare(String(a.from)));
+  return out;
+}
 
 /* ───────── autorouter ───────── */
 let tok = null;                   // { v, exp }
@@ -148,10 +247,11 @@ export async function GET(request) {
   const { H, p, deny } = await check(request, overLimit);
   if (deny) return deny;
 
-  const ar = process.env.AR_USER && process.env.AR_PASS;
-  const faa = process.env.FAA_CLIENT_ID && process.env.FAA_CLIENT_SECRET;
-  if (!ar && !faa)
-    return json({ error: 'key', detail: 'AR_USER / AR_PASS(または FAA_CLIENT_ID / FAA_CLIENT_SECRET)が未設定' }, 503, H);
+  const sw = process.env.SWIM_ID && process.env.SWIM_PW && process.env.SWIM_LOGIN_URL && process.env.SWIM_SEARCH_URL;
+  const ar = !sw && process.env.AR_USER && process.env.AR_PASS;
+  const faa = !sw && !ar && process.env.FAA_CLIENT_ID && process.env.FAA_CLIENT_SECRET;
+  if (!sw && !ar && !faa)
+    return json({ error: 'key', detail: 'SWIM_*(または AR_USER / AR_PASS、FAA_CLIENT_ID / FAA_CLIENT_SECRET)が未設定' }, 503, H);
 
   const ids = [...new Set((p.get('ids') || '').toUpperCase().split(','))]
     .map(s => s.trim()).filter(s => /^[A-Z0-9]{4}$/.test(s)).sort();
@@ -159,12 +259,15 @@ export async function GET(request) {
 
   const now = Date.now();
   for (const [k, v] of cache) if (now - v.t > UP_TTL_MS) cache.delete(k);
-  const ck = (ar ? 'A:' : 'F:') + ids.join(',');
+  const ck = (sw ? 'S:' : ar ? 'A:' : 'F:') + ids.join(',');
   const hit = cache.get(ck);
   if (hit) return new Response(hit.body, { status: 200, headers: H });
 
-  const out = { updated: new Date(now).toISOString().slice(0, 16) + 'Z', src: ar ? 'autorouter' : 'faa', n: {}, err: {} };
-  if (ar) {
+  const out = { updated: new Date(now).toISOString().slice(0, 16) + 'Z', src: sw ? 'swim' : ar ? 'autorouter' : 'faa', n: {}, err: {} };
+  if (sw) {
+    try { out.n = await swimFetch(ids); }
+    catch (e) { return json({ error: 'upstream', detail: String((e && e.message) || e) }, 502, H); }
+  } else if (ar) {
     try { out.n = await arFetch(ids); }
     catch (e) { return json({ error: 'upstream', detail: String((e && e.message) || e) }, 502, H); }
   } else {

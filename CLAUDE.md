@@ -1058,6 +1058,10 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     自衛隊飛行場や国内限定の通知は ICAO 配信に流れてこないことがあり、**出ない=異常なしではない**。
     この注意書きは画面に出している。**消さないこと**。
   ⚠ 取得元は環境変数で切り替わる(**リポジトリには絶対に書かない**)。未設定なら中継が 503 `{error:'key'}` を返す。
+    ・**SWIM デジタルノータム(v6-206・最優先)** `SWIM_ID`/`SWIM_PW`/`SWIM_LOGIN_URL`/`SWIM_SEARCH_URL` … 2026-10-07 承認。
+      ログイン API で Cookie(MSMSI・MSMAI)→ 検索 API(location を + でつなぐ・今から7日に有効なもの)。応答は AIXM の XML 文字列の配列で、
+      `event:NOTAM` の series/number/year・selectionCode・coordinates/radius・effectiveStart/End(YYMMDDhhmm・EST)・schedule・text を拾う。
+      URL の途中は承認者だけに通知される部分なので env に置く。固定IP の要件は仕様書に無い(Vercel から直接)。
     ・autorouter(既定・EAD由来) `AR_USER`/`AR_PASS` … ⚠**規約でAPI利用合意が要る**。合意が取れるまで設定しない。
       client_secret は**アカウントのパスワードそのもの**なので、他で使っていないパスワードにすること。
     ・FAA `FAA_CLIENT_ID`/`FAA_CLIENT_SECRET` … ⚠2026-09にポータルが login.gov の**身元確認(米国発行の身分証)**を
