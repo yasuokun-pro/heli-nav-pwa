@@ -141,6 +141,9 @@ async function swimSearch(cond, days) {
   let o;
   try { o = JSON.parse(raw); } catch { throw new Error(`SWIM 応答がJSONでない: ${raw.slice(0, 60).replace(/\s+/g, ' ')}`); }
   const e = o.error_info || {};
+  // ⚠ error 1 は仕様書の表に無いが、**該当0件**のときに返る(2026-10-07 実機: 区域の分割取得で RD・RP(日本には無い)や
+  //   WC・WF・WY など出ていない種類だけが error 1 になった)。失敗ではなく空として扱う
+  if (String(e.error_code) === '1') return [];
   if (e.error_code && String(e.error_code) !== '0') {
     const err = new Error(`SWIM error ${e.error_code} ${e.error_description || ''}`.trim());
     err.code = String(e.error_code);
@@ -230,7 +233,7 @@ async function swimArea(box) {
       g.ok.forEach(v => { const key = `${v.icao}|${v.no}`; if (!seen.has(key)) { seen.add(key); rows.push(v); } });
     });
     // Vercel のログで原因を追えるように(位置・矩形は出さない)
-    console.log(`swimArea split: rows=${rows.length} trunc=${trunc.join(',') || '-'} fail=${fail.join(' / ') || '-'}`);
+    if (trunc.length || fail.length) console.log(`swimArea split: rows=${rows.length} trunc=${trunc.join(',') || '-'} fail=${fail.join(' / ') || '-'}`);
     if (fail.length === jobs.length) throw got[0].e;
     info = { mode: 'split', ...(trunc.length ? { trunc } : {}), ...(fail.length ? { fail } : {}) };
   }
