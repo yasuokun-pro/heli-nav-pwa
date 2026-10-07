@@ -1062,6 +1062,10 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
       ログイン API で Cookie(MSMSI・MSMAI)→ 検索 API(location を + でつなぐ・今から7日に有効なもの)。応答は AIXM の XML 文字列の配列で、
       `event:NOTAM` の series/number/year・selectionCode・coordinates/radius・effectiveStart/End(YYMMDDhhmm・EST)・schedule・text を拾う。
       URL の途中は承認者だけに通知される部分なので env に置く。固定IP の要件は仕様書に無い(Vercel から直接)。
+    ・**吹き出しの大きさ(v6-207)**: 画面の高さ(帯を除く)の45%までにして中でスクロール(`ntmPopOpt`)。上の余白は --ovlH+44px
+      (諸元の帯の下に見出しが隠れたため)。**参考訳**: `ntmJa()` が ICAO 略語・定型句を日本語に置き換える(語順は英語のまま・機械翻訳ではない)。
+      `body.ntmJa` で日本語/原文を切り替え(`hnav.ntmJa`)。「参考訳…正式な解釈は原文で」の注記は消さないこと。
+      ⚠ 略語表は語の境目で当てる(座標の N/E に当たらない)。曖昧な語(MIN=分/最低)は入れない
     ・autorouter(既定・EAD由来) `AR_USER`/`AR_PASS` … ⚠**規約でAPI利用合意が要る**。合意が取れるまで設定しない。
       client_secret は**アカウントのパスワードそのもの**なので、他で使っていないパスワードにすること。
     ・FAA `FAA_CLIENT_ID`/`FAA_CLIENT_SECRET` … ⚠2026-09にポータルが login.gov の**身元確認(米国発行の身分証)**を
