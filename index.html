@@ -623,6 +623,9 @@
   .ntmCfg input[type=number]{width:72px}
   .ntmCfg b{color:var(--txt);font-family:var(--mono);font-weight:500}
   .ntmTop{border-color:#d92b22}.ntmTop .ntmHd{background:rgba(217,43,34,.15)}
+  .ntmHideBtn{background:none;border:1px solid var(--line);color:var(--dim);border-radius:5px;padding:1px 6px;font-size:11px;cursor:pointer;margin-left:4px}
+  .ntmHideBtn.on{border-color:var(--cyn);color:var(--cyn)}
+  .ntmIt.hid{opacity:.45}
   .ntmPin.l3{border-color:#ff3b30;color:#ff3b30}.ntmPin.l1{border-color:var(--dim);color:var(--dim)}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{color:var(--dim);font-weight:500;text-align:left;padding:6px 5px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.04em}
@@ -1135,7 +1138,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-210';
+const VER_TAG='v6-211';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4106,7 +4109,7 @@ function ntmLvHtml(x){const e=ntmEval(x);return `<span class="ntmLv l${e.lv}">${
 function ntmItemHtml(x,showLoc,col){
   const k=ntmKey(x),pin=ntmPinned(k),g=ntmGeo(x),ttl=ntmTitle(x),lv=ntmEval(x).lv;
   const gl=g.polys.length?`多角形${g.polys.length>1?'×'+g.polys.length:''}`:g.circles.length?`${g.circles.every(c=>c.pt)?'地点':'円'}${g.circles.length>1?'×'+g.circles.length:''}`:g.lines.length?'線':'';
-  return `<div class="ntmIt lv${lv}${pin?' pinned':''}" data-k="${wxEsc(k)}">`+
+  return `<div class="ntmIt lv${lv}${pin?' pinned':''}${ntmHidden(k)?' hid':''}" data-k="${wxEsc(k)}">`+
     `<div style="margin-bottom:2px">${ntmLvHtml(x)}</div>`+
     (ttl?`<div class="ntmTtl" style="--c:${col||'var(--txt)'}">${wxEsc(ttl)}</div>`:'')+
     `<div class="ntmMeta">${wxEsc(x.no)}`+
@@ -4114,7 +4117,8 @@ function ntmItemHtml(x,showLoc,col){
     `${x.cls?` <span class="ntmCls">${wxEsc(x.cls)}</span>`:''}`+
     ` ${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST${ntmFl(x)}`+
     (gl?`<span class="ntmGeo">◇${gl}</span>`:'')+
-    `<button class="ntmPinBtn${pin?' on':''}" data-k="${wxEsc(k)}" title="地図に残す(📌のみ表示のとき、これ以外は消える)">📌</button></div>`+
+    `<button class="ntmPinBtn${pin?' on':''}" data-k="${wxEsc(k)}" title="地図に残す(📌のみ表示のとき、これ以外は消える)">📌</button>`+
+    `<button class="ntmHideBtn${ntmHidden(k)?' on':''}" data-k="${wxEsc(k)}" title="この NOTAM だけ地図から隠す(一覧には残る)">${ntmHidden(k)?'隠し中':'隠す'}</button></div>`+
     (x.sch?`<div class="ntmMeta">時間帯 ${wxEsc(x.sch)}(UTC)</div>`:'')+
     ntmTxtHtml(x.txt)+`</div>`;
 }
@@ -4124,10 +4128,12 @@ function renderNtmBar(){
   el.innerHTML=`地図に出す <span class="seg"><button data-m="imp" class="${ntmMapMode==='imp'?'on':''}">影響あり・注意</button>`+
     `<button data-m="all" class="${ntmMapMode==='all'?'on':''}">全部</button>`+
     `<button data-m="pin" class="${ntmMapMode==='pin'?'on':''}">📌のみ (${n})</button></span>`+
-    (n?`<button class="lnk" data-m="clr">📌を全部外す</button>`:'');
+    (n?`<button class="lnk" data-m="clr">📌を全部外す</button>`:'')+
+    (Object.keys(ntmHides).length?`<button class="lnk" data-m="unhide">隠した${Object.keys(ntmHides).length}件を戻す</button>`:'');
   el.querySelectorAll('button').forEach(b=>b.onclick=()=>{
     const m=b.dataset.m;
     if(m==='clr'){if(!confirm('📌を全部外しますか?'))return;ntmPins={};ntmPinSave()}
+    else if(m==='unhide'){ntmHides={};ntmHideSave()}
     else ntmMapModeSet(m);
     renderNotam();drawNtmMap();
   });
@@ -4261,9 +4267,14 @@ function ntmGeoDist(x,refPts){
   const inPoly=(p,R)=>{let c=false;for(let i=0,j=R.length-1;i<R.length;j=i++){const a=R[i],b=R[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c}return c};
   let best=1e9;
   const shapes=[...g.polys.map(r=>({r,closed:1})),...g.lines.map(r=>({r,closed:0}))];
+  // 線分どうしが交わるか(ルートが区域の辺を横切る。頂点がどちらも外でも、途中で中を通る)
+  const ccw=(a,b,c)=>(c[1]-a[1])*(b[0]-a[0])-(b[1]-a[1])*(c[0]-a[0]);
+  const cross=(a,b,c,d)=>(ccw(a,b,c)>0)!==(ccw(a,b,d)>0)&&(ccw(c,d,a)>0)!==(ccw(c,d,b)>0);
   shapes.forEach(({r,closed})=>{
     const R=r.map(xy);
     if(closed&&P.some(p=>inPoly(p,R))){best=0;return}
+    const n0=closed?R.length:R.length-1;
+    for(let i=0;i<n0;i++)for(let j=0;j<P.length-1;j++)if(cross(R[i],R[(i+1)%R.length],P[j],P[j+1])){best=0;return}
     R.forEach(q=>best=Math.min(best,toRoute(q)));
     const n=closed?R.length:R.length-1;
     for(let i=0;i<n;i++)P.forEach(p=>best=Math.min(best,segD(p,R[i],R[(i+1)%R.length])));
@@ -4391,6 +4402,23 @@ let ntmMapMode=store.get('hnav.ntmMapMode')||(store.get('hnav.ntmPinOnly')?'pin'
 const ntmPinned=k=>!!ntmPins[k];
 function ntmPinSave(){store.set('hnav.ntmPin',ntmPins)}
 function ntmMapModeSet(m){ntmMapMode=m;store.set('hnav.ntmMapMode',m)}
+/* ── 個別に隠す(v6-211・ユーザー要望) ──
+   関東平野一円の熱気球(RJJJ)のように範囲が広すぎるものを地図から外す。一覧には残す(「隠し中」)。
+   どの表示モードでも隠す。値は終わりの時刻で、過ぎたら捨てる(hnav.ntmHide・端末の中だけ) */
+let ntmHides=(()=>{const o=store.get('hnav.ntmHide')||{},now=Date.now(),r={};
+  for(const k in o){const t=Date.parse(o[k]);if(!/^\d{4}-/.test(o[k])||!isFinite(t)||t>now)r[k]=o[k]}return r})();
+const ntmHidden=k=>!!ntmHides[k];
+function ntmHideSave(){store.set('hnav.ntmHide',ntmHides)}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.ntmHideBtn');if(!b)return;
+  e.preventDefault();e.stopPropagation();
+  const k=b.dataset.k,x=ntmFind(k);
+  if(ntmHides[k])delete ntmHides[k];else ntmHides[k]=x?x.to||'PERM':'PERM';
+  ntmHideSave();
+  const on=!!ntmHides[k];
+  document.querySelectorAll('.ntmHideBtn').forEach(z=>{if(z.dataset.k===k){z.classList.toggle('on',on);z.textContent=on?'隠し中':'隠す'}});
+  document.querySelectorAll('.ntmIt').forEach(z=>{if(z.dataset.k===k)z.classList.toggle('hid',on)});
+  renderNtmBar();map.closePopup();drawNtmMap();
+},true);
 function ntmFind(k){
   if(!NTM)return null;
   for(const ic in (NTM.n||{}))for(const x of NTM.n[ic])if(ntmKey(x)===k)return x;
@@ -4486,7 +4514,8 @@ function ntmPopHtml(x){
   const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const on=document.body.classList.contains('ntmJa'),k=ntmKey(x),g=ntmGeo(x);
   return `<div class="apPop"><h5>${esc(x.no)} ${esc(x.icao)}<button class="ntmJaBtn">${on?'原文':'日本語'}</button>`+
-    `<button class="ntmPinBtn${ntmPinned(k)?' on':''}" data-k="${esc(k)}" title="地図に残す">📌</button></h5>`+
+    `<button class="ntmPinBtn${ntmPinned(k)?' on':''}" data-k="${esc(k)}" title="地図に残す">📌</button>`+
+    `<button class="ntmHideBtn" data-k="${esc(k)}" title="この NOTAM だけ地図から隠す(一覧には残る)">隠す</button></h5>`+
     `<div style="margin-top:3px">${ntmLvHtml(x)}</div>`+
     (()=>{const c=NTM_CAT.find(z=>z.k===ntmCatOf(x)),t=ntmTitle(x);return `<div class="ntmPopCat" style="--c:${c.c}">${c.n}${t?' / '+esc(t):''}</div>`})()+
     `<div style="font-size:11px;color:var(--dim)">${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST${ntmFl(x)}</div>`+
@@ -4517,6 +4546,9 @@ function ntmDrawOne(x){
   if(!ls.length)ls.push(circ([x.lat,x.lon],+x.rad>0?+x.rad:2));
   if(!ls.length)return false;
   ls.forEach(l=>l.bindPopup(()=>ntmPopHtml(x),ntmPopOpt()).on('popupopen',ntmPopFit).addTo(ntmLayer));
+  // 点は半径5pxで指では当たりにくい。透明の大きい円(半径16px)を重ねて当たり判定にする(ntmShapes には入れない=📌で色を変えない)
+  if(obs)ls.filter(l=>l instanceof L.CircleMarker&&!(l instanceof L.Circle)).forEach(l=>
+    L.circleMarker(l.getLatLng(),{radius:16,stroke:false,fill:true,fillOpacity:0}).bindPopup(()=>ntmPopHtml(x),ntmPopOpt()).on('popupopen',ntmPopFit).addTo(ntmLayer));
   ntmShapes[k]=ls;
   return true;
 }
@@ -4527,7 +4559,7 @@ function drawNtmMap(){
   if(!NTM)return;
   const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   ntmCtxNow=null;
-  const want=x=>ntmMapMode==='all'||ntmPinned(ntmKey(x))||(ntmMapMode==='imp'&&ntmEval(x).lv>1);
+  const want=x=>!ntmHidden(ntmKey(x))&&(ntmMapMode==='all'||ntmPinned(ntmKey(x))||(ntmMapMode==='imp'&&ntmEval(x).lv>1));
   // 形のあるものは 参考→注意→影響あり の順に描いて、重要なものを上に重ねる
   const shapes=[];
   ntmIds.forEach(ic=>{
@@ -4553,7 +4585,9 @@ function drawNtmMap(){
       .on('popupopen',ntmPopFit).addTo(ntmLayer);
   });
   ntmAreaList().filter(want).forEach(x=>shapes.push(x));
-  shapes.sort((a,b)=>ntmEval(a).lv-ntmEval(b).lv).forEach(x=>ntmDrawOne(x));
+  // ⚠ 障害物の点は最後(一番上)に描く。広い区域の多角形の下になるとタップを取られて詳細が開けない(v6-211・ユーザー指摘)
+  const ob=x=>ntmCatOf(x)==='obs'?10:0;
+  shapes.sort((a,b)=>ob(a)+ntmEval(a).lv-ob(b)-ntmEval(b).lv).forEach(x=>ntmDrawOne(x));
 }
 document.getElementById('btnNtmMap').onclick=toggleNtmMap;
 document.getElementById('btnNtmMap2').onclick=()=>{if(!ntmMapOn)toggleNtmMap();setScreen('main')};
@@ -8212,6 +8246,28 @@ function fixLogHead(){
   }
   redraw();
 })();
+/* ── レイヤーボタンの状態を覚える(v6-211・ユーザー要望) ──
+   開き直すと ACA/TCA(hnav.aca)以外のボタンが全部オフに戻っていた。地図右のレイヤーの ON/OFF を hnav.layers に保存し、
+   起動時にボタンを押して戻す。⚠ 「敵を置く」(操作)と「TRK UP」(T/O で自動)は対象外。GPS・ベース地図は別に扱っている */
+const LAYER_KEEP=['btnAsp','btnRes','btnTra','btnCiv','btnSup','btnNuke','btnDid','btnThr','btnThrComp','btnThrRte',
+  'btnRing','btnLos','btnShade','btnEmerRte','btnAp','btnNav','btnFix','btnFixR','btnAwy','btnHp','btnHpad','btnObst',
+  'btnPwln','btnJsdf','btnTfc2','btnRain','btnNtmMap','btnDips'];
+function layerSave(){
+  const o={};
+  LAYER_KEEP.forEach(id=>{const b=document.getElementById(id);if(b)o[id]=b.classList.contains('on')?1:0});
+  store.set('hnav.layers',o);
+}
+setTimeout(()=>{
+  const o=store.get('hnav.layers')||{};
+  LAYER_KEEP.forEach(id=>{
+    const b=document.getElementById(id);
+    if(b&&id in o&&!!o[id]!==b.classList.contains('on')){try{b.click()}catch(e){console.warn('layer restore',id,e)}}
+  });
+  // ⚠ 戻し終わってから見張る(先に見張ると、起動途中の状態で保存を上書きする)
+  let t=0;
+  const mo=new MutationObserver(()=>{clearTimeout(t);t=setTimeout(layerSave,400)});
+  LAYER_KEEP.forEach(id=>{const b=document.getElementById(id);if(b)mo.observe(b,{attributes:true,attributeFilter:['class']})});
+},300);
 </script>
 <div id="toast"></div>
 <div id="updBar">
