@@ -612,6 +612,18 @@
   .ntmCat i{color:var(--dim);font-style:normal}
   .ntmTtl{font-size:12px;font-weight:700;color:var(--c,var(--txt));margin-bottom:1px}
   .ntmPopCat{font-size:11px;font-weight:700;margin:6px 0 2px;padding-left:5px;border-left:3px solid var(--c,var(--dim))}
+  /* 影響度(v6-210) */
+  .ntmLv{display:inline-block;font-size:10px;font-weight:700;border-radius:3px;padding:0 5px;margin-right:5px;vertical-align:1px;border:1px solid}
+  .ntmLv.l3{color:#fff;background:#d92b22;border-color:#d92b22}.ntmLv.l2{color:#ff9500;border-color:#ff9500}.ntmLv.l1{color:var(--dim);border-color:var(--line)}
+  .ntmWhy{font-size:10px;color:var(--dim);font-weight:400}
+  .ntmIt.lv1 .ntmTx,.ntmIt.lv1 .ntmTtl{opacity:.6}
+  .ntmCnt b{font-weight:700;margin-left:6px}.ntmCnt .c3{color:#ff5a50}.ntmCnt .c2{color:#ff9500}.ntmCnt .c1{color:var(--dim)}
+  .ntmCfg{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 8px;font-size:12px;color:var(--dim)}
+  .ntmCfg input{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:5px;padding:3px 6px;font:13px var(--mono)}
+  .ntmCfg input[type=number]{width:72px}
+  .ntmCfg b{color:var(--txt);font-family:var(--mono);font-weight:500}
+  .ntmTop{border-color:#d92b22}.ntmTop .ntmHd{background:rgba(217,43,34,.15)}
+  .ntmPin.l3{border-color:#ff3b30;color:#ff3b30}.ntmPin.l1{border-color:var(--dim);color:var(--dim)}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{color:var(--dim);font-weight:500;text-align:left;padding:6px 5px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.04em}
   td{padding:6px 5px;border-bottom:1px solid var(--line);font-family:var(--mono);white-space:nowrap}
@@ -1017,6 +1029,7 @@
       <button class="btn ntmJaBtn" title="NOTAM の略語を日本語に置き換えた参考訳と、原文を切り替える">日本語</button>
       <span id="ntmStatus" class="hint" style="align-self:center"></span>
     </div>
+    <div class="ntmCfg" id="ntmCfg"></div>
     <div class="ntmBar" id="ntmBar"></div>
     <div class="hint">ルート上の飛行場のNOTAMと、ルートにかかる<b>区域のNOTAM</b>(FIR RJJJ 名義など・座標のあるもの)(中継経由)。
       ⚠ <b>公式ブリーフィングの代わりにはなりません</b>。国内の正式な情報源はAIS Japan・部隊のブリーフィングです。
@@ -1122,7 +1135,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-209';
+const VER_TAG='v6-210';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3976,7 +3989,7 @@ async function loadNotam(force){
   ntmErr='';
   try{
     NTM=await relayPost('/api/notam',{ids:ids.join(','),box});
-    ntmIds=ids;ntmFetched=Date.now();ntmBoxSent=box;ntmGeoCache=new WeakMap();
+    ntmIds=ids;ntmFetched=Date.now();ntmBoxSent=box;ntmGeoCache=new WeakMap();ntmCtxNow=null;
   }catch(e){
     const m=String(e.message||e);
     ntmErr=/503 key/.test(m)?'中継に取得元の設定が入っていません(Vercelの環境変数 AR_USER / AR_PASS)'
@@ -4060,6 +4073,8 @@ function ntmGroups(list){
   list.forEach(x=>(by[ntmCatOf(x)]||(by[ntmCatOf(x)]=[])).push(x));
   const t=v=>/^\d{4}-/.test(v)?Date.parse(v):0;
   return NTM_CAT.filter(c=>by[c.k]).map(c=>({cat:c,items:by[c.k].sort((a,b)=>{
+    const la=ntmEval(a).lv,lb=ntmEval(b).lv;
+    if(la!==lb)return lb-la;                       // 影響度の高いものから(v6-210)
     const qa=ntmQ(a),qb=ntmQ(b),ha=qa&&NTM_HOT.test(qa.c)?0:1,hb=qb&&NTM_HOT.test(qb.c)?0:1;
     if(ha!==hb)return ha-hb;
     const aa=t(a.from)<=now?0:1,ab=t(b.from)<=now?0:1;
@@ -4067,10 +4082,17 @@ function ntmGroups(list){
     return aa===0?t(b.from)-t(a.from):t(a.from)-t(b.from);
   })}));
 }
+// 影響度ごとの件数「影響あり2 注意3 参考10」
+function ntmCntHtml(list){
+  const c=[0,0,0,0];list.forEach(x=>c[ntmEval(x).lv]++);
+  return `<span class="ntmCnt">${c[3]?`<b class="c3">影響あり${c[3]}</b>`:''}${c[2]?`<b class="c2">注意${c[2]}</b>`:''}${c[1]?`<b class="c1">参考${c[1]}</b>`:''}</span>`;
+}
+// 開閉。何も触っていなければ、全部「参考」の組は畳んでおく
+function ntmIsOpen(k,def){return ntmOpen[k]===undefined?def:ntmOpen[k]!==false}
 function ntmGroupsHtml(list,showLoc,key){
   return ntmGroups(list).map(g=>{
-    const ok=key+'|'+g.cat.k,open=ntmOpen[ok]!==false;
-    return `<div class="ntmCat" data-ic="${wxEsc(ok)}" style="--c:${g.cat.c}">${g.cat.n}<small>${g.items.length}件</small><i>${open?'▾':'▸'}</i></div>`+
+    const ok=key+'|'+g.cat.k,open=ntmIsOpen(ok,g.items.some(x=>ntmEval(x).lv>1));
+    return `<div class="ntmCat" data-ic="${wxEsc(ok)}" data-open="${open?1:0}" style="--c:${g.cat.c}">${g.cat.n}<small>${ntmCntHtml(g.items)}</small><i>${open?'▾':'▸'}</i></div>`+
       (open?g.items.map(x=>ntmItemHtml(x,showLoc,g.cat.c)).join(''):'');
   }).join('');
 }
@@ -4079,10 +4101,13 @@ function ntmFl(x){        // Q 行の下限/上限(FL)。000=SFC・999=UNL
   const f=(v,lo)=>!isFinite(v)?'?':lo&&v===0?'SFC':v>=999?'UNL':'FL'+String(v).padStart(3,'0');
   return ` ${f(x.lo,1)}-${f(x.up)}`;
 }
+const NTM_LVN=['','参考','注意','影響あり'];
+function ntmLvHtml(x){const e=ntmEval(x);return `<span class="ntmLv l${e.lv}">${NTM_LVN[e.lv]}</span><span class="ntmWhy">${wxEsc(e.why)}</span>`}
 function ntmItemHtml(x,showLoc,col){
-  const k=ntmKey(x),pin=ntmPinned(k),g=ntmGeo(x),ttl=ntmTitle(x);
+  const k=ntmKey(x),pin=ntmPinned(k),g=ntmGeo(x),ttl=ntmTitle(x),lv=ntmEval(x).lv;
   const gl=g.polys.length?`多角形${g.polys.length>1?'×'+g.polys.length:''}`:g.circles.length?`${g.circles.every(c=>c.pt)?'地点':'円'}${g.circles.length>1?'×'+g.circles.length:''}`:g.lines.length?'線':'';
-  return `<div class="ntmIt${pin?' pinned':''}" data-k="${wxEsc(k)}">`+
+  return `<div class="ntmIt lv${lv}${pin?' pinned':''}" data-k="${wxEsc(k)}">`+
+    `<div style="margin-bottom:2px">${ntmLvHtml(x)}</div>`+
     (ttl?`<div class="ntmTtl" style="--c:${col||'var(--txt)'}">${wxEsc(ttl)}</div>`:'')+
     `<div class="ntmMeta">${wxEsc(x.no)}`+
     (showLoc?` <b>${wxEsc(x.icao)}</b>`:'')+
@@ -4096,18 +4121,39 @@ function ntmItemHtml(x,showLoc,col){
 function renderNtmBar(){
   const el=document.getElementById('ntmBar');if(!el)return;
   const n=Object.keys(ntmPins).length;
-  el.innerHTML=`地図に出す <span class="seg"><button data-m="all" class="${ntmPinOnly?'':'on'}">全部</button>`+
-    `<button data-m="pin" class="${ntmPinOnly?'on':''}">📌のみ (${n})</button></span>`+
+  el.innerHTML=`地図に出す <span class="seg"><button data-m="imp" class="${ntmMapMode==='imp'?'on':''}">影響あり・注意</button>`+
+    `<button data-m="all" class="${ntmMapMode==='all'?'on':''}">全部</button>`+
+    `<button data-m="pin" class="${ntmMapMode==='pin'?'on':''}">📌のみ (${n})</button></span>`+
     (n?`<button class="lnk" data-m="clr">📌を全部外す</button>`:'');
   el.querySelectorAll('button').forEach(b=>b.onclick=()=>{
     const m=b.dataset.m;
     if(m==='clr'){if(!confirm('📌を全部外しますか?'))return;ntmPins={};ntmPinSave()}
-    else ntmPinOnlySet(m==='pin');
+    else ntmMapModeSet(m);
     renderNotam();drawNtmMap();
   });
 }
+// 出発時刻と高度(影響度の判定に使う)
+function renderNtmCfg(){
+  const el=document.getElementById('ntmCfg');if(!el)return;
+  const C=ntmCtxNow||(ntmCtxNow=ntmCtx());
+  const etd=store.get('hnav.ntmEtd')||'';
+  const f=t=>{const d=new Date(t+9*3600e3);return `${pad(d.getUTCMonth()+1)}/${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`};
+  el.innerHTML=`<span>出発 <input type="time" id="ntmEtdIn" value="${etd}">`+
+    (etd?` <button class="lnk" id="ntmEtdNow">今にする</button>`:'(空欄=今)')+`</span>`+
+    `<span>判定する時間 <b>${f(C.t0)}〜${f(C.t1).slice(-5)}</b> JST</span>`+
+    (C.ifr?`<span>高度 <b>IFR 巡航 ${C.crz.toLocaleString()}ft</b>(IFR計画から)</span>`
+          :`<span>高度 VFR 〜<input type="number" id="ntmAltIn" min="500" max="20000" step="500" value="${C.crz}">ft</span>`)+
+    `<span style="flex-basis:100%;font-size:10px">影響度はアプリの目安(時間・高度・ルートからの距離・出発/目的/代替の飛行場で判定)。Q行の高度と本文の座標の読み取りなので取り違えはあり得ます。<b style="font-family:inherit;color:var(--amb)">参考も含めて原文で確認を</b></span>`;
+  const e=document.getElementById('ntmEtdIn');
+  if(e)e.onchange=()=>{store.set('hnav.ntmEtd',e.value||'');ntmCtxNow=null;renderNotam();drawNtmMap()};
+  const nw=document.getElementById('ntmEtdNow');
+  if(nw)nw.onclick=()=>{store.set('hnav.ntmEtd','');ntmCtxNow=null;renderNotam();drawNtmMap()};
+  const a=document.getElementById('ntmAltIn');
+  if(a)a.onchange=()=>{const v=Math.round(+a.value/100)*100;if(v>0)store.set('hnav.ntmVfrAlt',v);ntmCtxNow=null;renderNotam();drawNtmMap()};
+}
 function renderNotam(){
-  renderNtmBar();
+  ntmCtxNow=null;
+  renderNtmCfg();renderNtmBar();
   const b=document.getElementById('ntmBody'),st=document.getElementById('ntmStatus');
   if(!b)return;
   const srcName={swim:'SWIM(国交省 デジタルノータム)',autorouter:'autorouter(EAD)',faa:'FAA'};
@@ -4115,10 +4161,10 @@ function renderNotam(){
     (srcName[NTM.src]?` / ${srcName[NTM.src]}`:''):'';
   if(ntmErr&&!NTM){b.innerHTML=`<div class="ifrNa">${wxEsc(ntmErr)}</div>`;return}
   if(!NTM){b.innerHTML='<div class="hint">「↻ 取得」でルート上の飛行場と、ルートにかかる区域のNOTAMを取ります。</div>';return}
-  const ar=ntmAreaList(),aOpen=ntmOpen.AREA!==false,ai=NTM.areaInfo;
+  const ar=ntmAreaList(),aOpen=ntmIsOpen('AREA',true),ai=NTM.areaInfo;
   const areaHtml=NTM.src!=='swim'?'':
-    `<div class="ntmAd"><div class="ntmHd" data-ic="AREA"><b>区域</b> <span class="jp">${wps.length?`ルートから${NTM_AREA_NM}NM以内`:'付近'}</span>`+
-    `<small>${NTM.areaErr?'取得できず':ar.length+'件'}</small><i>${aOpen?'▾':'▸'}</i></div>`+
+    `<div class="ntmAd"><div class="ntmHd" data-ic="AREA" data-open="${aOpen?1:0}"><b>区域</b> <span class="jp">${wps.length?`ルートから${NTM_AREA_NM}NM以内`:'付近'}</span>`+
+    `<small>${NTM.areaErr?'取得できず':ar.length+'件'+ntmCntHtml(ar)}</small><i>${aOpen?'▾':'▸'}</i></div>`+
     (aOpen?(NTM.areaErr?`<div class="ifrNa">${wxEsc(NTM.areaErr)}</div>`:
       `<div class="ntmIt"><div class="ntmMeta" style="white-space:normal">FIR RJJJ の NOTAM のうち、座標(Q行の円・本文の多角形)がルートにかかるもの。今から${ai?ai.days*24:48}時間に有効な分。`+
       (ai&&ai.mode==='split'?'<br>FIR 全体は件数が多いので「RJJJ 名義の全部」と「他の名義の航行警報(W)・空域制限(R)」に分けて取得。他の飛行場名義の障害物などはその飛行場の欄にしか出ません。':'')+
@@ -4128,21 +4174,30 @@ function renderNotam(){
       `<br>座標の無い区域の通知は地図に出せないので入っていません。</div></div>`+
       (ar.length?ntmGroupsHtml(ar,true,'AREA'):'<div class="ifrNa">ルートにかかる区域のNOTAMはありません(この配信で見える範囲では)</div>')):'')+
     `</div>`;
-  b.innerHTML=ntmIds.map(ic=>{
+  // ⚠ 影響あり: 飛行場・区域をまたいで一番上にまとめる(v6-210)
+  const top=[];ntmIds.forEach(ic=>ntmLive((NTM.n&&NTM.n[ic])||[]).forEach(x=>{if(ntmEval(x).lv===3)top.push(x)}));
+  ar.forEach(x=>{if(ntmEval(x).lv===3)top.push(x)});
+  const tOpen=ntmIsOpen('TOP',true);
+  const topHtml=`<div class="ntmAd ntmTop"><div class="ntmHd" data-ic="TOP" data-open="${tOpen?1:0}"><b style="color:#ff5a50;white-space:nowrap">⚠ 影響あり</b>`+
+    `<small>${top.length}件</small><i>${tOpen?'▾':'▸'}</i></div>`+
+    (tOpen?(top.length?ntmGroups(top).map(g=>g.items.map(x=>ntmItemHtml(x,true,g.cat.c)).join('')).join('')
+      :'<div class="ifrNa">影響ありと判定したものはありません(目安の判定です。注意・参考も原文で確認を)</div>'):'')+`</div>`;
+  const role=ntmCtxNow.key;
+  b.innerHTML=topHtml+ntmIds.map(ic=>{
     const nm=(ASP.find(a=>a.icao===ic)||{}).n||'';
     const err=NTM.err&&NTM.err[ic];
     const list=ntmLive((NTM.n&&NTM.n[ic])||[]);
-    const open=ntmOpen[ic]!==false;
-    return `<div class="ntmAd"><div class="ntmHd" data-ic="${ic}">`+
-      `<b>${ic}</b> <span class="jp">${wxEsc(nm)}</span>`+
-      `<small>${err?'取得できず':list.length+'件'}</small><i>${open?'▾':'▸'}</i></div>`+
+    const open=ntmIsOpen(ic,true);
+    return `<div class="ntmAd"><div class="ntmHd" data-ic="${ic}" data-open="${open?1:0}">`+
+      `<b>${ic}</b> <span class="jp">${wxEsc(nm)}${role[ic]?` <span class="ntmCls">${NTM_ROLE[role[ic]]}</span>`:''}</span>`+
+      `<small>${err?'取得できず':list.length+'件'+ntmCntHtml(list)}</small><i>${open?'▾':'▸'}</i></div>`+
       (open?(err?`<div class="ifrNa">${wxEsc(err)}</div>`
         :(list.length?ntmGroupsHtml(list,false,ic)
           :'<div class="ifrNa">有効なNOTAMはありません(この配信で見える範囲では)</div>')):'')+
       `</div>`;
   }).join('')+areaHtml+(ntmErr?`<div class="ifrNa">${wxEsc(ntmErr)}</div>`:'');
   b.querySelectorAll('.ntmHd,.ntmCat').forEach(h=>h.onclick=()=>{
-    const ic=h.dataset.ic;ntmOpen[ic]=ntmOpen[ic]===false;renderNotam()});
+    ntmOpen[h.dataset.ic]=h.dataset.open!=='1';renderNotam()});
 }
 // 期限切れは落とす(取得から時間が経っていても混ざらないように)
 function ntmLive(list){const now=Date.now();return list.filter(x=>!/^\d{4}-/.test(x.to)||Date.parse(x.to)>now)}
@@ -4195,9 +4250,9 @@ function ntmGeo(x){
   return g;
 }
 // ルート(なければ現在地・地図中心)からの距離(NM)。図形の内側なら0
-function ntmGeoDist(x){
+function ntmGeoDist(x,refPts){
   const g=ntmGeo(x);
-  const ref=wps.length?wps.map(w=>[w.lat,w.lng]):[(()=>{const c=ownPos||map.getCenter();return [c.lat,c.lng]})()];
+  const ref=refPts||(wps.length?wps.map(w=>[w.lat,w.lng]):[(()=>{const c=ownPos||map.getCenter();return [c.lat,c.lng]})()]);
   const KY=110540/1852,kx=111320*Math.cos(ref[0][0]*Math.PI/180)/1852;
   const P=ref.map(p=>[p[1]*kx,p[0]*KY]);
   const xy=p=>[p[1]*kx,p[0]*KY];
@@ -4226,16 +4281,116 @@ function ntmAreaList(){
   return ntmLive(NTM.area).filter(x=>!seen.has(ntmKey(x))&&ntmGeoDist(x)<=lim);
 }
 
+/* ── 影響度(v6-210・ユーザー要望) ──
+   全部出すと地図が円で埋まって、どれが本当に効くのか分からない。飛行の 時間・高度・ルート で3段に分ける:
+     3 影響あり … ルートにかかる(障害物は1NM以内)・出発/目的/代替の滑走路閉鎖や区域の通知・(IFR)その飛行場の航法施設
+     2 注意     … ルートから3NM以内・途中の飛行場の滑走路閉鎖・出発/目的/代替のその他
+     1 参考     … 飛行の時間に有効でない・高度が離れている・遠い・途中の飛行場の施設など
+   ・時間: 出発(入力・空欄なら今)〜到着(ルートの ETE)+30分。D項(時間帯)の HHMM-HHMM も見る(曜日・日付は見ないので広めに当たる)
+   ・高度: IFR 計画を「地図に反映」したルートなら巡航高度±1,000ft、出発/目的/代替の10NM以内は 0〜巡航(上昇・降下)。
+          VFR は入力した「〜◯◯ft」で 0〜その高度。NOTAM の高さは Q 行の下限/上限(FL)。±500ft の余裕を見る
+   ⚠ 目安。一覧からは何も消さない(参考は畳むだけ)。地図は既定で 影響あり・注意 だけ */
+const NTM_ROLE={dep:'出発',dst:'目的',alt:'代替'};
+var rteTotH=0;                 // ルートの所要時間(h)。redraw が入れる
+let ntmCtxNow=null,ntmEvC=new WeakMap();
+function ntmEtd(){              // 出発時刻(ms)。"HH:MM"(JST)。2時間より前なら明日とみなす
+  const v=store.get('hnav.ntmEtd')||'',m=/^(\d{1,2}):(\d{2})$/.exec(v),now=Date.now();
+  if(!m)return {t:now,set:false};
+  const j=new Date(now+9*3600e3);
+  let t=Date.UTC(j.getUTCFullYear(),j.getUTCMonth(),j.getUTCDate(),+m[1],+m[2])-9*3600e3;
+  if(t<now-2*3600e3)t+=86400e3;
+  return {t,set:true};
+}
+function ntmCtx(){
+  const e=ntmEtd();
+  let h=rteTotH;
+  if(!h&&wps.length>1){let d=0;for(let i=1;i<wps.length;i++)d+=distNM(wps[i-1],wps[i]);h=d/(num('tas')||100)}
+  const t0=e.t,t1=e.t+h*3600e3+30*60e3;
+  const fi=store.get('hnav.ntmIfr'),first=wps[0],last=wps[wps.length-1];
+  const ifr=!!(fi&&first&&last&&first.name===fi.dep&&(last.name===fi.dst||last.name===fi.alt)&&fi.crz>0);
+  const crz=ifr?fi.crz:(+store.get('hnav.ntmVfrAlt')||3000);
+  const apNear=w=>{if(!w)return null;let b=null,bd=3;ASP.forEach(a=>{if(!a.icao)return;const d=distNM({lat:w.lat,lng:w.lng},{lat:a.lat,lng:a.lng});if(d<bd){bd=d;b=a}});return b};
+  const key={};
+  if(ifr)[['dep',fi.dep],['dst',fi.dst],['alt',fi.alt]].forEach(([r,ic])=>{if(ic&&!key[ic])key[ic]=r});
+  else{const a=apNear(first),b=wps.length>1?apNear(last):null;if(a)key[a.icao]='dep';if(b&&!key[b.icao])key[b.icao]='dst'}
+  const keyPts=Object.keys(key).map(ic=>ASP.find(a=>a.icao===ic)).filter(Boolean).map(a=>[a.lat,a.lng]);
+  const sig=[Math.round(t0/6e4),Math.round(t1/6e4),ifr,crz,JSON.stringify(key),wps.map(w=>w.lat.toFixed(4)+','+w.lng.toFixed(4)).join(';')].join('|');
+  return {t0,t1,ifr,crz,key,keyPts,sig};
+}
+const ntmBand=(C,near)=>C.ifr?(near?[0,C.crz+1000]:[C.crz-1000,C.crz+1000]):[0,C.crz];
+// D項の時間帯(UTC の HHMM-HHMM)が飛行の時間と重なるか。読めない書式(SR-SS 等)は重なる扱い
+function ntmSchHit(sch,t0,t1){
+  const s=String(sch||'').toUpperCase();if(!s||/H24/.test(s))return true;
+  const R=[...s.matchAll(/(?:^|\D)(\d{2})(\d{2})\s*-\s*(\d{2})(\d{2})(?!\d)/g)]
+    .map(m=>[+m[1]*60+ +m[2],+m[3]*60+ +m[4]]).filter(r=>r[0]<1440&&r[1]<=1440);
+  if(!R.length)return true;
+  const D=86400e3;
+  for(let d=Math.floor(t0/D)*D-D;d<=t1;d+=D)for(const [a,b] of R){
+    const s0=d+a*6e4,s1=d+(b>a?b:b+1440)*6e4;if(s0<=t1&&s1>=t0)return true;
+  }
+  return false;
+}
+// 地図に形を描けるか。飛行場そのものへの通知(滑走路・施設・灯火・航法・管制)は形を描かず飛行場のピンに入れる
+const NTM_GEO_CAT=new Set(['sp','as','obs','oth']);
+function ntmDrawable(x){
+  const cat=ntmCatOf(x);if(!NTM_GEO_CAT.has(cat))return false;
+  const g=ntmGeo(x);if(g.polys.length||g.lines.length||g.circles.length)return true;
+  if(!(isFinite(x.lat)&&isFinite(x.lon)&&(x.lat||x.lon))||+x.rad>100)return false;
+  if(cat==='oth'){const a=ASP.find(z=>z.icao===x.icao);if(a&&distNM({lat:x.lat,lng:x.lon},{lat:a.lat,lng:a.lng})<1.5)return false}   // 飛行場全体の円
+  return true;
+}
+function ntmEval(x){
+  const C=ntmCtxNow||(ntmCtxNow=ntmCtx());
+  const c=ntmEvC.get(x);if(c&&c.sig===C.sig)return c.r;
+  const r=ntmEval0(x,C);ntmEvC.set(x,{sig:C.sig,r});return r;
+}
+function ntmEval0(x,C){
+  const R=(lv,why)=>({lv,why});
+  const f=/^\d{4}-/.test(x.from)?Date.parse(x.from):-Infinity,to=/^\d{4}-/.test(x.to)?Date.parse(x.to):Infinity;
+  if(to<C.t0||f>C.t1)return R(1,'飛行の時間には有効でない');
+  if(!ntmSchHit(x.sch,C.t0,C.t1))return R(1,'時間帯(D項)が飛行の時間と重ならない');
+  const cat=ntmCatOf(x),role=C.key[x.icao],rn=role?NTM_ROLE[role]+'飛行場':'';
+  const altMiss=near=>{
+    if(!isFinite(x.lo)||!isFinite(x.up))return '';
+    const b=ntmBand(C,near),n0=x.lo*100,n1=x.up>=999?1e6:x.up*100;
+    return n0<=b[1]+500&&n1>=b[0]-500?'':`高度が離れている(${ntmFl(x).trim()} / 飛行 ${b[0].toLocaleString()}〜${b[1].toLocaleString()}ft)`;
+  };
+  if(ntmDrawable(x)){
+    const d=ntmGeoDist(x),near=C.keyPts.some(p=>ntmGeoDist(x,[p])<=10);
+    const am=altMiss(near);if(am)return R(1,am);
+    const ds=d<=0.05?'ルートにかかる':`ルートから${d.toFixed(1)}NM`;
+    if(cat==='obs')return R(d<=1?3:d<=3?2:1,ds);
+    return R(d<=0.5?3:d<=3?2:1,ds);
+  }
+  if(role){
+    if(cat==='sp'||cat==='as'||cat==='obs'){const am=altMiss(true);if(am)return R(1,am)}
+    if(cat==='ad'||cat==='sp'||cat==='as')return R(3,rn);
+    if(cat==='nav')return R(C.ifr?3:2,rn+(C.ifr?'(計器飛行で使う施設・方式)':''));
+    return R(2,rn);
+  }
+  if(cat==='ad')return R(2,'途中の飛行場(緊急時の降り先)');
+  if(cat==='sp'||cat==='as'){const am=altMiss(false);if(am)return R(1,am);return R(2,'範囲の座標が無い')}
+  return R(1,'途中の飛行場の施設など');
+}
+// ルートを変えたら判定し直す(redraw から。少し待ってまとめて)
+let ntmRcT=0;
+function ntmRouteChanged(){
+  if(!NTM)return;
+  clearTimeout(ntmRcT);
+  ntmRcT=setTimeout(()=>{ntmCtxNow=null;drawNtmMap();const t=document.getElementById('tab-ntm');if(t&&t.style.display!=='none')renderNotam()},800);
+}
+
 /* ── 📌(v6-208) ──
    残したい NOTAM に📌を付け、「📌のみ」にすると地図には📌の付いたものだけ出る(ユーザー要望)。
    鍵は「位置指示記号|番号」。値は終わりの時刻で、過ぎたら次に読むときに捨てる。端末の中だけ(hnav.ntmPin) */
 const ntmKey=x=>`${x.icao}|${x.no}`;
 let ntmPins=(()=>{const o=store.get('hnav.ntmPin')||{},now=Date.now(),r={};
   for(const k in o){const t=Date.parse(o[k]);if(!/^\d{4}-/.test(o[k])||!isFinite(t)||t>now)r[k]=o[k]}return r})();
-let ntmPinOnly=!!store.get('hnav.ntmPinOnly');
+// 地図に出すもの: imp=影響あり・注意(既定) / all=全部 / pin=📌のみ(v6-210。以前の hnav.ntmPinOnly から引き継ぐ)
+let ntmMapMode=store.get('hnav.ntmMapMode')||(store.get('hnav.ntmPinOnly')?'pin':'imp');
 const ntmPinned=k=>!!ntmPins[k];
 function ntmPinSave(){store.set('hnav.ntmPin',ntmPins)}
-function ntmPinOnlySet(on){ntmPinOnly=!!on;store.set('hnav.ntmPinOnly',ntmPinOnly?1:0)}
+function ntmMapModeSet(m){ntmMapMode=m;store.set('hnav.ntmMapMode',m)}
 function ntmFind(k){
   if(!NTM)return null;
   for(const ic in (NTM.n||{}))for(const x of NTM.n[ic])if(ntmKey(x)===k)return x;
@@ -4250,8 +4405,9 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
   document.querySelectorAll('.ntmPinBtn').forEach(z=>{if(z.dataset.k===k)z.classList.toggle('on',on)});
   document.querySelectorAll('.ntmIt').forEach(z=>{if(z.dataset.k===k)z.classList.toggle('pinned',on)});
   renderNtmBar();
-  // 地図: 📌のみなら描き直す(外したものは消える)。全部表示なら線の太さだけ変える(描き直すと吹き出しが閉じる)
-  if(ntmPinOnly&&!on)drawNtmMap();else ntmRestyle(k);
+  // 地図: 出し入れが変わるときだけ描き直す(描き直すと吹き出しが閉じる)。それ以外は線の太さだけ変える
+  const lv=x?ntmEval(x).lv:3;
+  if(ntmMapMode==='pin'||(ntmMapMode==='imp'&&lv===1))drawNtmMap();else ntmRestyle(k);
 },true);
 document.getElementById('btnNtmR').onclick=()=>loadNotam(true);
 
@@ -4331,6 +4487,7 @@ function ntmPopHtml(x){
   const on=document.body.classList.contains('ntmJa'),k=ntmKey(x),g=ntmGeo(x);
   return `<div class="apPop"><h5>${esc(x.no)} ${esc(x.icao)}<button class="ntmJaBtn">${on?'原文':'日本語'}</button>`+
     `<button class="ntmPinBtn${ntmPinned(k)?' on':''}" data-k="${esc(k)}" title="地図に残す">📌</button></h5>`+
+    `<div style="margin-top:3px">${ntmLvHtml(x)}</div>`+
     (()=>{const c=NTM_CAT.find(z=>z.k===ntmCatOf(x)),t=ntmTitle(x);return `<div class="ntmPopCat" style="--c:${c.c}">${c.n}${t?' / '+esc(t):''}</div>`})()+
     `<div style="font-size:11px;color:var(--dim)">${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST${ntmFl(x)}</div>`+
     (x.sch?`<div style="font-size:11px;color:var(--dim)">時間帯 ${esc(x.sch)}(UTC)</div>`:'')+
@@ -4339,16 +4496,25 @@ function ntmPopHtml(x){
     ntmTxtHtml(x.txt,true)+`</div>`;
 }
 let ntmShapes={};          // 鍵 → 地図の図形(📌で太さを変えるため)
-const ntmStyle=pin=>({color:'#ff9500',weight:pin?3:1.5,dashArray:pin?null:'5,4',fillOpacity:pin?.12:.06});
-function ntmRestyle(k){(ntmShapes[k]||[]).forEach(l=>l.setStyle&&l.setStyle(ntmStyle(ntmPinned(k))))}
+// 影響度で色と線を分ける: 影響あり=赤の実線 / 注意=橙の破線 / 参考=灰の点線。📌は太く実線
+function ntmStyle(lv,pin){
+  const b=lv===3?{color:'#ff3b30',weight:2.5,dashArray:null,fillOpacity:.13,opacity:1}
+         :lv===2?{color:'#ff9500',weight:1.5,dashArray:'5,4',fillOpacity:.06,opacity:1}
+         :{color:'#a0a6ad',weight:1,dashArray:'2,4',fillOpacity:.03,opacity:.7};
+  return pin?{...b,weight:b.weight+1.5,dashArray:null,opacity:1}:b;
+}
+function ntmRestyle(k){const x=ntmFind(k),lv=x?ntmEval(x).lv:2;(ntmShapes[k]||[]).forEach(l=>l.setStyle&&l.setStyle(ntmStyle(lv,ntmPinned(k))))}
 // 1件の NOTAM の図形。本文に形があればそれ、無ければ Q 行の円。どちらも無ければ false
 function ntmDrawOne(x){
-  const k=ntmKey(x),g=ntmGeo(x),st=ntmStyle(ntmPinned(k)),ls=[];
+  if(!ntmDrawable(x))return false;
+  const k=ntmKey(x),g=ntmGeo(x),st=ntmStyle(ntmEval(x).lv,ntmPinned(k)),ls=[];
+  // ⚠ 障害物は円(Q 行の半径は1〜5NM)で描くと画面が埋まる。位置の点だけにする(v6-210)
+  const obs=ntmCatOf(x)==='obs';
+  const circ=(c,r)=>obs?L.circleMarker(c,{...st,radius:5,fillOpacity:.55,dashArray:null}):L.circle(c,{...st,radius:r*1852});
   g.polys.forEach(r=>ls.push(L.polygon(r,st)));
   g.lines.forEach(r=>ls.push(L.polyline(r,{...st,fill:false})));
-  g.circles.forEach(c=>ls.push(L.circle(c.c,{...st,radius:c.r*1852})));
-  if(!ls.length&&isFinite(x.lat)&&isFinite(x.lon)&&(x.lat||x.lon)&&!(+x.rad>100))
-    ls.push(L.circle([x.lat,x.lon],{...st,radius:(+x.rad>0?+x.rad:2)*1852}));
+  g.circles.forEach(c=>ls.push(circ(c.c,c.r)));
+  if(!ls.length)ls.push(circ([x.lat,x.lon],+x.rad>0?+x.rad:2));
   if(!ls.length)return false;
   ls.forEach(l=>l.bindPopup(()=>ntmPopHtml(x),ntmPopOpt()).on('popupopen',ntmPopFit).addTo(ntmLayer));
   ntmShapes[k]=ls;
@@ -4360,19 +4526,24 @@ function drawNtmMap(){
   ntmLayer=L.layerGroup().addTo(map);ntmShapes={};
   if(!NTM)return;
   const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  const want=x=>!ntmPinOnly||ntmPinned(ntmKey(x));
+  ntmCtxNow=null;
+  const want=x=>ntmMapMode==='all'||ntmPinned(ntmKey(x))||(ntmMapMode==='imp'&&ntmEval(x).lv>1);
+  // 形のあるものは 参考→注意→影響あり の順に描いて、重要なものを上に重ねる
+  const shapes=[];
   ntmIds.forEach(ic=>{
     const all=ntmLive((NTM.n&&NTM.n[ic])||[]).filter(want);
-    const noGeo=all.filter(x=>!ntmDrawOne(x));
+    all.forEach(x=>{if(ntmDrawable(x))shapes.push(x)});
+    const list=all.filter(x=>!ntmDrawable(x));      // 形の無いものは飛行場のピンに
     const a=ASP.find(z=>z.icao===ic);
     if(!a)return;
-    if(ntmPinOnly&&!noGeo.length)return;           // 📌のみ: 📌の付いた座標なしの通知が無い飛行場はピンも出さない
-    const n=ntmPinOnly?noGeo.length:all.length,list=ntmPinOnly?noGeo:all;
+    if(ntmMapMode!=='all'&&!list.length)return;
+    const n=list.length,mx=list.reduce((m,x)=>Math.max(m,ntmEval(x).lv),0);
     L.marker([a.lat,a.lng],{icon:L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,15],
-      html:`<div class="ntmPin${n?'':' zero'}">N${n?'<b>'+n+'</b>':''}</div>`})})
+      html:`<div class="ntmPin${n?'':' zero'}${mx===3?' l3':mx===1?' l1':''}">N${n?'<b>'+n+'</b>':''}</div>`})})
       .bindPopup(()=>`<div class="apPop"><h5>${ic} ${esc(a.n)}`+
         (n?`<button class="ntmJaBtn">${document.body.classList.contains('ntmJa')?'原文':'日本語'}</button>`:'')+`</h5>`+
         (n?ntmGroups(list).map(g=>`<div class="ntmPopCat" style="--c:${g.cat.c}">${g.cat.n} (${g.items.length})</div>`+g.items.map(x=>`<div style="margin:3px 0">`+
+             `<div>${ntmLvHtml(x)}</div>`+
              (ntmTitle(x)?`<div style="font-size:11px;font-weight:700">${esc(ntmTitle(x))}</div>`:'')+
              `<span style="color:var(--dim);font-family:var(--mono);font-size:10px">`+
              `${esc(x.no)} ${ntmTime(x.from)}〜${ntmTime(x.to)}${x.est?'(EST)':''}${ntmFl(x)}</span>`+
@@ -4381,7 +4552,8 @@ function drawNtmMap(){
         `</div>`,ntmPopOpt())
       .on('popupopen',ntmPopFit).addTo(ntmLayer);
   });
-  ntmAreaList().filter(want).forEach(x=>ntmDrawOne(x));
+  ntmAreaList().filter(want).forEach(x=>shapes.push(x));
+  shapes.sort((a,b)=>ntmEval(a).lv-ntmEval(b).lv).forEach(x=>ntmDrawOne(x));
 }
 document.getElementById('btnNtmMap').onclick=toggleNtmMap;
 document.getElementById('btnNtmMap2').onclick=()=>{if(!ntmMapOn)toggleNtmMap();setScreen('main')};
@@ -4963,6 +5135,8 @@ function redraw(){
   }
   document.getElementById('dDist').innerHTML=totD.toFixed(1)+' <small>NM</small>';
   document.getElementById('dEte').textContent=(!anyBad&&totH>0)?fmtHM(totH):'--:--';
+  rteTotH=(!anyBad&&totH>0)?totH:0;
+  try{ntmRouteChanged()}catch(_){}                 // NOTAM の影響度を判定し直す(読み込み前は NTM が未定義で飛ばす)
   document.getElementById('dEta').textContent=(!anyBad&&totH>0)?hm(new Date(Date.now()+totH*3600e3)):'--:--';
   const req=(!anyBad&&num('ff')>0)?totF:0;
   document.getElementById('dReq').innerHTML=req.toFixed(0)+' <small>lbs</small>';
@@ -7971,6 +8145,8 @@ document.getElementById('ifrToMap').onclick=()=>{
   if(document.getElementById('ifrWithAlt').checked&&P.legsA)P.legsA.forEach(push);
   // 飛行ログ側の風を IFR の共通の風に揃える(時間を合わせるため。レグ別の風は飛行ログには持てない)
   document.getElementById('wDir').value=W.base.d;document.getElementById('wSpd').value=W.base.s;
+  // NOTAM の影響度の判定に巡航高度と出発/目的/代替を渡す(ルートの先頭・末尾がこれと一致する間だけ IFR として使う)
+  store.set('hnav.ntmIfr',{crz:P.CA.alt,dep:P.dep.icao,dst:P.dst.icao,alt:(P.alt&&P.alt.icao)||''});
   loadRouteObj({v:1,wp},true);
   // ⚠ SID線は loadRouteObj(→clearAllWp が sidLayer も消す)の**後**に描く
   sidLayer.clearLayers();
