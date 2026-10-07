@@ -137,7 +137,9 @@ async function swimSearch(cond, days) {
   let r = await call(c0);
   if (r.status === 403 || r.status === 401 || (r.status >= 300 && r.status < 400)) r = await call(await swimRelogin(c0));   // セッション切れ
   if (!r.ok) throw new Error(`SWIM ${r.status}`);
-  const o = await r.json();
+  const raw = await r.text();
+  let o;
+  try { o = JSON.parse(raw); } catch { throw new Error(`SWIM 応答がJSONでない: ${raw.slice(0, 60).replace(/\s+/g, ' ')}`); }
   const e = o.error_info || {};
   if (e.error_code && String(e.error_code) !== '0') {
     const err = new Error(`SWIM error ${e.error_code} ${e.error_description || ''}`.trim());
@@ -227,6 +229,8 @@ async function swimArea(box) {
       }
       g.ok.forEach(v => { const key = `${v.icao}|${v.no}`; if (!seen.has(key)) { seen.add(key); rows.push(v); } });
     });
+    // Vercel のログで原因を追えるように(位置・矩形は出さない)
+    console.log(`swimArea split: rows=${rows.length} trunc=${trunc.join(',') || '-'} fail=${fail.join(' / ') || '-'}`);
     if (fail.length === jobs.length) throw got[0].e;
     info = { mode: 'split', ...(trunc.length ? { trunc } : {}), ...(fail.length ? { fail } : {}) };
   }
