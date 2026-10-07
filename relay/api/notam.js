@@ -34,12 +34,13 @@
    POST /api/notam  本文 {"ids":"RJTT,RJAA,...","box":"s,w,n,e"(任意・SWIM のみ),"k":"合言葉"}
      → { updated, src:'swim'|'autorouter'|'faa', n:{ICAO:[{no,txt,from,to,iss,cls,type,q,lat,lon,rad,est,sch}]}, err:{ICAO:"理由"} }
      est=1 は終わりが見込み(EST)、sch は時間帯(D項)、lo/up は Q 行の下限/上限(FL)。SWIM のときだけ付く
-     box があれば area:[同じ形の行] / areaInfo:{mode:'fir'|'rjjj',total,kept,days} / areaErr も返す(区域の NOTAM)
+     box があれば area:[同じ形の行] / areaInfo:{mode:'fir'|'split',trunc?,fail?,total,kept,days} / areaErr も返す(区域の NOTAM)
    ⚠ lat/lon/rad(NM) は**あるときだけ**。EADのNOTAMは大半が飛行場そのものへの通知で座標を持たない。
      アプリは座標があれば円、無ければ飛行場にピンを出す。
 */
 import { check, preflight, json, makeLimiter } from '../lib/guard.js';
 
+export const maxDuration = 30;    // 区域の分割取得で SWIM を最大28回引く(7本並列)
 const UP_TTL_MS = 600_000;        // NOTAMは分単位で変わるものではないので10分使い回す
 const MAX_IDS = 8;
 const PAGE = 100;
@@ -152,7 +153,7 @@ async function swimFetch(ids) {
      ルートから遠い飛行場の名義でもルートにかかる通知(羽田の名義で出る東京湾の区域など)が取れない。
    ⚠ SWIM の検索は場所(緯度経度)で絞れない。fir=RJJJ でまとめて引いて、**ここで外接矩形に当たるものだけ**残す。
      アプリは丸めた矩形(0.1度単位)しか送らない。ルートそのものとの距離はアプリが端末の中で見る。
-   ⚠ 件数が検索上限を超えると error 14。そのときは location=RJJJ(FIR 名義だけ)に絞って取り直す */
+   ⚠ 件数が検索上限を超えると error 14。そのときは種類ごとに分けて取り直す(下の swimArea) */
 // 本文の座標 "354703N1391338E" / "3547N13913E"(区切りに空白・/ が入ることがある)
 const TXT_COORD = /(\d{2})(\d{2})(\d{2}(?:\.\d+)?)?\s*([NS])\s*\/?\s*(\d{3})(\d{2})(\d{2}(?:\.\d+)?)?\s*([EW])/g;
 function txtPts(t) {
@@ -178,17 +179,42 @@ function hitBox(v, b) {
   const r = v.rad / 60;
   return v.lat - r <= b[2] + m && v.lat + r >= b[0] - m && v.lon - r <= b[3] + m && v.lon + r >= b[1] - m;
 }
+// ⚠ fir=RJJJ 1回では検索上限(error 14)に当たった(2026-10-07 実機)。そのときは
+//   ① location=RJJJ(FIR 名義は全種類) ② fir=RJJJ をノータムコードの主題(2文字)ごと: 航行警報 W*・空域制限 R*
+//   に分けて引き直す。他の飛行場の名義の障害物・灯火などはここでは取らない(飛行場の欄で取る)
+const AREA_SUBJ = ['WA', 'WB', 'WC', 'WD', 'WE', 'WF', 'WG', 'WH', 'WJ', 'WL', 'WM', 'WP', 'WR', 'WS', 'WT', 'WU', 'WV', 'WW', 'WY', 'WZ',
+  'RA', 'RD', 'RM', 'RO', 'RP', 'RR', 'RT'];
+async function pool(items, n, fn) {               // n 本ずつ並列(SWIM を一度に叩きすぎない)
+  const out = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: n }, async () => {
+    while (i < items.length) { const k = i++; try { out[k] = { ok: await fn(items[k]) }; } catch (e) { out[k] = { e }; } }
+  }));
+  return out;
+}
 async function swimArea(box) {
-  let rows, mode = 'fir';
-  try { rows = await swimSearch({ fir: 'RJJJ' }, 2); }
-  catch (e) {
+  const days = 2;
+  let rows, info;
+  try {
+    rows = await swimSearch({ fir: 'RJJJ' }, days);
+    info = { mode: 'fir' };
+  } catch (e) {
     if (e.code !== '14') throw e;
-    mode = 'rjjj';                                // 多すぎる → FIR 名義の通知だけ
-    rows = await swimSearch({ location: 'RJJJ' }, 2);
+    const jobs = [{ location: 'RJJJ' }, ...AREA_SUBJ.map(c => ({ fir: 'RJJJ', notamCode: c }))];
+    const got = await pool(jobs, 7, c => swimSearch(c, days));
+    const seen = new Set(), trunc = [], fail = [];
+    rows = [];
+    got.forEach((g, k) => {
+      const name = jobs[k].notamCode || 'RJJJ名義';
+      if (g.e) { (g.e.code === '14' ? trunc : fail).push(name); return; }
+      g.ok.forEach(v => { const key = `${v.icao}|${v.no}`; if (!seen.has(key)) { seen.add(key); rows.push(v); } });
+    });
+    if (fail.length === jobs.length) throw got[0].e;
+    info = { mode: 'split', ...(trunc.length ? { trunc } : {}), ...(fail.length ? { fail } : {}) };
   }
   const hit = rows.filter(v => hitBox(v, box));
   hit.sort((a, b) => String(b.from).localeCompare(String(a.from)));
-  return { rows: hit, info: { mode, total: rows.length, kept: hit.length, days: 2 } };
+  return { rows: hit, info: { ...info, total: rows.length, kept: hit.length, days } };
 }
 
 /* ───────── autorouter ───────── */

@@ -605,6 +605,13 @@
   .ntmBar .seg button.on{color:#ff9500;border-color:#ff9500;background:rgba(255,149,0,.1)}
   .ntmBar .lnk{background:none;border:none;color:var(--cyn);font-size:12px;cursor:pointer;padding:4px}
   .ntmGeo{font-size:10px;color:#ff9500;font-family:var(--mono);margin-left:4px}
+  /* 種類ごとの見出し(v6-209) */
+  .ntmCat{display:flex;align-items:center;gap:6px;padding:5px 10px;border-top:1px solid var(--line);background:rgba(255,255,255,.03);
+    font-size:12px;font-weight:700;cursor:pointer;border-left:3px solid var(--c,var(--dim))}
+  .ntmCat small{margin-left:auto;color:var(--dim);font-weight:400}
+  .ntmCat i{color:var(--dim);font-style:normal}
+  .ntmTtl{font-size:12px;font-weight:700;color:var(--c,var(--txt));margin-bottom:1px}
+  .ntmPopCat{font-size:11px;font-weight:700;margin:6px 0 2px;padding-left:5px;border-left:3px solid var(--c,var(--dim))}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{color:var(--dim);font-weight:500;text-align:left;padding:6px 5px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.04em}
   td{padding:6px 5px;border-bottom:1px solid var(--line);font-family:var(--mono);white-space:nowrap}
@@ -1115,7 +1122,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-208';
+const VER_TAG='v6-209';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3978,15 +3985,106 @@ async function loadNotam(force){
   renderNotam();
   drawNtmMap();
 }
+/* ── 種類ごとに分けて並べる(v6-209・ユーザー要望) ──
+   並び: 飛行場・滑走路(閉鎖など重要) → 特殊な飛行(気球・花火・落下傘・無人機・射撃…) → 空域 → 航法施設・方式 → 通信・管制
+        → 誘導路・エプロン・施設 → その他 → 灯火 → 障害物(数が多いので最後)。
+   判定は Q コード(selectionCode)の主題2文字(ICAO Doc 8126)。Q コードが無い配信は本文の語で当てる */
+const NTM_CAT=[
+  {k:'ad', n:'飛行場・滑走路',     c:'var(--red)'},
+  {k:'sp', n:'特殊な飛行・活動',   c:'#ff9500'},
+  {k:'as', n:'空域',               c:'var(--mag)'},
+  {k:'nav',n:'航法施設・方式',     c:'var(--cyn)'},
+  {k:'atc',n:'通信・管制',         c:'var(--blu)'},
+  {k:'fac',n:'誘導路・エプロン・施設',c:'var(--grn)'},
+  {k:'oth',n:'その他',             c:'var(--dim)'},
+  {k:'lgt',n:'灯火',               c:'var(--amb)'},
+  {k:'obs',n:'障害物',             c:'var(--dim)'},
+];
+const NTM_SUBJ={
+ AA:'最低高度',AC:'管制圏',AD:'防空識別圏',AE:'管制区',AF:'飛行情報区',AH:'高高度管制区',AL:'最低使用FL',AN:'RNAV経路',AO:'洋上管制区',AP:'位置通報点',AR:'ATS経路',AT:'進入管制区',AU:'高高度FIR',AV:'高高度助言区域',AX:'交点',AZ:'飛行場交通区域',
+ CA:'対空通信施設',CB:'ADS-B',CC:'ADS-C',CD:'CPDLC',CE:'航空路監視レーダー',CG:'GCA',CL:'SELCAL',CM:'地表面探知レーダー',CP:'PAR',CR:'PAR監視部',CS:'SSR',CT:'ターミナルレーダー',
+ FA:'飛行場',FB:'すべり測定装置',FC:'雲高測定装置',FD:'駐機誘導装置',FE:'酸素',FF:'消防救難',FG:'地上管制',FH:'ヘリコプター着陸帯',FI:'防除氷',FJ:'オイル',FL:'着陸方向指示器',FM:'気象業務',FO:'霧消散',FP:'ヘリポート',FS:'除雪',FT:'視程計',FU:'燃料',FW:'風向指示器',FZ:'税関',
+ GA:'GNSS(飛行場)',GW:'GNSS(広域)',
+ IC:'ILS',ID:'ILS DME',IG:'グライドパス',II:'インナーマーカー',IL:'ローカライザー',IM:'ミドルマーカー',IN:'ローカライザー',IO:'アウターマーカー',IS:'ILS CAT I',IT:'ILS CAT II',IU:'ILS CAT III',IW:'MLS',IX:'ロケーター(外)',IY:'ロケーター(中)',
+ LA:'進入灯',LB:'飛行場灯台',LC:'滑走路中心線灯',LD:'着陸方向指示灯',LE:'滑走路縁灯',LF:'連鎖式閃光灯',LG:'PCL',LH:'高光度滑走路灯',LI:'滑走路末端識別灯',LJ:'滑走路整列灯',LK:'進入灯(CAT II)',LL:'低光度滑走路灯',LM:'中光度滑走路灯',LP:'PAPI',LR:'着陸区域の灯火',LS:'過走帯灯',LT:'滑走路末端灯',LU:'HAPI',LV:'VASIS',LW:'ヘリポート灯火',LX:'誘導路中心線灯',LY:'誘導路縁灯',LZ:'接地帯灯',
+ MA:'移動区域',MB:'舗装強度',MC:'クリアウェイ',MD:'公示距離',MG:'地上走行誘導',MH:'拘束装置',MK:'駐機区域',MM:'昼間標識',MN:'エプロン',MO:'停止線灯',MP:'駐機場',MR:'滑走路',MS:'過走帯',MT:'滑走路末端',MU:'ターニングパッド',MW:'着陸帯・ショルダー',MX:'誘導路',MY:'高速脱出誘導路',
+ NA:'無線航法施設(全部)',NB:'NDB',NC:'DECCA',ND:'DME',NF:'ファンマーカー',NL:'ロケーター',NM:'VOR/DME',NN:'TACAN',NO:'OMEGA',NT:'VORTAC',NV:'VOR',NX:'方向探知局',
+ OA:'航空情報業務',OB:'障害物',OE:'入国要件',OL:'障害灯',OR:'救難調整本部',
+ PA:'STAR',PB:'VFR到着方式',PC:'緊急時方式',PD:'SID',PE:'VFR出発方式',PF:'流量管理',PH:'待機方式',PI:'計器進入方式',PK:'VFR進入方式',PL:'飛行計画処理',PM:'飛行場運用最低気象条件',PN:'騒音規制',PO:'障害物間隔高度',PR:'通信途絶時の方式',PT:'転移高度',PU:'進入復行方式',PX:'最低待機高度',PZ:'ADIZ方式',
+ RA:'空域の留保',RD:'危険区域',RM:'軍用運用区域',RO:'上空通過',RP:'飛行禁止区域',RR:'制限空域',RT:'臨時制限空域',
+ SA:'ATIS',SB:'飛行計画受付',SC:'航空交通管制部',SE:'飛行情報業務',SF:'飛行場情報業務',SL:'流量管理センター',SO:'洋上管制',SP:'進入管制',SS:'飛行援助',ST:'飛行場管制',SU:'高高度管制',SV:'VOLMET',SY:'高高度助言',
+ WA:'航空ショー',WB:'曲技飛行',WC:'係留気球・凧',WD:'爆発物処理',WE:'演習',WF:'空中給油',WG:'グライダー',WH:'発破・花火',WJ:'標的・バナー曳航',WL:'気球の放球',WM:'射撃・ミサイル・ロケット',WP:'落下傘降下・パラグライダー',WR:'放射性・有毒物質',WS:'ガスの燃焼・放出',WT:'大編隊の移動',WU:'無人航空機',WV:'編隊飛行',WW:'火山活動',WY:'航空測量',WZ:'模型飛行',
+};
+const NTM_COND={
+ AC:'整備のため停止',AD:'昼間のみ',AF:'飛行点検済み',AG:'地上点検のみで運用',AH:'運用時間変更',AK:'通常運用に復帰',AL:'既定の制限付きで運用',AM:'軍用のみ',AN:'夜間運用可',AO:'運用中',AP:'事前許可要',AR:'要求により',AS:'使用不可',AU:'利用不可',AW:'廃止',AX:'停止の取消',
+ CA:'実施',CC:'完了',CD:'終了',CE:'設置',CF:'周波数変更',CG:'格下げ',CH:'変更',CI:'識別・呼出符号変更',CL:'再設定',CM:'移設',CN:'取消',CO:'運用',CP:'出力低下',CR:'一時代替',CS:'設置',CT:'試験中・使用不可',
+ HW:'工事中',HV:'工事完了',HG:'草刈り中',HX:'鳥の群れ',HK:'鳥の渡り',HJ:'打上げ予定',HU:'打上げ中',HQ:'運用取消',
+ LB:'基地機専用',LC:'閉鎖',LD:'危険',LF:'混信',LG:'識別符号なしで運用',LH:'重量制限',LI:'IFR運航不可',LK:'不動光で運用',LN:'夜間閉鎖',LP:'禁止',LR:'滑走路・誘導路に制限',LS:'中断あり',LT:'制限',LV:'VFR運航不可',LW:'実施予定',LX:'注意して運用',
+ XX:'',
+};
+// 重要度(同じ種類の中で先に出す): 閉鎖・使用不可・禁止
+const NTM_HOT=/^(LC|AS|AU|AW|LD|LP|CT|LN)$/;
+function ntmQ(x){const m=/^Q?([A-Z]{2})([A-Z]{2})$/.exec(String(x.q||'').toUpperCase());return m?{s:m[1],c:m[2]}:null}
+function ntmCatOf(x){
+  const q=ntmQ(x),t=String(x.txt||'').toUpperCase();
+  if(q){
+    const s=q.s,a=s[0];
+    if(s==='OB'||s==='OL')return 'obs';
+    if(a==='L')return 'lgt';
+    if(a==='W')return 'sp';
+    if(a==='R'||a==='A')return 'as';
+    if(/^(FA|FH|FP|MA|MB|MC|MD|MH|MR|MS|MT|MU|MW)$/.test(s))return 'ad';
+    if(a==='I'||a==='N'||a==='G'||a==='P')return 'nav';
+    if(a==='C'||a==='S')return 'atc';
+    if(a==='M'||a==='F')return 'fac';
+    return 'oth';
+  }
+  // Q コードが無い配信(autorouter 等)は本文の語で
+  if(/\b(BALLOON|FIREWORK|PJE|PARACHUT|UNMANNED|UAV|UAS|DRONE|FIRING|LASER|AEROBATIC|GLIDER|EXER)/.test(t))return 'sp';
+  if(/\b(OBST|CRANE|TOWER|MAST)\b/.test(t))return 'obs';
+  if(/\b(RWY|AD CLSD|AERODROME CLSD)\b/.test(t))return 'ad';
+  if(/\b(LGT|LIGHT|PAPI|ALS)\b/.test(t))return 'lgt';
+  if(/\b(TWY|APN|STAND)\b/.test(t))return 'fac';
+  if(/\b(ILS|LOC|VOR|DME|NDB|TACAN|RNAV|SID|STAR|IAP|APCH PROC)\b/.test(t))return 'nav';
+  if(/\b(RESTRICTED|DANGER|PROHIBITED|CTR|TCA|ACA)\b/.test(t))return 'as';
+  return 'oth';
+}
+function ntmTitle(x){        // 「滑走路 閉鎖」のような見出し。Q コードが無ければ空
+  const q=ntmQ(x);if(!q)return '';
+  const s=NTM_SUBJ[q.s]||'',c=NTM_COND[q.c];
+  return (s+(c?' '+c:'')).trim();
+}
+// 種類ごとの組 [{cat,items}]。組の中は 閉鎖などを先に → 今有効なもの → 始まりの早い順
+function ntmGroups(list){
+  const now=Date.now(),by={};
+  list.forEach(x=>(by[ntmCatOf(x)]||(by[ntmCatOf(x)]=[])).push(x));
+  const t=v=>/^\d{4}-/.test(v)?Date.parse(v):0;
+  return NTM_CAT.filter(c=>by[c.k]).map(c=>({cat:c,items:by[c.k].sort((a,b)=>{
+    const qa=ntmQ(a),qb=ntmQ(b),ha=qa&&NTM_HOT.test(qa.c)?0:1,hb=qb&&NTM_HOT.test(qb.c)?0:1;
+    if(ha!==hb)return ha-hb;
+    const aa=t(a.from)<=now?0:1,ab=t(b.from)<=now?0:1;
+    if(aa!==ab)return aa-ab;
+    return aa===0?t(b.from)-t(a.from):t(a.from)-t(b.from);
+  })}));
+}
+function ntmGroupsHtml(list,showLoc,key){
+  return ntmGroups(list).map(g=>{
+    const ok=key+'|'+g.cat.k,open=ntmOpen[ok]!==false;
+    return `<div class="ntmCat" data-ic="${wxEsc(ok)}" style="--c:${g.cat.c}">${g.cat.n}<small>${g.items.length}件</small><i>${open?'▾':'▸'}</i></div>`+
+      (open?g.items.map(x=>ntmItemHtml(x,showLoc,g.cat.c)).join(''):'');
+  }).join('');
+}
 function ntmFl(x){        // Q 行の下限/上限(FL)。000=SFC・999=UNL
   if(!isFinite(x.lo)&&!isFinite(x.up))return '';
   const f=(v,lo)=>!isFinite(v)?'?':lo&&v===0?'SFC':v>=999?'UNL':'FL'+String(v).padStart(3,'0');
   return ` ${f(x.lo,1)}-${f(x.up)}`;
 }
-function ntmItemHtml(x,showLoc){
-  const k=ntmKey(x),pin=ntmPinned(k),g=ntmGeo(x);
+function ntmItemHtml(x,showLoc,col){
+  const k=ntmKey(x),pin=ntmPinned(k),g=ntmGeo(x),ttl=ntmTitle(x);
   const gl=g.polys.length?`多角形${g.polys.length>1?'×'+g.polys.length:''}`:g.circles.length?`${g.circles.every(c=>c.pt)?'地点':'円'}${g.circles.length>1?'×'+g.circles.length:''}`:g.lines.length?'線':'';
-  return `<div class="ntmIt${pin?' pinned':''}" data-k="${wxEsc(k)}"><div class="ntmMeta">${wxEsc(x.no)}`+
+  return `<div class="ntmIt${pin?' pinned':''}" data-k="${wxEsc(k)}">`+
+    (ttl?`<div class="ntmTtl" style="--c:${col||'var(--txt)'}">${wxEsc(ttl)}</div>`:'')+
+    `<div class="ntmMeta">${wxEsc(x.no)}`+
     (showLoc?` <b>${wxEsc(x.icao)}</b>`:'')+
     `${x.cls?` <span class="ntmCls">${wxEsc(x.cls)}</span>`:''}`+
     ` ${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST${ntmFl(x)}`+
@@ -4023,9 +4121,12 @@ function renderNotam(){
     `<small>${NTM.areaErr?'取得できず':ar.length+'件'}</small><i>${aOpen?'▾':'▸'}</i></div>`+
     (aOpen?(NTM.areaErr?`<div class="ifrNa">${wxEsc(NTM.areaErr)}</div>`:
       `<div class="ntmIt"><div class="ntmMeta" style="white-space:normal">FIR RJJJ の NOTAM のうち、座標(Q行の円・本文の多角形)がルートにかかるもの。今から${ai?ai.days*24:48}時間に有効な分。`+
+      (ai&&ai.mode==='split'?'<br>FIR 全体は件数が多いので「RJJJ 名義の全部」と「他の名義の航行警報(W)・空域制限(R)」に分けて取得。他の飛行場名義の障害物などはその飛行場の欄にしか出ません。':'')+
+      (ai&&ai.trunc?`<br><span style="color:var(--amb)">⚠ 件数超過で取れなかった種類: ${ai.trunc.map(c=>wxEsc(NTM_SUBJ[c]?c+' '+NTM_SUBJ[c]:c)).join('、')}</span>`:'')+
+      (ai&&ai.fail?`<br><span style="color:var(--amb)">⚠ 取得に失敗した種類: ${ai.fail.map(wxEsc).join('、')}</span>`:'')+
       (ai&&ai.mode==='rjjj'?'<br><span style="color:var(--amb)">⚠ 件数が多すぎたので RJJJ 名義のものだけ。他の飛行場名義の区域は入っていません</span>':'')+
       `<br>座標の無い区域の通知は地図に出せないので入っていません。</div></div>`+
-      (ar.length?ar.map(x=>ntmItemHtml(x,true)).join(''):'<div class="ifrNa">ルートにかかる区域のNOTAMはありません(この配信で見える範囲では)</div>')):'')+
+      (ar.length?ntmGroupsHtml(ar,true,'AREA'):'<div class="ifrNa">ルートにかかる区域のNOTAMはありません(この配信で見える範囲では)</div>')):'')+
     `</div>`;
   b.innerHTML=ntmIds.map(ic=>{
     const nm=(ASP.find(a=>a.icao===ic)||{}).n||'';
@@ -4036,11 +4137,11 @@ function renderNotam(){
       `<b>${ic}</b> <span class="jp">${wxEsc(nm)}</span>`+
       `<small>${err?'取得できず':list.length+'件'}</small><i>${open?'▾':'▸'}</i></div>`+
       (open?(err?`<div class="ifrNa">${wxEsc(err)}</div>`
-        :(list.length?list.map(x=>ntmItemHtml(x)).join('')
+        :(list.length?ntmGroupsHtml(list,false,ic)
           :'<div class="ifrNa">有効なNOTAMはありません(この配信で見える範囲では)</div>')):'')+
       `</div>`;
   }).join('')+areaHtml+(ntmErr?`<div class="ifrNa">${wxEsc(ntmErr)}</div>`:'');
-  b.querySelectorAll('.ntmHd').forEach(h=>h.onclick=()=>{
+  b.querySelectorAll('.ntmHd,.ntmCat').forEach(h=>h.onclick=()=>{
     const ic=h.dataset.ic;ntmOpen[ic]=ntmOpen[ic]===false;renderNotam()});
 }
 // 期限切れは落とす(取得から時間が経っていても混ざらないように)
@@ -4230,6 +4331,7 @@ function ntmPopHtml(x){
   const on=document.body.classList.contains('ntmJa'),k=ntmKey(x),g=ntmGeo(x);
   return `<div class="apPop"><h5>${esc(x.no)} ${esc(x.icao)}<button class="ntmJaBtn">${on?'原文':'日本語'}</button>`+
     `<button class="ntmPinBtn${ntmPinned(k)?' on':''}" data-k="${esc(k)}" title="地図に残す">📌</button></h5>`+
+    (()=>{const c=NTM_CAT.find(z=>z.k===ntmCatOf(x)),t=ntmTitle(x);return `<div class="ntmPopCat" style="--c:${c.c}">${c.n}${t?' / '+esc(t):''}</div>`})()+
     `<div style="font-size:11px;color:var(--dim)">${ntmTime(x.from)} 〜 ${ntmTime(x.to)}${x.est?'(EST)':''} JST${ntmFl(x)}</div>`+
     (x.sch?`<div style="font-size:11px;color:var(--dim)">時間帯 ${esc(x.sch)}(UTC)</div>`:'')+
     ((g.polys.length||g.lines.length||g.circles.length)?
@@ -4270,9 +4372,11 @@ function drawNtmMap(){
       html:`<div class="ntmPin${n?'':' zero'}">N${n?'<b>'+n+'</b>':''}</div>`})})
       .bindPopup(()=>`<div class="apPop"><h5>${ic} ${esc(a.n)}`+
         (n?`<button class="ntmJaBtn">${document.body.classList.contains('ntmJa')?'原文':'日本語'}</button>`:'')+`</h5>`+
-        (n?list.map(x=>`<div style="margin:3px 0"><span style="color:var(--dim);font-family:var(--mono);font-size:10px">`+
+        (n?ntmGroups(list).map(g=>`<div class="ntmPopCat" style="--c:${g.cat.c}">${g.cat.n} (${g.items.length})</div>`+g.items.map(x=>`<div style="margin:3px 0">`+
+             (ntmTitle(x)?`<div style="font-size:11px;font-weight:700">${esc(ntmTitle(x))}</div>`:'')+
+             `<span style="color:var(--dim);font-family:var(--mono);font-size:10px">`+
              `${esc(x.no)} ${ntmTime(x.from)}〜${ntmTime(x.to)}${x.est?'(EST)':''}${ntmFl(x)}</span>`+
-             `<button class="ntmPinBtn${ntmPinned(ntmKey(x))?' on':''}" data-k="${esc(ntmKey(x))}">📌</button>`+ntmTxtHtml(x.txt,true)+`</div>`).join('')
+             `<button class="ntmPinBtn${ntmPinned(ntmKey(x))?' on':''}" data-k="${esc(ntmKey(x))}">📌</button>`+ntmTxtHtml(x.txt,true)+`</div>`).join('')).join('')
            :'<div style="color:var(--dim)">有効なNOTAMはありません(この配信で見える範囲では)</div>')+
         `</div>`,ntmPopOpt())
       .on('popupopen',ntmPopFit).addTo(ntmLayer);
