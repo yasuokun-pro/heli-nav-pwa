@@ -520,7 +520,8 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
 2. **生成器を順に回す**(全部 `sorted()[-1]` で最新の日付フォルダを見る):
    `gen_fix → gen_navaids --splice → gen_awy`(⚠ awy は navaids.gen.js を読むので **navaids を先に**。
    順を誤ると改名した navaid(2026-09: 高知 KRE→NAE)の直行経路が落ちる)
-   `→ gen_proc → gen_tomin → gen_ad → gen_freq --splice → gen_magvar`(出た MAGV_C を index.html に貼る)
+   `→ gen_proc → gen_tomin → gen_ad → gen_ils → gen_freq --splice → gen_magvar`(出た MAGV_C を index.html に貼る)
+   ⚠ `gen_ils` は ad.json(標高の代用)を読むので **gen_ad の後**
    `→ gen_res → gen_nuke → gen_tra → gen_civ → gen_hp → gen_natl_ctr → gen_asp --splice → gen_sup`
    ⚠ `gen_proc`/`gen_tomin` は日付フォルダをまたいで glob していて**2サイクル分が混ざった**。最新フォルダだけに直した
    ⚠ `gen_aca`(aca.json)と `gen_tca` は図の読み取り結果を固定で持っているので回さない。
@@ -1259,6 +1260,18 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
         そこで切ると表が丸ごと落ちる。CHANGE 行は飛ばすだけにして、切るのは脚注だけ
       ⚠ 見出しの探し方: "MINIMA" は CHANGE 行や表の下の注記にも出る。**"MINIMA … THR elev." の行**を採る
       検算: 558図すべてで制御文字・未知グリフ 0、"CAT" 行が無いのは3図だけ
+- **ILS の最終進入経路(v6-213・ユーザー要望)**: `tools/gen_ils.py` → `ils.json`(**80本/60飛行場**)、地物グループの `btnIls`。
+  厚木の南の海岸線のように ILS の下をくぐる・高度で避ける場所のため。THR から外へ10NM、1NMごとに GP 上の高さ
+  (THR標高+RDH+距離×tan(GP角))。吹き出しに 1〜10NM の表。
+  - 作り方: 進入コース = **LOC アンテナを通る滑走路の真方位**(AD 2.12)。THR = GP アンテナを中心線に下ろした点から RDH/tan だけ手前
+    (厚木 RWY01 は AIP の THR 座標と約15m で一致)。⚠ THR 座標を AD 2.12 の表から直接読むと**隣の滑走路の座標を拾った**(羽田 16R が 241°)ので使わない
+  - 真方位が "To be issued" のとき: ①反対向きの LOC どうしを結ぶ(横田) ②備考の BRG(MAG)+磁気偏差(下総)。
+    ⚠ 偏差の度記号が **˚(U+02DA)** の AIP がある
+  - 検算: GP アンテナの中心線からの横ずれは 100〜160m。**60〜250m を外れたら出さない**(羽田 RWY23 は 18m=LOC が中心線上に無い)
+  - ⚠ 段組の空白を詰めないと「datum   16.3m(53ft)」の RDH が当たらない
+  - GP 角・RDH・THR 標高が読めないものは 3.0°・50ft・飛行場標高で計算し、吹き出しに「仮定」と出す(横田は GP 角・RDH とも仮定)
+  - LDA・GP の無い LOC 単独・PAR は対象外
+  - ⚠ 目安: 進入機は GP に乗る前はインターセプト高度で水平に来る。地球の丸み(10NM で約90ft)・気圧は見ていない
 - **地図レイヤー**(地物グループ `btnFix` / `btnAwy`): 障害物と同じく**画面内だけ描く**。
   FIXはズーム8〜9で▲とnavaid名のみ、10以上で全部(上限300)。航空路は下層ATS=アンバー実線・
   RNAV=シアン破線・**直行経路=緑の点線(ラベルはズーム9から)**、ラベルは経路ごとに画面中央に一番近い区間に1つ。区間タップで区間表(MEA/MOCA/奇偶)

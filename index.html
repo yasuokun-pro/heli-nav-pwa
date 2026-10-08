@@ -628,7 +628,9 @@
   .ntmIt.hid{opacity:.45}
   .ntmIt{cursor:pointer}.ntmIt.sel{outline:2px solid #ffe600;outline-offset:-2px}
   .ntmCfg input[type=date]{width:128px}
-  .ntmPin.l3{border-color:#ff3b30;color:#ff3b30}.ntmPin.l1{border-color:var(--dim);color:var(--dim)}
+  .ntmPin.l3{border-color:#ff3b30;color:#ff3b30}
+  .ils-lab{font:600 10px var(--mono);color:#00e5c0;background:rgba(10,16,24,.82);padding:0 3px;border-radius:3px;white-space:nowrap}
+  .ils-lab small{color:#8a9bb3;font-size:9px;margin-left:3px}.ntmPin.l1{border-color:var(--dim);color:var(--dim)}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{color:var(--dim);font-weight:500;text-align:left;padding:6px 5px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.04em}
   td{padding:6px 5px;border-bottom:1px solid var(--line);font-family:var(--mono);white-space:nowrap}
@@ -817,6 +819,7 @@
         <button id="btnFix" title="重要地点(AIP ENR 4.3)のうち navaid の方位/距離で評定できる点。▲義務位置通報点 △任意">FIX</button>
         <button id="btnFixR" title="RNAV専用の重要地点(navaidでの評定なし。GNSS/RNAV装置が要る)">RNAV点</button>
         <button id="btnAwy" title="航空路(AIP ENR 3.1 下層ATSルート / ENR 3.3 RNAV経路)">航空路</button>
+        <button id="btnIls" title="ILS の最終進入経路(AIP AD 2.19)。滑走路末端から10NM、1NMごとに GP 上の高さの目安">ILS</button>
         <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AIP AD 1.4)と滑空場(ENR 5.5.1)">ヘリポート</button>
         <button id="btnHpad" title="地域防災計画などが定める防災拠点(臨時離着陸場・緊急離着陸場・場外離着陸場)。応援機を受け入れる場所であって、緊急着陸の適地ではない。ズーム11以上">防災拠点</button>
         <button id="btnObst">障害物</button>
@@ -1140,7 +1143,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-212';
+const VER_TAG='v6-213';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2532,6 +2535,62 @@ document.getElementById('btnAwy').onclick=async function(){
   drawAwy();restackOverlays();
 };
 map.on('moveend zoomend',()=>{if(awyOn&&!popupOn(awyLayer)){drawAwy();restackOverlays()}});
+
+/* ── ILS の最終進入経路(v6-213・ユーザー要望) ──
+   厚木の南の海岸線のように、ILS の最終進入の**下をくぐる・高度で避ける**ところで使う。tools/gen_ils.py → ils.json
+   (AIP AD 2.19 の LOC/GP アンテナ位置・GP 角・RDH と AD 2.12 の真方位・THR 標高)。
+   滑走路末端(THR)から外側へ10NM。1NMごとの目盛りに GP 上の高さ = THR標高 + RDH + 距離×tan(GP角)。
+   ⚠ 目安: 進入機は GP に乗る前はインターセプト高度で水平に来る(GP より低いことも)。地球の丸み(10NMで約90ft)・気圧は見ていない。
+     GP 角・RDH・THR 標高が AIP から読めなかったものは仮定値(3.0°・50ft・飛行場標高)で、吹き出しに出す */
+let ILS=null,ilsOn=false;
+const ilsLayer=L.layerGroup(),ILS_NM=10,ILS_COL='#00e5c0';
+async function loadIls(){
+  if(ILS)return ILS;
+  try{const r=await fetch('ils.json?v='+VER_TAG);ILS=await r.json()}catch(e){ILS={ils:[]}}
+  return ILS;
+}
+const ilsAlt=(o,d)=>(o.elev||0)+o.rdh+d*6076.12*Math.tan(o.ang*Math.PI/180);
+function ilsPop(o){
+  const a=ASP.find(z=>z.icao===o.icao),r10=v=>Math.round(v/10)*10;
+  const rows=[1,2,3,4,5,6,7,8,9,10].map(d=>`<tr><td>${d}NM</td><td>${r10(ilsAlt(o,d)).toLocaleString()}ft</td></tr>`).join('');
+  const as=[o.angAs?'GP角':'',o.rdhAs?'RDH':'',o.elevAd?'THR標高(飛行場標高で代用)':''].filter(Boolean);
+  return `<div class="apPop"><h5 style="color:${ILS_COL}">ILS RWY ${o.rwy} ${a?a.n:''} ${o.icao}</h5>`+
+    `<div style="font-size:11px">${o.id||''} ${o.f||''} / 進入コース ${fmt3(Math.round((o.crs+(typeof magVarAt==='function'?magVarAt(o.thr[0],o.thr[1]):0)+360)%360))}°M</div>`+
+    `<div style="font-size:11px">GP ${o.ang.toFixed(2).replace(/0$/,'')}° / RDH ${o.rdh}ft / THR ${o.elev!=null?Math.round(o.elev)+'ft':'?'}</div>`+
+    (as.length?`<div style="font-size:10px;color:var(--amb)">⚠ AIP から読めず仮定: ${as.join('・')}(GP角3.0°・RDH50ft)</div>`:'')+
+    `<table class="awyTbl" style="margin-top:4px"><tr><th>THRから</th><th>GP上の高さ(MSL)</th></tr>${rows}</table>`+
+    `<div style="font-size:10px;color:#8a9bb3;margin-top:4px">目安。進入機は GP に乗る前はインターセプト高度で水平に来る。地球の丸み・気圧は見ていない。AIP AD 2.19 ${ILS.eff||''}・要チャート確認</div></div>`;
+}
+function drawIls(){
+  ilsLayer.clearLayers();
+  if(!ilsOn||!ILS)return;
+  const z=map.getZoom();
+  ILS.ils.forEach(o=>{
+    const back=(o.crs+180)%360,P=d=>{const q=destLL(o.thr[0],o.thr[1],back,d);return [q.lat,q.lng]};
+    const line=[P(0),P(ILS_NM)];
+    L.polyline(line,{renderer:ovRenderer,color:'#0b1a24',weight:6,opacity:.55,interactive:false}).addTo(ilsLayer);
+    L.polyline(line,{renderer:ovRenderer,color:ILS_COL,weight:2.5}).bindPopup(()=>ilsPop(o),{maxWidth:260}).addTo(ilsLayer);
+    if(z<9)return;
+    // 1NM ごとの目盛り(横に±0.3NM)と高さ。ズーム10未満は2NMおき・ラベル無し、12以上は全部
+    for(let d=1;d<=ILS_NM;d++){
+      const c=P(d),l=destLL(c[0],c[1],(back+90)%360,0.3),r=destLL(c[0],c[1],(back+270)%360,0.3);
+      L.polyline([[l.lat,l.lng],[r.lat,r.lng]],{renderer:ovRenderer,color:ILS_COL,weight:d%5===0?2.5:1.5,interactive:false}).addTo(ilsLayer);
+      // ラベルは目盛りの東側の端から右へ(西側の端に付けると線の上に重なる)
+      const e=l.lng>r.lng?l:r;
+      if(z>=12||(z>=10&&d%2===0))
+        L.marker([e.lat,e.lng],{interactive:false,icon:L.divIcon({className:'',iconSize:null,iconAnchor:[-3,7],
+          html:`<div class="ils-lab">${(Math.round(ilsAlt(o,d)/10)*10).toLocaleString()}<small>${d}</small></div>`})}).addTo(ilsLayer);
+    }
+    L.marker(P(ILS_NM+0.6),{interactive:false,icon:L.divIcon({className:'',iconSize:null,iconAnchor:[30,7],
+      html:`<div class="ils-lab" style="text-align:center;width:60px">ILS ${o.rwy} ${o.icao}</div>`})}).addTo(ilsLayer);
+  });
+}
+document.getElementById('btnIls').onclick=async function(){
+  ilsOn=!ilsOn;this.classList.toggle('on',ilsOn);
+  if(ilsOn){await loadIls();ilsLayer.addTo(map)}else map.removeLayer(ilsLayer);
+  drawIls();restackOverlays();
+};
+map.on('zoomend',()=>{if(ilsOn&&!popupOn(ilsLayer))drawIls()});
 
 /* ── 臨時空域(SUP)レイヤー: 射撃訓練・臨時訓練空域・無人機運用など ── */
 let SUP=null,supOn=false;
@@ -8332,7 +8391,7 @@ function fixLogHead(){
    開き直すと ACA/TCA(hnav.aca)以外のボタンが全部オフに戻っていた。地図右のレイヤーの ON/OFF を hnav.layers に保存し、
    起動時にボタンを押して戻す。⚠ 「敵を置く」(操作)と「TRK UP」(T/O で自動)は対象外。GPS・ベース地図は別に扱っている */
 const LAYER_KEEP=['btnAsp','btnRes','btnTra','btnCiv','btnSup','btnNuke','btnDid','btnThr','btnThrComp','btnThrRte',
-  'btnRing','btnLos','btnShade','btnEmerRte','btnAp','btnNav','btnFix','btnFixR','btnAwy','btnHp','btnHpad','btnObst',
+  'btnRing','btnLos','btnShade','btnEmerRte','btnAp','btnNav','btnFix','btnFixR','btnAwy','btnIls','btnHp','btnHpad','btnObst',
   'btnPwln','btnJsdf','btnTfc2','btnRain','btnNtmMap','btnDips'];
 function layerSave(){
   const o={};
