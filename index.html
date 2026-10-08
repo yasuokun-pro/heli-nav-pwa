@@ -626,6 +626,8 @@
   .ntmHideBtn{background:none;border:1px solid var(--line);color:var(--dim);border-radius:5px;padding:1px 6px;font-size:11px;cursor:pointer;margin-left:4px}
   .ntmHideBtn.on{border-color:var(--cyn);color:var(--cyn)}
   .ntmIt.hid{opacity:.45}
+  .ntmIt{cursor:pointer}.ntmIt.sel{outline:2px solid #ffe600;outline-offset:-2px}
+  .ntmCfg input[type=date]{width:128px}
   .ntmPin.l3{border-color:#ff3b30;color:#ff3b30}.ntmPin.l1{border-color:var(--dim);color:var(--dim)}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{color:var(--dim);font-weight:500;text-align:left;padding:6px 5px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.04em}
@@ -1138,7 +1140,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-211';
+const VER_TAG='v6-212';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3932,7 +3934,20 @@ document.getElementById('btnMetR').onclick=()=>loadMetar(true);
    中継(/api/notam)経由でFAAのICAO配信から取る。⚠ **公式ブリーフィングの代わりにはならない**。
    国内限定の通知や自衛隊飛行場の分は流れてこないことがあるので「出ない=異常なし」ではない。
    ⚠ 位置は送らない(飛行場のICAOだけ)。取りに行くのは**押したときだけ**(自動更新しない)。 */
-let NTM=null,ntmFetched=0,ntmErr='',ntmIds=[],ntmOpen={},ntmBoxSent='';
+let NTM=null,ntmFetched=0,ntmErr='',ntmIds=[],ntmOpen={},ntmBoxSent='',ntmWinSent=null;
+/* 取得する時間の範囲(v6-212)。判定する時間(出発〜到着+30分)を10分単位で外側に丸め、前後に1時間の余裕。
+   中継は区域の NOTAM をこの間に有効なものだけ引く(翌日以降の計画にも使える) */
+const ymdhmU=t=>new Date(t).toISOString().replace(/[-:T]/g,'').slice(0,12);
+function ntmWinReq(){
+  const C=ntmCtx(),now=Date.now(),T=600e3;
+  const a=Math.max(now,Math.floor((C.t0-3600e3)/T)*T),b=Math.ceil((C.t1+3600e3)/T)*T;
+  return {ws:ymdhmU(a),we:ymdhmU(Math.max(b,a+3*3600e3)),a,b:Math.max(b,a+3*3600e3)};
+}
+// 判定する時間が取得した範囲からはみ出しているか(10分までは目をつぶる)
+function ntmWinOut(C){
+  if(!NTM||!ntmWinSent||NTM.src!=='swim')return false;
+  return C.t0<ntmWinSent.a-600e3&&C.t0>Date.now()+600e3||C.t1>ntmWinSent.b+600e3;
+}
 /* 区域の NOTAM を引く矩形(v6-208)。ルートの外接矩形+約9NM を**0.1度単位に外側へ丸めて**送る。
    ⚠ ルートそのものは送らない(中継は矩形で粗く絞るだけ。ルートからの距離は ntmAreaList が端末の中で見る) */
 const NTM_AREA_NM=5;
@@ -3985,14 +4000,14 @@ async function loadNotam(force){
   const st=document.getElementById('ntmStatus');
   const ids=ntmPickIcaos();
   if(!ids.length){ntmErr='ルートも現在地も無いので飛行場を決められません';renderNotam();return}
-  const box=ntmBox();
-  if(NTM&&!force&&Date.now()-ntmFetched<600000&&ids.join()===ntmIds.join()&&box===ntmBoxSent){renderNotam();drawNtmMap();return}
+  const box=ntmBox(),W=ntmWinReq();
+  if(NTM&&!force&&Date.now()-ntmFetched<600000&&ids.join()===ntmIds.join()&&box===ntmBoxSent&&!ntmWinOut(ntmCtx())){renderNotam();drawNtmMap();return}
   if(!relayBase()){ntmErr='中継が未設定です(他機情報タブの中継設定)';renderNotam();return}
   if(st)st.textContent='取得中…';
   ntmErr='';
   try{
-    NTM=await relayPost('/api/notam',{ids:ids.join(','),box});
-    ntmIds=ids;ntmFetched=Date.now();ntmBoxSent=box;ntmGeoCache=new WeakMap();ntmCtxNow=null;
+    NTM=await relayPost('/api/notam',{ids:ids.join(','),box,ws:W.ws,we:W.we});
+    ntmIds=ids;ntmFetched=Date.now();ntmBoxSent=box;ntmWinSent=W;ntmGeoCache=new WeakMap();ntmCtxNow=null;
   }catch(e){
     const m=String(e.message||e);
     ntmErr=/503 key/.test(m)?'中継に取得元の設定が入っていません(Vercelの環境変数 AR_USER / AR_PASS)'
@@ -4142,16 +4157,27 @@ function renderNtmBar(){
 function renderNtmCfg(){
   const el=document.getElementById('ntmCfg');if(!el)return;
   const C=ntmCtxNow||(ntmCtxNow=ntmCtx());
-  const etd=store.get('hnav.ntmEtd')||'';
+  const E=ntmEtd();
   const f=t=>{const d=new Date(t+9*3600e3);return `${pad(d.getUTCMonth()+1)}/${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`};
-  el.innerHTML=`<span>出発 <input type="time" id="ntmEtdIn" value="${etd}">`+
-    (etd?` <button class="lnk" id="ntmEtdNow">今にする</button>`:'(空欄=今)')+`</span>`+
-    `<span>判定する時間 <b>${f(C.t0)}〜${f(C.t1).slice(-5)}</b> JST</span>`+
+  const out=ntmWinOut(C);
+  el.innerHTML=`<span>出発 <input type="date" id="ntmEtdD" value="${E.set&&!E.past?jstYmd(E.t):jstYmd(Date.now())}">`+
+    `<input type="time" id="ntmEtdT" value="${E.set&&!E.past?jstHm(E.t):''}">`+
+    (E.set?` <button class="lnk" id="ntmEtdNow">今にする</button>`:'(時刻が空欄=今)')+`</span>`+
+    `<span>判定する時間 <b>${f(C.t0)}〜${f(C.t1)}</b> JST</span>`+
+    (E.past?`<span style="color:var(--amb)">⚠ 入れた出発時刻が過ぎているので今で判定</span>`:'')+
+    (out?`<span style="color:var(--amb);flex-basis:100%">⚠ 判定する時間が取得した範囲の外です。「↻ 取得」で取り直してください</span>`:'')+
     (C.ifr?`<span>高度 <b>IFR 巡航 ${C.crz.toLocaleString()}ft</b>(IFR計画から)</span>`
           :`<span>高度 VFR 〜<input type="number" id="ntmAltIn" min="500" max="20000" step="500" value="${C.crz}">ft</span>`)+
     `<span style="flex-basis:100%;font-size:10px">影響度はアプリの目安(時間・高度・ルートからの距離・出発/目的/代替の飛行場で判定)。Q行の高度と本文の座標の読み取りなので取り違えはあり得ます。<b style="font-family:inherit;color:var(--amb)">参考も含めて原文で確認を</b></span>`;
-  const e=document.getElementById('ntmEtdIn');
-  if(e)e.onchange=()=>{store.set('hnav.ntmEtd',e.value||'');ntmCtxNow=null;renderNotam();drawNtmMap()};
+  // 日付・時刻を変えたら判定し直す。取得した範囲の外に出たら取り直す(翌日以降の計画・v6-212)
+  const ed=document.getElementById('ntmEtdD'),et=document.getElementById('ntmEtdT');
+  const setEtd=()=>{
+    store.set('hnav.ntmEtd',et.value?`${ed.value||jstYmd(Date.now())}T${et.value}`:'');
+    ntmCtxNow=null;
+    if(NTM&&ntmWinOut(ntmCtx()))loadNotam(true);else{renderNotam();drawNtmMap()}
+  };
+  if(ed)ed.onchange=()=>{if(!et.value)et.value='09:00';setEtd()};
+  if(et)et.onchange=setEtd;
   const nw=document.getElementById('ntmEtdNow');
   if(nw)nw.onclick=()=>{store.set('hnav.ntmEtd','');ntmCtxNow=null;renderNotam();drawNtmMap()};
   const a=document.getElementById('ntmAltIn');
@@ -4172,7 +4198,7 @@ function renderNotam(){
     `<div class="ntmAd"><div class="ntmHd" data-ic="AREA" data-open="${aOpen?1:0}"><b>区域</b> <span class="jp">${wps.length?`ルートから${NTM_AREA_NM}NM以内`:'付近'}</span>`+
     `<small>${NTM.areaErr?'取得できず':ar.length+'件'+ntmCntHtml(ar)}</small><i>${aOpen?'▾':'▸'}</i></div>`+
     (aOpen?(NTM.areaErr?`<div class="ifrNa">${wxEsc(NTM.areaErr)}</div>`:
-      `<div class="ntmIt"><div class="ntmMeta" style="white-space:normal">FIR RJJJ の NOTAM のうち、座標(Q行の円・本文の多角形)がルートにかかるもの。今から${ai?ai.days*24:48}時間に有効な分。`+
+      `<div class="ntmIt"><div class="ntmMeta" style="white-space:normal">FIR RJJJ の NOTAM のうち、座標(Q行の円・本文の多角形)がルートにかかるもの。${ai&&ai.from?`${ntmTime(ai.from)}〜${ntmTime(ai.to)} JST に有効な分`:'今から48時間に有効な分'}。`+
       (ai&&ai.mode==='split'?'<br>FIR 全体は件数が多いので「RJJJ 名義の全部」と「他の名義の航行警報(W)・空域制限(R)」に分けて取得。他の飛行場名義の障害物などはその飛行場の欄にしか出ません。':'')+
       (ai&&ai.trunc?`<br><span style="color:var(--amb)">⚠ 件数超過で取れなかった種類: ${ai.trunc.map(c=>wxEsc(NTM_SUBJ[c]?c+' '+NTM_SUBJ[c]:c)).join('、')}</span>`:'')+
       (ai&&ai.fail?`<br><span style="color:var(--amb)">⚠ 取得に失敗した種類: ${ai.fail.map(wxEsc).join('、')}</span>`:'')+
@@ -4304,14 +4330,24 @@ function ntmAreaList(){
 const NTM_ROLE={dep:'出発',dst:'目的',alt:'代替'};
 var rteTotH=0;                 // ルートの所要時間(h)。redraw が入れる
 let ntmCtxNow=null,ntmEvC=new WeakMap();
-function ntmEtd(){              // 出発時刻(ms)。"HH:MM"(JST)。2時間より前なら明日とみなす
-  const v=store.get('hnav.ntmEtd')||'',m=/^(\d{1,2}):(\d{2})$/.exec(v),now=Date.now();
+// 出発時刻(ms)。保存は "YYYY-MM-DDTHH:MM"(JST・v6-212)。過去なら今で判定する。
+// 古い "HH:MM" だけの値は「2時間より前なら明日」とみなす(v6-210 の形)
+function ntmEtd(){
+  const v=store.get('hnav.ntmEtd')||'',now=Date.now();
+  let m=/^(\d{4})-(\d{2})-(\d{2})T(\d{1,2}):(\d{2})$/.exec(v);
+  if(m){
+    const t=Date.UTC(+m[1],m[2]-1,+m[3],+m[4],+m[5])-9*3600e3;
+    return t<now-600e3?{t:now,set:true,past:true}:{t,set:true};
+  }
+  m=/^(\d{1,2}):(\d{2})$/.exec(v);
   if(!m)return {t:now,set:false};
   const j=new Date(now+9*3600e3);
   let t=Date.UTC(j.getUTCFullYear(),j.getUTCMonth(),j.getUTCDate(),+m[1],+m[2])-9*3600e3;
   if(t<now-2*3600e3)t+=86400e3;
   return {t,set:true};
 }
+const jstYmd=t=>new Date(t+9*3600e3).toISOString().slice(0,10);
+const jstHm=t=>new Date(t+9*3600e3).toISOString().slice(11,16);
 function ntmCtx(){
   const e=ntmEtd();
   let h=rteTotH;
@@ -4402,6 +4438,52 @@ let ntmMapMode=store.get('hnav.ntmMapMode')||(store.get('hnav.ntmPinOnly')?'pin'
 const ntmPinned=k=>!!ntmPins[k];
 function ntmPinSave(){store.set('hnav.ntmPin',ntmPins)}
 function ntmMapModeSet(m){ntmMapMode=m;store.set('hnav.ntmMapMode',m)}
+/* ── 一覧の NOTAM をタップ → 地図をその場所へ寄せて強調(v6-212・ユーザー要望) ──
+   形があればその範囲(多角形・円・障害物の点)、無ければ名義の飛行場。黄色の太線で10秒ほど示す。
+   隠した・地図のモードで出していないものでも、強調は出す(場所と範囲を確かめるため) */
+let ntmHiLayer=null,ntmHiT=0;
+function ntmFocus(k){
+  const x=ntmFind(k);if(!x)return;
+  const g=ntmGeo(x),Y={color:'#ffe600',weight:4,opacity:1,fillColor:'#ffe600',fillOpacity:.12,interactive:false};
+  if(ntmHiLayer)map.removeLayer(ntmHiLayer);
+  clearTimeout(ntmHiT);
+  map.stop();                    // 前のタップの移動(パン)が残っていれば止める
+  ntmHiLayer=L.layerGroup().addTo(map);
+  const ls=[];let pts=[];
+  if(ntmDrawable(x)){
+    g.polys.forEach(r=>ls.push(L.polygon(r,Y)));
+    g.lines.forEach(r=>ls.push(L.polyline(r,{...Y,fill:false})));
+    g.circles.forEach(c=>ls.push(L.circle(c.c,{...Y,radius:Math.max(c.r,0.15)*1852})));
+    if(!ls.length)ls.push(L.circle([x.lat,x.lon],{...Y,radius:(+x.rad>0?+x.rad:2)*1852}));
+    if(ntmCatOf(x)==='obs')ls.forEach(l=>{if(l.getLatLng)pts.push(l.getLatLng())});
+  }else{
+    const a=ASP.find(z=>z.icao===x.icao);
+    if(!a){toast('この NOTAM には地図に出せる位置がありません(座標も飛行場もなし)',5000);map.removeLayer(ntmHiLayer);ntmHiLayer=null;return}
+    pts.push(L.latLng(a.lat,a.lng));
+  }
+  ls.forEach(l=>l.addTo(ntmHiLayer));
+  // 点(障害物・飛行場)は太い輪で囲む。画面上の大きさが一定なので見落とさない
+  pts.forEach(p=>L.circleMarker(p,{radius:20,color:'#ffe600',weight:4,fill:false,interactive:false}).addTo(ntmHiLayer));
+  const b=ls.length?L.featureGroup(ls).getBounds():L.latLngBounds(pts);
+  const o=parseFloat(getComputedStyle(document.querySelector('.mapwrap')||document.body).getPropertyValue('--ovlH'))||0;
+  const go=()=>{
+    if(pts.length&&(!ls.length||ntmCatOf(x)==='obs'))map.setView(b.getCenter(),Math.max(map.getZoom(),12));
+    else map.fitBounds(b,{paddingTopLeft:[60,o+40],paddingBottomRight:[110,40],maxZoom:13});   // 右はレイヤーボタンの幅
+  };
+  // ⚠ ズームのアニメーション中に setView すると Leaflet が黙って無視する(続けてタップしたとき)。終わってから動かす
+  if(map._animatingZoom)map.once('zoomend',go);else go();
+  ntmHiT=setTimeout(()=>{if(ntmHiLayer){map.removeLayer(ntmHiLayer);ntmHiLayer=null}
+    document.querySelectorAll('.ntmIt.sel').forEach(z=>z.classList.remove('sel'))},10000);
+}
+document.getElementById('ntmBody').addEventListener('click',e=>{
+  if(e.target.closest('button,a,input'))return;
+  if(String(getSelection&&getSelection())!=='')return;   // 原文を選んでコピーしているときは動かさない
+  const it=e.target.closest('.ntmIt[data-k]');if(!it)return;
+  document.querySelectorAll('.ntmIt.sel').forEach(z=>z.classList.remove('sel'));
+  document.querySelectorAll('.ntmIt').forEach(z=>{if(z.dataset.k===it.dataset.k)z.classList.add('sel')});
+  ntmFocus(it.dataset.k);
+});
+
 /* ── 個別に隠す(v6-211・ユーザー要望) ──
    関東平野一円の熱気球(RJJJ)のように範囲が広すぎるものを地図から外す。一覧には残す(「隠し中」)。
    どの表示モードでも隠す。値は終わりの時刻で、過ぎたら捨てる(hnav.ntmHide・端末の中だけ) */

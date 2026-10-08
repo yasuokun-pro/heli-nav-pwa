@@ -34,7 +34,8 @@
    POST /api/notam  本文 {"ids":"RJTT,RJAA,...","box":"s,w,n,e"(任意・SWIM のみ),"k":"合言葉"}
      → { updated, src:'swim'|'autorouter'|'faa', n:{ICAO:[{no,txt,from,to,iss,cls,type,q,lat,lon,rad,est,sch}]}, err:{ICAO:"理由"} }
      est=1 は終わりが見込み(EST)、sch は時間帯(D項)、lo/up は Q 行の下限/上限(FL)。SWIM のときだけ付く
-     box があれば area:[同じ形の行] / areaInfo:{mode:'fir'|'split',trunc?,fail?,total,kept,days} / areaErr も返す(区域の NOTAM)
+     box があれば area:[同じ形の行] / areaInfo:{mode:'fir'|'split',trunc?,fail?,total,kept,from,to} / areaErr も返す(区域の NOTAM)
+     ws/we(YYYYMMDDhhmm UTC)= 計画の時間。区域はこの間に有効なもの、飛行場は今から max(7日, we) まで。無ければ今から48時間
    ⚠ lat/lon/rad(NM) は**あるときだけ**。EADのNOTAMは大半が飛行場そのものへの通知で座標を持たない。
      アプリは座標があれば円、無ければ飛行場にピンを出す。
 */
@@ -124,12 +125,11 @@ function swimRow(xml) {
     ...(/^\d{3}$/.test(tag(n, 'maximumFL')) ? { up: +tag(n, 'maximumFL') } : {}),
   };
 }
-// 検索1回。cond は location / fir など。今から days 日の間に有効なもの
-async function swimSearch(cond, days) {
-  const now = new Date();
+// 検索1回。cond は location / fir など。t0〜t1(ms)の間に有効なもの
+async function swimSearch(cond, t0, t1) {
   const q = new URLSearchParams({
     userId: process.env.SWIM_ID, ...cond, display: '0',
-    validDatetimeStart: ymdhm(now), validDatetimeEnd: ymdhm(new Date(now.getTime() + days * 86400e3)),
+    validDatetimeStart: ymdhm(new Date(t0)), validDatetimeEnd: ymdhm(new Date(t1)),
   });
   const url = `${process.env.SWIM_SEARCH_URL}?${q.toString().replace(/%20/g, '+')}`;
   const call = c => fetch(url, { headers: { Cookie: c, Accept: 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(20000) });
@@ -152,8 +152,10 @@ async function swimSearch(cond, days) {
   const d = Array.isArray(o.data) ? o.data[0] || {} : o.data || {};
   return [].concat(d.digitalNotam || []).map(x => swimRow(String(x))).filter(Boolean);
 }
-async function swimFetch(ids) {
-  const rows = await swimSearch({ location: ids.join(' ') }, 7);
+// 飛行場の分は今から7日(計画の時間がそれより先ならそこまで)
+async function swimFetch(ids, we) {
+  const now = Date.now();
+  const rows = await swimSearch({ location: ids.join(' ') }, now, Math.max(now + 7 * 86400e3, we || 0));
   const out = {};
   ids.forEach(i => { out[i] = []; });
   rows.forEach(v => { (out[v.icao] || (out[v.icao] = [])).push(v); });
@@ -205,20 +207,20 @@ async function pool(items, n, fn) {               // n 本ずつ並列(SWIM を�
   }));
   return out;
 }
-async function swimArea(box) {
-  const days = 2;
+// 区域の分はアプリが送る計画の時間(ws〜we)だけ。件数を減らすためもある
+async function swimArea(box, ws, we) {
   let rows, info;
   try {
-    rows = await swimSearch({ fir: 'RJJJ' }, days);
+    rows = await swimSearch({ fir: 'RJJJ' }, ws, we);
     info = { mode: 'fir' };
   } catch (e) {
     if (e.code !== '14') throw e;
     const jobs = [{ location: 'RJJJ' }, ...AREA_SUBJ.map(c => ({ fir: 'RJJJ', notamCode: c }))];
     // ⚠ 7本並列では28種中11種が失敗した(2026-10-07 実機)。3本に減らし、失敗分は最後に1本ずつ取り直す
-    const got = await pool(jobs, 3, c => swimSearch(c, days));
+    const got = await pool(jobs, 3, c => swimSearch(c, ws, we));
     for (let k = 0; k < jobs.length; k++) {
       if (got[k].e && got[k].e.code !== '14') {
-        try { got[k] = { ok: await swimSearch(jobs[k], days) }; } catch (e) { got[k] = { e }; }
+        try { got[k] = { ok: await swimSearch(jobs[k], ws, we) }; } catch (e) { got[k] = { e }; }
       }
     }
     const seen = new Set(), trunc = [], fail = [];
@@ -239,7 +241,7 @@ async function swimArea(box) {
   }
   const hit = rows.filter(v => hitBox(v, box));
   hit.sort((a, b) => String(b.from).localeCompare(String(a.from)));
-  return { rows: hit, info: { ...info, total: rows.length, kept: hit.length, days } };
+  return { rows: hit, info: { ...info, total: rows.length, kept: hit.length, from: iso(ws / 1000), to: iso(we / 1000) } };
 }
 
 /* ───────── autorouter ───────── */
@@ -367,14 +369,20 @@ export async function GET(request) {
     bx[2] - bx[0] <= 12 && bx[3] - bx[1] <= 15 ? bx.map(v => Math.round(v * 10) / 10) : null;
 
   const now = Date.now();
+  // 計画の時間 ws/we(YYYYMMDDhhmm UTC・v6-212)。翌日以降の計画用。無い・おかしいときは今から48時間
+  const pw = v => { const m = String(v || '').match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/); return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) : NaN; };
+  let ws = pw(p.get('ws')), we = pw(p.get('we'));
+  if (!(ws >= now - 3600e3 && we > ws && we <= now + 31 * 86400e3 && we - ws <= 4 * 86400e3)) { ws = now; we = now + 2 * 86400e3; }
+  ws = Math.max(ws, now);
+
   for (const [k, v] of cache) if (now - v.t > UP_TTL_MS) cache.delete(k);
-  const ck = (sw ? 'S:' : ar ? 'A:' : 'F:') + ids.join(',') + (sw && box ? '|' + box.join(',') : '');
+  const ck = (sw ? 'S:' : ar ? 'A:' : 'F:') + ids.join(',') + (sw && box ? '|' + box.join(',') : '') + (sw ? `|${p.get('ws') || ''}-${p.get('we') || ''}` : '');
   const hit = cache.get(ck);
   if (hit) return new Response(hit.body, { status: 200, headers: H });
 
   const out = { updated: new Date(now).toISOString().slice(0, 16) + 'Z', src: sw ? 'swim' : ar ? 'autorouter' : 'faa', n: {}, err: {} };
   if (sw) {
-    const [a, b] = await Promise.allSettled([swimFetch(ids), box ? swimArea(box) : Promise.resolve(null)]);
+    const [a, b] = await Promise.allSettled([swimFetch(ids, we), box ? swimArea(box, ws, we) : Promise.resolve(null)]);
     if (a.status === 'rejected') return json({ error: 'upstream', detail: String((a.reason && a.reason.message) || a.reason) }, 502, H);
     out.n = a.value;
     if (b.status === 'fulfilled' && b.value) { out.area = b.value.rows; out.areaInfo = b.value.info; }
