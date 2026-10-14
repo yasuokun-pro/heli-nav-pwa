@@ -1290,7 +1290,17 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
         そこで切ると表が丸ごと落ちる。CHANGE 行は飛ばすだけにして、切るのは脚注だけ
       ⚠ 見出しの探し方: "MINIMA" は CHANGE 行や表の下の注記にも出る。**"MINIMA … THR elev." の行**を採る
       検算: 558図すべてで制御文字・未知グリフ 0、"CAT" 行が無いのは3図だけ
-- **ILS の最終進入経路(v6-213・ユーザー要望)**: `tools/gen_ils.py` → `ils.json`(**80本/60飛行場**)、地物グループの `btnIls`。
+- **⭐ ILS は v6-217 から AIXM 由来**: `tools/gen_ils_aixm.py --compare / --write` → `ils.json`(**85本**= AIXM 82 + PDF 版3)。
+  AIXM では LOC・GP・DME が**別々の Navaid**("ILS-LOC 16R" / "ILS-GP 16R")で、同じ runwayDirection を指すものをまとめる。
+  - 中心線は **AIXM の物理 THR を通る真方位**。THR(GP の基準)は GP アンテナを中心線に下ろした点から RDH/tan 手前。
+    ⚠ **羽田 16L/16R/34R は GP が移設末端基準**(AIP「312m inside FM RWY16L Displaced THR」)で、AIXM の RunwayCentrelinePoint には物理の THR しか無い。
+    物理の THR を使うと 400〜500m(GP 上で約70ft)ずれる。`dthr`(物理 THR からの距離 m)を持たせ、吹き出しに出す
+  - ⚠ **AIXM の関連づけの誤り**: 宇都宮 RWY19 に下総の LOC(ISH 109.1)が付いていた(80km 離れている)。
+    LOC が中心線から 300m 超・THR から 6km の範囲外なら出さない。下総 RJTL 19・福江 RJFN 28(THR なし)・三沢 RJSM 28(GP なし)は PDF 版を残す(`src:'pdf'`)
+  - PDF 版との差: 進入コースは全部一致(0.00°)、THR は50m以内。**GP 角・RDH の仮定値が無くなった**(横田・神戸・中部・宮崎…)。
+    THR 標高は PDF の表の読み取りが違っていたものがある(三沢 102→135ft、鹿児島 906→859ft、横田36 462→416ft)
+  - 増えた: 岩国 02・石見 11・羽田 23・嘉手納 05L/23R
+- **ILS の最終進入経路(v6-213・ユーザー要望)**: `tools/gen_ils.py` → `ils.json`(**80本/60飛行場**)、地物グループの `btnIls`。**v6-217 からは上の AIXM 版が正**。
   厚木の南の海岸線のように ILS の下をくぐる・高度で避ける場所のため。THR から外へ10NM、1NMごとに GP 上の高さ
   (THR標高+RDH+距離×tan(GP角))。吹き出しに 1〜10NM の表。
   - 作り方: 進入コース = **LOC アンテナを通る滑走路の真方位**(AD 2.12)。THR = GP アンテナを中心線に下ろした点から RDH/tan だけ手前

@@ -1150,7 +1150,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-216';
+const VER_TAG='v6-217';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2565,7 +2565,9 @@ function ilsPop(o){
     `<div style="font-size:11px">GP ${o.ang.toFixed(2).replace(/0$/,'')}° / RDH ${o.rdh}ft / THR ${o.elev!=null?Math.round(o.elev)+'ft':'?'}</div>`+
     (as.length?`<div style="font-size:10px;color:var(--amb)">⚠ AIP から読めず仮定: ${as.join('・')}(GP角3.0°・RDH50ft)</div>`:'')+
     `<table class="awyTbl" style="margin-top:4px"><tr><th>THRから</th><th>GP上の高さ(MSL)</th></tr>${rows}</table>`+
-    `<div style="font-size:10px;color:#8a9bb3;margin-top:4px">目安。進入機は GP に乗る前はインターセプト高度で水平に来る。地球の丸み・気圧は見ていない。AIP AD 2.19 ${ILS.eff||''}・要チャート確認</div></div>`;
+    `<div style="font-size:10px;color:#8a9bb3;margin-top:4px">目安。進入機は GP に乗る前はインターセプト高度で水平に来る。地球の丸み・気圧は見ていない。`+
+    `${o.src==='aixm'?'SWIM AIP データ配信(AIXM) '+(ILS.eff||'').replace(/^.*_(\d{4})(\d\d)(\d\d).*$/,'$1-$2-$3版'):'AIP AD 2.19 から読み取り'}`+
+    `${o.dthr?`・GP は移設末端(物理の THR から ${o.dthr}m 内側)が基準`:''}・要チャート確認</div></div>`;
 }
 // 航空図の標準記号「ローカライザーのフェザー」(ICAO Annex 4 の約束事に倣って自作・v6-214)。
 // 滑走路側がとがった細長い矢羽根で、後ろ端は V に切れ込み、片側半分を塗る。色は NAV の記号と同じ
