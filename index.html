@@ -629,8 +629,13 @@
   .ntmIt{cursor:pointer}.ntmIt.sel{outline:2px solid #ffe600;outline-offset:-2px}
   .ntmCfg input[type=date]{width:128px}
   .ntmPin.l3{border-color:#ff3b30;color:#ff3b30}
-  .ils-lab{font:600 10px var(--mono);color:#00e5c0;background:rgba(10,16,24,.82);padding:0 3px;border-radius:3px;white-space:nowrap}
-  .ils-lab small{color:#8a9bb3;font-size:9px;margin-left:3px}.ntmPin.l1{border-color:var(--dim);color:var(--dim)}
+  /* ILS のラベル(v6-214): 箱をやめて地図の注記と同じ縁取りの文字。高さが主・距離(NM)は小さく */
+  .ils-lab{font:600 10px/1 var(--mono);color:#cfe2f7;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000,0 1px 2px #000;
+    transform:translate(4px,0)}
+  .ils-lab.r{transform:translate(calc(-100% - 4px),0)}
+  .ils-lab.c{transform:translate(-50%,0);color:#9fc0e6;font-size:9px}
+  .ils-lab i{font-style:normal;color:#8aa4c2;font-size:8.5px;margin-left:2px}
+  .ils-lab.r i{margin:0 2px 0 0}.ntmPin.l1{border-color:var(--dim);color:var(--dim)}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{color:var(--dim);font-weight:500;text-align:left;padding:6px 5px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.04em}
   td{padding:6px 5px;border-bottom:1px solid var(--line);font-family:var(--mono);white-space:nowrap}
@@ -1143,7 +1148,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-213';
+const VER_TAG='v6-214';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2543,7 +2548,7 @@ map.on('moveend zoomend',()=>{if(awyOn&&!popupOn(awyLayer)){drawAwy();restackOve
    ⚠ 目安: 進入機は GP に乗る前はインターセプト高度で水平に来る(GP より低いことも)。地球の丸み(10NMで約90ft)・気圧は見ていない。
      GP 角・RDH・THR 標高が AIP から読めなかったものは仮定値(3.0°・50ft・飛行場標高)で、吹き出しに出す */
 let ILS=null,ilsOn=false;
-const ilsLayer=L.layerGroup(),ILS_NM=10,ILS_COL='#00e5c0';
+const ilsLayer=L.layerGroup(),ILS_NM=10,ILS_COL='#9fc0e6',ILS_FILL='#3f7fc4';   // 線は NAV の記号と同じ色、塗りは濃いめ
 async function loadIls(){
   if(ILS)return ILS;
   try{const r=await fetch('ils.json?v='+VER_TAG);ILS=await r.json()}catch(e){ILS={ils:[]}}
@@ -2561,28 +2566,44 @@ function ilsPop(o){
     `<table class="awyTbl" style="margin-top:4px"><tr><th>THRから</th><th>GP上の高さ(MSL)</th></tr>${rows}</table>`+
     `<div style="font-size:10px;color:#8a9bb3;margin-top:4px">目安。進入機は GP に乗る前はインターセプト高度で水平に来る。地球の丸み・気圧は見ていない。AIP AD 2.19 ${ILS.eff||''}・要チャート確認</div></div>`;
 }
+// 航空図の標準記号「ローカライザーのフェザー」(ICAO Annex 4 の約束事に倣って自作・v6-214)。
+// 滑走路側がとがった細長い矢羽根で、後ろ端は V に切れ込み、片側半分を塗る。色は NAV の記号と同じ
+const ILS_FW=0.32;          // 片側の幅(NM)
 function drawIls(){
   ilsLayer.clearLayers();
   if(!ilsOn||!ILS)return;
   const z=map.getZoom();
   ILS.ils.forEach(o=>{
-    const back=(o.crs+180)%360,P=d=>{const q=destLL(o.thr[0],o.thr[1],back,d);return [q.lat,q.lng]};
-    const line=[P(0),P(ILS_NM)];
-    L.polyline(line,{renderer:ovRenderer,color:'#0b1a24',weight:6,opacity:.55,interactive:false}).addTo(ilsLayer);
-    L.polyline(line,{renderer:ovRenderer,color:ILS_COL,weight:2.5}).bindPopup(()=>ilsPop(o),{maxWidth:260}).addTo(ilsLayer);
+    const back=(o.crs+180)%360,rt=(o.crs+90)%360,lt=(o.crs+270)%360;   // 右・左は進入機から見て
+    // 中心線上 d NM・横に w NM(+は進入機の右)の点
+    const Q=(d,w)=>{const c=destLL(o.thr[0],o.thr[1],back,d);if(!w)return [c.lat,c.lng];const q=destLL(c.lat,c.lng,w>0?rt:lt,Math.abs(w));return [q.lat,q.lng]};
+    const W=ILS_FW,N=ILS_NM,T=1.6;          // T: 先の三角の長さ
+    const tip=Q(0,0),r1=Q(T,W),r2=Q(N,W),notch=Q(N-0.9,0),l2=Q(N,-W),l1=Q(T,-W);
+    const pop=()=>ilsPop(o);
+    // 塗る半分(進入機から見て右)と外形
+    // ⚠ 淡色地図の上では明るい青だけだと消える。暗い縁取りを下に敷き、塗りは濃いめの青
+    const out=[tip,r1,r2,notch,l2,l1];
+    L.polygon(out,{renderer:ovRenderer,color:'#0d1b2a',weight:3.6,opacity:.75,fill:false,interactive:false}).addTo(ilsLayer);
+    L.polygon([tip,r1,r2,notch],{renderer:ovRenderer,stroke:false,fillColor:ILS_FILL,fillOpacity:.8,interactive:false}).addTo(ilsLayer);
+    L.polygon(out,{renderer:ovRenderer,color:ILS_COL,weight:1.5,fill:true,fillColor:'#0d1b2a',fillOpacity:.12})
+      .bindPopup(pop,{maxWidth:260}).addTo(ilsLayer);
+    L.polyline([tip,notch],{renderer:ovRenderer,color:ILS_COL,weight:1,opacity:.9,interactive:false}).addTo(ilsLayer);
     if(z<9)return;
-    // 1NM ごとの目盛り(横に±0.3NM)と高さ。ズーム10未満は2NMおき・ラベル無し、12以上は全部
-    for(let d=1;d<=ILS_NM;d++){
-      const c=P(d),l=destLL(c[0],c[1],(back+90)%360,0.3),r=destLL(c[0],c[1],(back+270)%360,0.3);
-      L.polyline([[l.lat,l.lng],[r.lat,r.lng]],{renderer:ovRenderer,color:ILS_COL,weight:d%5===0?2.5:1.5,interactive:false}).addTo(ilsLayer);
-      // ラベルは目盛りの東側の端から右へ(西側の端に付けると線の上に重なる)
-      const e=l.lng>r.lng?l:r;
-      if(z>=12||(z>=10&&d%2===0))
-        L.marker([e.lat,e.lng],{interactive:false,icon:L.divIcon({className:'',iconSize:null,iconAnchor:[-3,7],
-          html:`<div class="ils-lab">${(Math.round(ilsAlt(o,d)/10)*10).toLocaleString()}<small>${d}</small></div>`})}).addTo(ilsLayer);
+    // 1NMごとの目盛り(塗っていない側に短く)と GP 上の高さ。ズーム10は5NMだけ・11は2NMおき・12以上は全部
+    for(let d=1;d<N;d++){
+      const tk=[Q(d,0),Q(d,-W*(d%5===0?1:0.6))];
+      L.polyline(tk,{renderer:ovRenderer,color:'#0d1b2a',weight:d%5===0?3.6:3,opacity:.75,interactive:false}).addTo(ilsLayer);
+      L.polyline(tk,{renderer:ovRenderer,color:ILS_COL,weight:d%5===0?1.8:1.2,interactive:false}).addTo(ilsLayer);
+      if(z>=12||(z===11&&d%2===0)||(z===10&&d%5===0)){   // 引くほど間引く(羽田の平行進入で重なる)
+        const p=Q(d,-W-0.08),left=destLL(p[0],p[1],lt,0.01);
+        // ラベルは左側(塗っていない側)の外。画面で左右どちらに出るかで寄せ方を変える
+        const toLeft=left.lng<p[1];
+        L.marker(p,{interactive:false,icon:L.divIcon({className:'',iconSize:null,iconAnchor:toLeft?[0,6]:[0,6],
+          html:`<div class="ils-lab${toLeft?' r':''}"><b>${(Math.round(ilsAlt(o,d)/10)*10).toLocaleString()}</b><i>${d}</i></div>`})}).addTo(ilsLayer);
+      }
     }
-    L.marker(P(ILS_NM+0.6),{interactive:false,icon:L.divIcon({className:'',iconSize:null,iconAnchor:[30,7],
-      html:`<div class="ils-lab" style="text-align:center;width:60px">ILS ${o.rwy} ${o.icao}</div>`})}).addTo(ilsLayer);
+    if(z>=9)L.marker(Q(N+0.5,0),{interactive:false,icon:L.divIcon({className:'',iconSize:null,iconAnchor:[0,6],
+      html:`<div class="ils-lab c">ILS ${o.rwy}${o.id?' '+o.id:''}</div>`})}).addTo(ilsLayer);
   });
 }
 document.getElementById('btnIls').onclick=async function(){
