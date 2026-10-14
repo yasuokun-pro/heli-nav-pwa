@@ -1150,7 +1150,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-218';
+const VER_TAG='v6-219';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2327,7 +2327,8 @@ document.getElementById('btnNav').onclick=async function(){
 
 /* ── 障害物レイヤー(全国16000件・AIS AREA1) ──
    全部描くと重いのでズーム10以上かつ画面内のみ、標高の高い順に上限200件描画 */
-const OBST_GLYPH=['▯','✳','⊥','⊥','▮','|','⌐','=','|','△']; // TYPES順
+const OBST_GLYPH=['▯','✳','⊥','⊥','▮','|','⌐','=','|','△','⌇','♣']; // TYPES順(v6-219 で 架線 CATENARY・樹木 TREE を追加)
+const OBST_JP={BUILDING:'建物',WINDMILL:'風車',TOWER:'鉄塔',ANTENNA:'アンテナ',CHIMNEY:'煙突',POLE:'柱',CRANE:'クレーン',BRIDGE:'橋',MAST:'マスト',OTHER:'その他',CATENARY:'架線',TREE:'樹木'};
 function viewBox(){ // 画面四隅から緯度経度範囲を出す(leaflet-rotate下ではgetBounds()が不正確)
   const z=map.getSize();
   if(!z.x||!z.y){const c=map.getCenter();return[c.lat-.15,c.lat+.15,c.lng-.2,c.lng+.2]}
@@ -2353,12 +2354,14 @@ function drawObst(){
   const [s,n,w,e]=viewBox();
   const inview=OBST.o.filter(o=>o[0]>=s&&o[0]<=n&&o[1]>=w&&o[1]<=e);
   inview.sort((x,y)=>y[2]-x[2]); // 標高が高いものを優先
-  inview.slice(0,200).forEach(o=>{
-    const[lat,lng,elev,hgt,ti,lit]=o;
-    const ty=(OBST.types&&OBST.types[ti])||'OBSTACLE';
-    L.circleMarker([lat,lng],{renderer:obstRenderer,radius:3.5,color:'#ffd24d',weight:1.5,
-      fillColor:'#ffd24d',fillOpacity:.55})
-      .bindTooltip(`${OBST_GLYPH[ti]||'▲'} ${ty} ${elev}ft(AMSL) / 高${hgt}ft${lit?' 灯火有':''}`,
+  // ⚠ v6-219 から AIXM の AREA2(飛行場周辺・100ft以上)も入る。低いので標高順だと押し出される。拡大したら多めに出す
+  const z=map.getZoom(),lim=z>=13?600:z>=12?350:200;
+  inview.slice(0,lim).forEach(o=>{
+    const[lat,lng,elev,hgt,ti,lit,ar]=o;
+    const ty=(OBST.types&&OBST.types[ti])||'OBSTACLE',a2=ar===2,col=a2?'#ffb070':'#ffd24d';
+    L.circleMarker([lat,lng],{renderer:obstRenderer,radius:a2?2.8:3.5,color:col,weight:1.5,
+      fillColor:col,fillOpacity:a2?.35:.55})
+      .bindTooltip(`${OBST_GLYPH[ti]||'▲'} ${OBST_JP[ty]||ty} ${elev}ft(AMSL) / 高${hgt}ft${lit?' 灯火有':''}${a2?' ・飛行場周辺(AREA2)':''}`,
         {direction:'top',sticky:true})
       .addTo(obstLayer);
   });

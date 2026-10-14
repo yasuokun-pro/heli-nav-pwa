@@ -1298,6 +1298,12 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
   - 抜けていた区間(A590 の YOSHI・V28 の OYE)を足し、AIXM にだけある経路(L512・M523・M750・N884・Q1・Z101・Z102)を追加。直行経路(DCT)は触らない
   - ⚠ 組み直しの点の名前は**今の名前に合わせる**(id で引けなければ100m以内の同じ点)。別名で作ると経路探索で別の節点になり乗り継げない(MYE と MATSUYAMA)
   - MEA は今の表記(6000 / 'FL150')を保つ(index.html の meaFt と同じ読み方)
+- **⭐ 障害物は v6-219 から AIXM 由来**: `tools/aixm_obst.py --write` → `obst.json`(**20,730件** = AREA1 全部 + AREA2(飛行場周辺)の 100ft 以上)。
+  AIXM の VerticalStructure 141,331件(AREA1 16,083 / AREA2 125,248・樹木・電柱が中心で中央36ft)。区分は annotation の "AREA1 EHIME" から。
+  - AIS の KML(AREA1・2026-07-22)とは 16,019件中 15,996件が 30m 以内で一致。同じ位置の重複 273件は1件にまとめる
+  - 形式は前と同じ [lat,lng,elevFt,heightFt,typeIdx,light] に **7番目 2 = AREA2** を足した。種類に CATENARY(架線)・TREE(樹木)、STACK は CHIMNEY に
+  - ⚠ CATENARY は**線ではなく点**(架線を支える位置)。送電線レイヤー(OSM)の代わりにはならない
+  - 表示はズーム13以上で600件・12で350件(AREA2 は低いので標高順だと押し出される)。AREA2 は淡い橙で小さく、吹き出しに「飛行場周辺(AREA2)」
 - **AIXM 側の誤りの控え**: `tools/aixm_issues.md`(下総 ILS→宇都宮の滑走路、三沢 ILS→新田原の滑走路、羽田の移設末端なし)。要望の文案つき
 - **⭐ ILS は v6-217 から AIXM 由来**: `tools/gen_ils_aixm.py --compare / --write` → `ils.json`(**85本**= AIXM 82 + PDF 版3)。
   AIXM では LOC・GP・DME が**別々の Navaid**("ILS-LOC 16R" / "ILS-GP 16R")で、同じ runwayDirection を指すものをまとめる。

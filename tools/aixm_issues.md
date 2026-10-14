@@ -31,7 +31,16 @@ HELI NAV のデータを AIXM と突き合わせたときに見つけた、**AIX
 | 内容 | RunwayCentrelinePoint は role=THR(物理の末端)だけ。AD 2.19 の備考では GP は **Displaced THR** 基準(例「GP: 312m inside FM RWY16L Displaced THR」) |
 | 影響 | 物理の THR を GP の基準にすると 400〜500m(GP 上で約70ft)ずれる。アプリは GP アンテナの位置から逆算して回避 |
 
+## 4.(要確認)埼玉県南部の高さ 1,663ft の障害物
+| 項目 | 値 |
+|---|---|
+| 地物 | VerticalStructure name **11000558** と **11000567**(同じ位置・同じ値で2件) |
+| 位置 | 35.81156N 139.74481E(川口市付近) |
+| 値 | type OTHER・高さ 1,663ft(507m)・標高 1,670ft・灯火あり・AREA1 |
+| 備考 | AIS の障害物データ(AREA1 KML)にも同じ値で2件ある。地上 507m はスカイツリー(634m)に次ぐ高さで、該当する構造物が思い当たらない。単位(ft/m)の取り違えなどを疑う |
+
 ## 誤りではないが気づいたこと
+- AREA1 の障害物に**同じ位置・同じ値の重複が 273件**ある(赤坂の同じ点に TOWER×3・BUILDING×1 など)
 - 民間訓練試験空域・その他の空域に**連絡先(Controlling/Communication Facility)が無い**(空域を参照する AirTrafficControlService も無い)。
   ENR 5.3.1 の表にはある。HK3・TH11・CK3・CK4・CK12・CS1・CS3・KS13-1〜3・KS15・SM2 は前の版からも引けなかった
 - 航空路の端点の navaid が **DesignatedPoint**(designator=MYE など navaid の識別符号)として載っている区間がある(Navaid を直接参照していない)
@@ -45,5 +54,6 @@ HELI NAV のデータを AIXM と突き合わせたときに見つけた、**AIX
 > 1. 下総(RJTL)ILS RWY19(ILS-LOC 19 ISH・ILS-GP 19)の runwayDirection が、宇都宮(RJTU)RWY19 を参照しています。
 > 2. 三沢(RJSM)ILS RWY28(ILS-LOC 28 IMIS・ILS-GP 28)の runwayDirection が、新田原(RJFN)RWY28 を参照しています。
 > 3.(参考)羽田 RWY16L/16R/34R は GP が移設末端基準ですが、RunwayCentrelinePoint に DISTHR がありません。
+> 4.(要確認)障害物 11000558・11000567(35.81156N 139.74481E)の高さ 1,663ft は、単位の取り違え等の可能性はないでしょうか。
 >
 > 各地物の uuid は別添のとおりです。
