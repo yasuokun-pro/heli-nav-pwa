@@ -31,12 +31,27 @@ def num(v):
     except (TypeError, ValueError): return None
 
 
+RAD_NM = {'[nmi_i]': 1.0, 'NM': 1.0, 'KM': 1 / 1.852, 'km': 1 / 1.852, 'M': 1 / 1852, 'm': 1 / 1852, '[mi_i]': 1.609344 / 1.852, 'MI': 1.609344 / 1.852}
+
+
+def circles_of(surface):
+    """CircleByCenterPoint(真円)→ [{c:[lat,lng], r:NM}]。⚠ 半径の単位は UCUM の "[nmi_i]"(海里)"""
+    out = []
+    for c in surface.iterfind('.//gml:CircleByCenterPoint', NS):
+        pos = c.find('gml:pos', NS); rad = c.find('gml:radius', NS)
+        if pos is None or rad is None: continue
+        la, lo = [float(x) for x in pos.text.split()[:2]]
+        out.append({'c': [round(la, 6), round(lo, 6)], 'r': round(float(rad.text) * RAD_NM.get(rad.get('uom'), 1.0), 4)})
+    return out
+
+
 def ring_of(surface):
-    """Surface → 外周リングの配列(PolygonPatch ごと)。curveMember の線をつないで閉じる"""
+    """Surface → 外周リングの配列(PolygonPatch ごと)。curveMember の線をつないで閉じる(真円だけのリングは circles_of で拾う)"""
     out = []
     for patch in surface.iterfind('.//gml:PolygonPatch', NS):
         ext = patch.find('gml:exterior', NS)
         if ext is None: continue
+        if ext.find('.//gml:CircleByCenterPoint', NS) is not None and ext.find('.//gml:posList', NS) is None: continue
         pts = []
         for pl in ext.iterfind('.//gml:posList', NS):
             v = [float(x) for x in pl.text.split()]
@@ -60,10 +75,11 @@ def comp_of(gc):
         if e is not None:
             c[k] = num(e.text) if e.text else e.text
             c[k + 'Uom'] = e.get('uom')
-            if e.text and not num(e.text): c[k] = e.text.strip()    # GND / UNL など
+            if e.text and num(e.text) is None: c[k] = e.text.strip()    # GND / UNL など。⚠ 0 は数値(not で見ると '0' の文字列になる)
         c[k + 'Ref'] = txt(vol, 'aixm:%sReference' % tag)
     s = vol.find('aixm:horizontalProjection/aixm:Surface', NS)
     c['rings'] = ring_of(s) if s is not None else []
+    c['circles'] = circles_of(s) if s is not None else []
     ref = vol.find('.//aixm:contributorAirspace', NS)
     if ref is not None: c['contrib'] = 1                          # 他の空域を参照する形(今は数えるだけ)
     return c

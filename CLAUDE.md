@@ -523,7 +523,9 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
    `→ gen_proc → gen_tomin → gen_ad → gen_ils → gen_freq --splice → gen_magvar`(出た MAGV_C を index.html に貼る)
    ⚠ `gen_ils` は ad.json(標高の代用)を読むので **gen_ad の後**
    `→ gen_res → gen_nuke → gen_tra → gen_civ → gen_hp → gen_natl_ctr → gen_asp --splice → gen_sup`
-   AIXM の差分が VM に届いていれば: scp で `aip/aixm_dist/` へ → `aixm_extract.py` → `gen_aca_aixm.py --at <発効日> --write`
+   AIXM の差分が VM に届いていれば: scp で `aip/aixm_dist/` へ → `aixm_extract.py` → `--at <発効日>` を付けて
+   `gen_aca_aixm --write` / `gen_asp_aixm --splice`(gen_asp の後)/ `gen_civ_aixm --write` / `gen_tra_aixm --write` / `gen_res_aixm --write` / `gen_jsdfa_aixm --write`
+   ⚠ 今は**初回全件しか無い**。差分(PERMDELTA)を全件に当てる処理は未実装(差分が届いたら作る)。それまでは全件の BASELINE の日付で切り替わる
    ⚠ `gen_proc`/`gen_tomin` は日付フォルダをまたいで glob していて**2サイクル分が混ざった**。最新フォルダだけに直した
    ⚠ `gen_aca`(aca.json)と `gen_tca` は図の読み取り結果を固定で持っているので回さない。
      AD 2.17 の**添付図**が変わったかは目視で確認する(本文の差分は下の方法で機械的に出せる)
@@ -705,6 +707,19 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     ⚠ **布引山演習場のように同名で本当に2区画ある**ものは消さないこと
       (両方に外形がある場合は残す)
 
+- **⭐ AIXM(SWIM AIP データ配信)への置き換え(v6-216)**。共通部品は `tools/aixm_geom.py`(その日の BASELINE・区画の BASE/UNION/SUBTR/INTERS)。
+  比較は `tools/aixm_compare.py`(今のデータと面積で突き合わせ)。
+  | データ | 生成器 | 結果 |
+  |---|---|---|
+  | 管制圏・情報圏(ASP_POLY の ctr/inf) | `gen_asp_aixm.py --splice` | 92+39件。⚠ **PCA は AIXM に無いので gen_asp.py の分を残す**(順番: gen_asp → gen_asp_aixm)。109件中99件が2%以内で一致。違ったのは築城(6000ft の区画が抜けていた)・那覇(700ft 区画)・嘉手納など。舞鶴・小松島・普天間が増えた |
+  | 民間訓練試験空域(civ.json) | `gen_civ_aixm.py --write` | 156区画。**KK4-1〜4-8 も OSM の再現ではなく AIP の座標**。海岸線・河川・支庁界の近似も解消。連絡先 fac は AIXM に無いので前の版・同じ組から引き継ぐ(12区画はなし→「AIP で確認」) |
+  | 自衛隊低高度訓練空域(tra.json) | `gen_tra_aixm.py --write` | 18区画。Area 3-1 に 4,000ft の部分、Area 5 に 2,000ft の部分があった |
+  | 制限空域・警戒区域・RJR(res.json) | `gen_res_aixm.py --write` | **形と上下限だけ**置き換え(名前・調整先・時間は PDF 版)。沖縄の W-179/W-174 などは PDF 版が読み違い。R-521 は AIXM で1つの形 |
+  | 自衛隊の高高度訓練/試験空域・回廊・超音速(jsdfa.json・新規) | `gen_jsdfa_aixm.py --write` | 区域グループの「高訓・回廊」(`btnHat`)。⚠ 高高度でも SFC からの区画がある |
+  | 原子力施設(nuke.json) | 変更なし | AIXM と座標が一致した |
+  - ⚠ AIXM の高度の落とし穴: **下限 0 を `not` で判定すると '0' の文字列になって消える**(aixm_extract 修正済み)。
+    **引き算(SUBTR)に高度帯があるときはその帯の中だけ引く**(TH13-2・嘉手納 CTR)。真円は `CircleByCenterPoint`(半径の単位 `[nmi_i]`)
+  - 上限・下限の基準が SFC のものは `upAgl`/`loAgl` を付けて「(地表から)」と出す
 - **⭐ 進入管制区(ACA)は v6-215 から SWIM AIP データ配信(AIXM)由来**: `tools/aixm_extract.py`(AIXM_ALL → `aip/aixm_dist/airspace.json`)
   → `tools/gen_aca_aixm.py --write`(aca.json の **ACA だけ**差し替え・TCA は下の図からのまま)。**27空域・173区画**(福岡ACAを含む・pending 解消)。
   - 受信: Oracle VM の `aipdist`(tools/aip-dist・AMQP の受信キュー)。初回全件 AIXM_ALL_20261006 を 2026-10-14 に受信。差分は AIP 発行のたびに届く。
