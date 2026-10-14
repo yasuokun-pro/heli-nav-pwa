@@ -46,6 +46,9 @@ cat > /etc/systemd/system/aipdist.service <<'EOF'
 Description=SWIM AIP data distribution receiver (AMQP)
 After=network-online.target
 Wants=network-online.target
+# 失敗が続いても SWIM を叩きすぎない(1時間に最大20回)。⚠ この2つは [Unit] に書く([Service] だと無視される)
+StartLimitIntervalSec=3600
+StartLimitBurst=20
 
 [Service]
 User=aipdist
@@ -53,9 +56,6 @@ EnvironmentFile=/etc/aipdist/env
 ExecStart=/usr/bin/python3 /usr/local/lib/aipdist-receiver.py
 Restart=always
 RestartSec=60
-# 失敗が続いても SWIM を叩きすぎない(1時間に最大20回)
-StartLimitIntervalSec=3600
-StartLimitBurst=20
 NoNewPrivileges=yes
 ProtectSystem=strict
 ReadWritePaths=/var/lib/aipdist
