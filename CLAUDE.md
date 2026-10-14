@@ -1290,6 +1290,15 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
         そこで切ると表が丸ごと落ちる。CHANGE 行は飛ばすだけにして、切るのは脚注だけ
       ⚠ 見出しの探し方: "MINIMA" は CHANGE 行や表の下の注記にも出る。**"MINIMA … THR elev." の行**を採る
       検算: 558図すべてで制御文字・未知グリフ 0、"CAT" 行が無いのは3図だけ
+- **⭐ IFR データの検算(v6-218)**: `tools/aixm_ifr_compare.py`(FIX・航法施設・航空路を AIXM と突き合わせ)/ `tools/fix_awy_aixm.py --write`(awy.json を直す)
+  - FIX 2,931点・航法施設 156局は**全部 30m 以内で一致**(navaid 名の点 AOMORI などは Navaid の name で引く)。adnav の "(TACAN)/IM/MM/GS" は読み取りのゴミ
+  - 航空路: **MEA 186区間を直した(うち108区間は1,000ft以上違った)**。⚠ PDF 版の誤り: ENR 3.1 の「↑6000 / FL230↓」は**上の区間/下の区間**の MEA で、
+    向き別ではない(V30 HAKODATE–TSURU は FL230)。継ぎ方(inh)の誤りもあった
+  - ⚠ PDF 版は**ページをまたいで次の経路を取り込んでいた**(Y62 に BILLY 以降の別経路 15区間、Z41・Y79 も)。AIXM の区間で組み直した
+  - 抜けていた区間(A590 の YOSHI・V28 の OYE)を足し、AIXM にだけある経路(L512・M523・M750・N884・Q1・Z101・Z102)を追加。直行経路(DCT)は触らない
+  - ⚠ 組み直しの点の名前は**今の名前に合わせる**(id で引けなければ100m以内の同じ点)。別名で作ると経路探索で別の節点になり乗り継げない(MYE と MATSUYAMA)
+  - MEA は今の表記(6000 / 'FL150')を保つ(index.html の meaFt と同じ読み方)
+- **AIXM 側の誤りの控え**: `tools/aixm_issues.md`(下総 ILS→宇都宮の滑走路、三沢 ILS→新田原の滑走路、羽田の移設末端なし)。要望の文案つき
 - **⭐ ILS は v6-217 から AIXM 由来**: `tools/gen_ils_aixm.py --compare / --write` → `ils.json`(**85本**= AIXM 82 + PDF 版3)。
   AIXM では LOC・GP・DME が**別々の Navaid**("ILS-LOC 16R" / "ILS-GP 16R")で、同じ runwayDirection を指すものをまとめる。
   - 中心線は **AIXM の物理 THR を通る真方位**。THR(GP の基準)は GP アンテナを中心線に下ろした点から RDH/tan 手前。

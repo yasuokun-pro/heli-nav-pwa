@@ -1,0 +1,49 @@
+# SWIM AIP データ配信(AIXM)で見つかった誤り・欠け
+
+HELI NAV のデータを AIXM と突き合わせたときに見つけた、**AIXM 側**の誤り・欠けの控え。
+航空情報センター(SWIM)へ修正の要望を出すときの材料。アプリ側はそれぞれ回避済み。
+
+- 対象ファイル: `AIXM_ALL_20261006150000.xml`(AIP データ配信サービス(初回)・2026-10-14 受信)
+- 照合日: 2026-10-14
+
+## 1. 下総 ILS RWY19 の関連づけが宇都宮の滑走路になっている
+| 項目 | 値 |
+|---|---|
+| 地物 | Navaid `ILS-LOC 19`(designator **ISH**・109.1MHz・uuid `c3ed293c-04b7-4f52-bd0c-458eb4985050`)<br>Navaid `ILS-GP 19`(uuid `4a040e6f-bcca-45aa-b6f9-fd8ded1be506`) |
+| servedAirport | RJTL(下総)… 正しい |
+| runwayDirection | `214c4525-04e7-4232-803c-bc46e17703b5` = **RJTU(宇都宮)RWY 19** … 誤り |
+| 正しいと思われる値 | `cbbd7419-7af8-4f88-9022-39916ca48d49` = RJTL RWY 19 |
+| 根拠 | AIP RJTL AD 2.19(ILS-LOC 19 ISH 109.1MHz / ILS-GP 19)。宇都宮 RWY19 の THR から LOC まで約80km |
+
+## 2. 三沢 ILS RWY28 の関連づけが新田原の滑走路になっている
+| 項目 | 値 |
+|---|---|
+| 地物 | Navaid `ILS-LOC 28`(designator **IMIS**・uuid `0f10a09f-6507-4c40-916a-a30dd09817a6`)<br>Navaid `ILS-GP 28`(uuid `c7605a78-41b7-4949-8e41-2d030a33a94b`) |
+| servedAirport | RJSM(三沢)… 正しい |
+| runwayDirection | `813646d8-3148-47aa-b9d2-1bcc57513697` = **RJFN(新田原)RWY 28** … 誤り |
+| 備考 | 新田原自身の ILS(`ILS-LOC 28` INH・`ILS-GP 28`)も同じ runwayDirection を指していて、1つの滑走路に2組の ILS が付いた形になっている |
+| 根拠 | AIP RJSM AD 2.19(ILS-LOC 28 / ILS-GP 28) |
+
+## 3.(参考)羽田の移設末端(DISTHR)が無い
+| 項目 | 値 |
+|---|---|
+| 対象 | RJTT RWY 16L / 16R / 34R |
+| 内容 | RunwayCentrelinePoint は role=THR(物理の末端)だけ。AD 2.19 の備考では GP は **Displaced THR** 基準(例「GP: 312m inside FM RWY16L Displaced THR」) |
+| 影響 | 物理の THR を GP の基準にすると 400〜500m(GP 上で約70ft)ずれる。アプリは GP アンテナの位置から逆算して回避 |
+
+## 誤りではないが気づいたこと
+- 民間訓練試験空域・その他の空域に**連絡先(Controlling/Communication Facility)が無い**(空域を参照する AirTrafficControlService も無い)。
+  ENR 5.3.1 の表にはある。HK3・TH11・CK3・CK4・CK12・CS1・CS3・KS13-1〜3・KS15・SM2 は前の版からも引けなかった
+- 航空路の端点の navaid が **DesignatedPoint**(designator=MYE など navaid の識別符号)として載っている区間がある(Navaid を直接参照していない)
+
+## 要望の文案(送る前に確認)
+> 航空局 航空情報センター 御中
+>
+> AIP データ配信サービスで受信した AIXM データ(AIXM_ALL_20261006150000)を確認したところ、
+> 以下の関連づけに誤りがあるように見受けられましたので、ご確認をお願いいたします。
+>
+> 1. 下総(RJTL)ILS RWY19(ILS-LOC 19 ISH・ILS-GP 19)の runwayDirection が、宇都宮(RJTU)RWY19 を参照しています。
+> 2. 三沢(RJSM)ILS RWY28(ILS-LOC 28 IMIS・ILS-GP 28)の runwayDirection が、新田原(RJFN)RWY28 を参照しています。
+> 3.(参考)羽田 RWY16L/16R/34R は GP が移設末端基準ですが、RunwayCentrelinePoint に DISTHR がありません。
+>
+> 各地物の uuid は別添のとおりです。
