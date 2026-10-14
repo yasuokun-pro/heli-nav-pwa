@@ -523,6 +523,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
    `→ gen_proc → gen_tomin → gen_ad → gen_ils → gen_freq --splice → gen_magvar`(出た MAGV_C を index.html に貼る)
    ⚠ `gen_ils` は ad.json(標高の代用)を読むので **gen_ad の後**
    `→ gen_res → gen_nuke → gen_tra → gen_civ → gen_hp → gen_natl_ctr → gen_asp --splice → gen_sup`
+   AIXM の差分が VM に届いていれば: scp で `aip/aixm_dist/` へ → `aixm_extract.py` → `gen_aca_aixm.py --at <発効日> --write`
    ⚠ `gen_proc`/`gen_tomin` は日付フォルダをまたいで glob していて**2サイクル分が混ざった**。最新フォルダだけに直した
    ⚠ `gen_aca`(aca.json)と `gen_tca` は図の読み取り結果を固定で持っているので回さない。
      AD 2.17 の**添付図**が変わったかは目視で確認する(本文の差分は下の方法で機械的に出せる)
@@ -704,7 +705,18 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     ⚠ **布引山演習場のように同名で本当に2区画ある**ものは消さないこと
       (両方に外形がある場合は残す)
 
-- **進入管制区・TCA(AD 2.17 添付チャート)**: `tools/gen_aca.py` → `aca.json`。
+- **⭐ 進入管制区(ACA)は v6-215 から SWIM AIP データ配信(AIXM)由来**: `tools/aixm_extract.py`(AIXM_ALL → `aip/aixm_dist/airspace.json`)
+  → `tools/gen_aca_aixm.py --write`(aca.json の **ACA だけ**差し替え・TCA は下の図からのまま)。**27空域・173区画**(福岡ACAを含む・pending 解消)。
+  - 受信: Oracle VM の `aipdist`(tools/aip-dist・AMQP の受信キュー)。初回全件 AIXM_ALL_20261006 を 2026-10-14 に受信。差分は AIP 発行のたびに届く。
+    VM の `/var/lib/aipdist/{raw,zip,aixm}`。Mac へは scp で `aip/aixm_dist/` に持ってくる(**SWIM のデータは公開リポジトリに置かない**)
+  - 時間スライスは「その日に有効な BASELINE」(`--at YYYY-MM-DD` で AIRAC 発効日の版)。大分・熊本・長崎・函館の ACA は廃止済み
+  - ⚠⚠ **ACA は高度で積み重なっている**: 百里 ACA 700ft SFC〜1,800ft の上に東京 ACA 1,800ft〜FL240、横田 700ft SFC〜8,000ft の上に東京 8,000ft〜。
+    **図から起こしたとき横田・百里の単独の数値を「下限」と読んで東京と重複除去していたのは誤り**(数値は両者の境の高度だった)。
+    図由来の版との比較: 東京0.43%・千歳0.06%・築城0.26%・那覇0.24%・浜松/明野/宇都宮 ~1% で一致、百里・中部・横田だけ積み重ね分が違った
+  - 吹き出しは**タップした地点の区画を全部**(下から順に)出す(`acaPopAt`)。下限が地表基準のものは `loAgl`「(地表から)」
+  - AIXM は弧を細かい点列で持つ(東京で1,044点)ので 2m まで間引く(22,096→9,708点・aca.json 325KB)
+  - ⚠ 比較スクリプトの cos(緯度) は**空港ごとに1つ**(図形ごとだと差が24%と出た)
+- **進入管制区・TCA(AD 2.17 添付チャート)**: `tools/gen_aca.py` → `aca.json`。**v6-215 からは TCA だけがこの方式**(ACA は上の AIXM)。
   - **AD 2.17の表には座標が無い**。全空港が「SEE ATTACHED CHART」。
     ただし図の多くは **(1)(2)… の番号付き座標表**を持ち、テキスト層から機械抽出できる。
     抽出結果は `tools/aca_points.json` に保存(13チャート311点)。

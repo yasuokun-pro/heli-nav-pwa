@@ -630,6 +630,7 @@
   .ntmCfg input[type=date]{width:128px}
   .ntmPin.l3{border-color:#ff3b30;color:#ff3b30}
   /* ILS のラベル(v6-214): 箱をやめて地図の注記と同じ縁取りの文字。高さが主・距離(NM)は小さく */
+  .acaTbl td{white-space:normal}.acaTbl td:first-child{white-space:nowrap}
   .ils-lab{font:600 10px/1 var(--mono);color:#cfe2f7;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000,0 1px 2px #000;
     transform:translate(4px,0)}
   .ils-lab.r{transform:translate(calc(-100% - 4px),0)}
@@ -1148,7 +1149,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-214';
+const VER_TAG='v6-215';
 const BUILD='2026-10-07';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2861,25 +2862,11 @@ async function loadAca(){
   ACA.f.forEach(f=>{
     const key=f.k+'|'+f.icao;
     (acaPoly[key]=acaPoly[key]||[]).push(
-      L.polygon(f.pts,{renderer:ovRenderer,color:ACA_COL,weight:2,dashArray:'7 5',
-        fillColor:ACA_COL,fillOpacity:.07})
-        .bindPopup(()=>{
-          const el=document.createElement('div');el.className='apPop';
-          el.innerHTML=`<h5 style="color:${ACA_COL}">${f.jp} ${f.n.split(' ').pop()}</h5>`+
-            `<dl><dt>空域</dt><dd>${f.k==='TCA'?'ターミナルコントロールエリア':'進入管制区'} (Class E)</dd>`+
-            // ⚠ 未記載を altTxt に渡すと「UNL(無制限)」になってしまう。
-            //   上限だけ載せた図・下限だけ載せた図の両方があるので別扱いにする
-            `<dt>上限</dt><dd>${f.up!==null&&f.up!==undefined?altTxt(f.up):NOALT}</dd>`+
-            `<dt>下限</dt><dd>${f.lo!==null&&f.lo!==undefined?altTxt(f.lo):NOALT}</dd>`+
-            `</dl>`+
-            // ⚠ 座標表の無い図は画像から起こした近似形状。混ざっていることを明示する
-            (/近似/.test(f.rmk||'')?`<div class="note" style="color:var(--amb)">`+
-              `⚠ ${f.rmk}。他の空域はAIPの座標そのままだが、ここだけ性格が違う。`+
-              `境界付近ではAIPのチャートで確認すること</div>`:'')+
-            `<div class="note">AIP ${f.icao} AD 2.17 添付図${ACA.eff?' (EFF '+ACA.eff+')':''}。`+
-            `<b>図から起こせた空域のみ表示している。載っていない=無い ではない。</b></div>`;
-          return el;
-        }));
+      Object.assign(L.polygon(f.pts,{renderer:ovRenderer,color:ACA_COL,weight:2,dashArray:'7 5',
+        fillColor:ACA_COL,fillOpacity:.07}),{_aca:f})
+        // ⚠ ACA は**高度で積み重なっている**(百里 700ft SFC〜1,800ft の上に東京 1,800ft〜FL240 など。AIXM で判明・v6-215)。
+        //   1枚だけの吹き出しだと一番上の区画しか読めないので、タップした地点の区画を全部まとめて出す
+        .on('click',e=>acaPopAt(e.latlng)));
     const m=acaMeta[key]=acaMeta[key]||{k:f.k,icao:f.icao,jp:f.jp,n:0,la:0,np:0};
     m.n++; f.pts.forEach(q=>{m.la+=q[0];m.np++});   // 飛行場が引けなければ重心を使う
   });
@@ -2890,6 +2877,33 @@ async function loadAca(){
     m.short=m.jp.replace(/進入管制区$/,'').replace(/ターミナルコントロールエリア$/,'');
   });
   return ACA;
+}
+// タップした地点にある ACA/TCA の区画を、下から順に全部出す(表示中の空域だけ)
+function acaAltTxt(f,w){
+  const v=f[w],t=f[w+'Txt'];
+  if(t)return t;
+  if(v===null||v===undefined)return NOALT;
+  return altTxt(v)+(w==='lo'&&f.loAgl?'<small>(地表から)</small>':'');
+}
+function acaPopAt(ll){
+  const hits=acaLayer.getLayers().filter(l=>l._aca&&inArea(ll.lat,ll.lng,l._aca.pts)).map(l=>l._aca)
+    .sort((a,b)=>(a.lo??-1)-(b.lo??-1)||(a.up??1e9)-(b.up??1e9));
+  if(!hits.length)return;
+  const ax=hits.some(f=>f.src==='aixm'),ch=hits.some(f=>f.src!=='aixm');
+  const el=document.createElement('div');el.className='apPop';
+  el.innerHTML=`<h5 style="color:${ACA_COL}">この地点の進入管制区・TCA(${hits.length})</h5>`+
+    // ⚠ 右のレイヤーボタンに隠れないよう、下限〜上限は1列にまとめて幅を詰める
+    `<table class="awyTbl acaTbl"><tr><th>空域</th><th>下限 〜 上限</th></tr>`+
+    hits.map(f=>`<tr><td>${f.jp.replace(/進入管制区$/,' ACA').replace(/ターミナルコントロールエリア$/,' TCA')}</td>`+
+      `<td>${acaAltTxt(f,'lo')} 〜 ${acaAltTxt(f,'up')}</td></tr>`).join('')+`</table>`+
+    `<div class="note">Class E。${hits.length>1?'<b>高度で積み重なっている</b>。自分の高度の行の空域が当たる。':''}</div>`+
+    (ax?`<div class="note">ACA: SWIM AIP データ配信(AIXM)${ACA.acaSrc?' '+ACA.acaSrc.replace(/^.*AIXM_ALL_(\d{4})(\d\d)(\d\d).*$/,'$1-$2-$3版'):''}。</div>`:'')+
+    (ch?`<div class="note">TCA: AIP AD 2.17 添付図${ACA.eff?' (EFF '+ACA.eff+')':''}から起こした形。<b>図から起こせた空域のみ。載っていない=無い ではない。</b></div>`:'')+
+    (hits.some(f=>/近似/.test(f.rmk||''))?`<div class="note" style="color:var(--amb)">⚠ ${hits.find(f=>/近似/.test(f.rmk||'')).rmk}。境界付近はAIPのチャートで確認すること</div>`:'');
+  // 吹き出しは NOTAM と同じく帯の下・画面内に収める(ntmPopOpt / ntmPopFit)
+  // 幅は 枠の余白(約48px)と右のボタン列(約85px)を引いた分まで
+  const pop=L.popup({...ntmPopOpt(),maxWidth:Math.min(260,innerWidth-170)}).setLatLng(ll).setContent(el).openOn(map);
+  ntmPopFit({popup:pop});
 }
 function acaApply(){
   acaLayer.clearLayers();
@@ -4667,9 +4681,13 @@ function ntmPopFit(e){
     const r=el.getBoundingClientRect(),m=map.getContainer().getBoundingClientRect();
     const o=parseFloat(getComputedStyle(document.querySelector('.mapwrap')||document.body).getPropertyValue('--ovlH'))||0;
     const top=m.top+o+44,bot=m.bottom-90;
-    let dy=0;
+    let dy=0,dx=0;
     if(r.top<top)dy=r.top-top; else if(r.bottom>bot)dy=Math.min(r.bottom-bot,r.top-top);
-    if(Math.abs(dy)>2)map.panBy([0,dy],{animate:true});
+    // 右のレイヤーボタン(.maptools)の下に入らないよう横にもずらす(v6-215。表の右の列が隠れていた)
+    const mt=document.querySelector('.maptools'),mr=mt&&mt.offsetParent?mt.getBoundingClientRect():null;
+    const right=mr&&mr.width?mr.left-6:m.right-8;
+    if(r.right>right)dx=Math.min(r.right-right,r.left-(m.left+8));
+    if(Math.abs(dy)>2||Math.abs(dx)>2)map.panBy([dx,dy],{animate:true});
   },320);
 }
 function ntmPopHtml(x){
