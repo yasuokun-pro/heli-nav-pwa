@@ -7,13 +7,13 @@ name: AIRAC release
 # 手動: Actions → AIRAC release → Run workflow(branch に airac-YYYYMMDD)。発効前に押しても何もしない
 on:
   schedule:
-    - cron: '*/10 0-2 1 10 *'     # 2026-10-01 分。次の版を用意するときはここと既定のブランチ名を直す
+    - cron: '*/10 0-2 29 10 *'    # 2026-10-29 分。次の版を用意するときはここと既定のブランチ名を直す
   workflow_dispatch:
     inputs:
       branch:
         description: '取り込む AIRAC ブランチ(airac-YYYYMMDD)'
         required: false
-        default: 'airac-20261001'
+        default: 'airac-20261029'
 
 permissions:
   contents: write
@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0
       - name: Merge the AIRAC branch once it is effective
         env:
-          BR: ${{ inputs.branch || 'airac-20261001' }}
+          BR: ${{ inputs.branch || 'airac-20261029' }}
         run: |
           set -e
           EFF="${BR#airac-}"
