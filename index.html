@@ -1150,8 +1150,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-219';
-const BUILD='2026-10-07';
+const VER_TAG='v6-220';
+const BUILD='2026-10-15';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -5238,6 +5238,7 @@ function airspaceAt(w){
 }
 /* 「Tokyo Tower 118.1/124.35」から呼出名と周波数を切り出す */
 function splitCall(rmk){
+  rmk=String(rmk||'').replace(/^(Controlling|Communication) Facility\s*-?\s*/,'');   // 民訓の連絡先(ENR 5.3.1)の欄名
   const m=String(rmk||'').match(/^(.*?)\s*((?:\d{3}\.\d{1,3})(?:\s*\/\s*\d{3}\.\d{1,3})*)/);
   if(!m)return {call:String(rmk||'').split('/')[0].trim(),freq:''};
   return {call:m[1].trim(),freq:m[2].replace(/\s/g,'')};

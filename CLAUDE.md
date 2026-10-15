@@ -712,7 +712,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
   | データ | 生成器 | 結果 |
   |---|---|---|
   | 管制圏・情報圏(ASP_POLY の ctr/inf) | `gen_asp_aixm.py --splice` | 92+39件。⚠ **PCA は AIXM に無いので gen_asp.py の分を残す**(順番: gen_asp → gen_asp_aixm)。109件中99件が2%以内で一致。違ったのは築城(6000ft の区画が抜けていた)・那覇(700ft 区画)・嘉手納など。舞鶴・小松島・普天間が増えた |
-  | 民間訓練試験空域(civ.json) | `gen_civ_aixm.py --write` | 156区画。**KK4-1〜4-8 も OSM の再現ではなく AIP の座標**。海岸線・河川・支庁界の近似も解消。連絡先 fac は AIXM に無いので前の版・同じ組から引き継ぐ(12区画はなし→「AIP で確認」) |
+  | 民間訓練試験空域(civ.json) | `gen_civ_aixm.py --write` | 156区画。**KK4-1〜4-8 も OSM の再現ではなく AIP の座標**。海岸線・河川・支庁界の近似も解消。連絡先 fac は AIXM に無いので **ENR 5.3.1 の表を pdfplumber で罫線ごと読む**(v6-220・結合セルは上の値を継ぐ)。⚠ 以前の「同じ組の区画から借りる」は誤っていた(TH13-4-7〜10 は Sendai TCA など) |
   | 自衛隊低高度訓練空域(tra.json) | `gen_tra_aixm.py --write` | 18区画。Area 3-1 に 4,000ft の部分、Area 5 に 2,000ft の部分があった |
   | 制限空域・警戒区域・RJR(res.json) | `gen_res_aixm.py --write` | **形と上下限だけ**置き換え(名前・調整先・時間は PDF 版)。沖縄の W-179/W-174 などは PDF 版が読み違い。R-521 は AIXM で1つの形 |
   | 自衛隊の高高度訓練/試験空域・回廊・超音速(jsdfa.json・新規) | `gen_jsdfa_aixm.py --write` | 区域グループの「高訓・回廊」(`btnHat`)。⚠ 高高度でも SFC からの区画がある |
@@ -1304,6 +1304,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
   - 形式は前と同じ [lat,lng,elevFt,heightFt,typeIdx,light] に **7番目 2 = AREA2** を足した。種類に CATENARY(架線)・TREE(樹木)、STACK は CHIMNEY に
   - ⚠ CATENARY は**線ではなく点**(架線を支える位置)。送電線レイヤー(OSM)の代わりにはならない
   - 表示はズーム13以上で600件・12で350件(AREA2 は低いので標高順だと押し出される)。AREA2 は淡い橙で小さく、吹き出しに「飛行場周辺(AREA2)」
+- **TCA は AIXM に空域として無い**(2026-10-15 確認): AirTrafficControlService の type `OTHER:TCA`(呼出符号・周波数・clientAirport)だけ。ACA の業務も clientAirspace を持たない
 - **AIXM 側の誤りの控え**: `tools/aixm_issues.md`(下総 ILS→宇都宮の滑走路、三沢 ILS→新田原の滑走路、羽田の移設末端なし)。要望の文案つき
 - **⭐ ILS は v6-217 から AIXM 由来**: `tools/gen_ils_aixm.py --compare / --write` → `ils.json`(**85本**= AIXM 82 + PDF 版3)。
   AIXM では LOC・GP・DME が**別々の Navaid**("ILS-LOC 16R" / "ILS-GP 16R")で、同じ runwayDirection を指すものをまとめる。
