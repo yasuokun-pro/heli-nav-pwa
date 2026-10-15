@@ -213,8 +213,14 @@ def parse_33(L):
                 key = 'odd' if (col_odd is None or abs(c-col_odd) <= abs(c-col_even)) else 'even'
                 seg.setdefault(key, v)
             # 次の行: [真方位] と [MOCA]
+            # ⚠ 20261029 版から管制部の欄(右端)が先に折り返し、[MOCA] が2行下に来る区間がある(Y57 SHIBK・Y574 HINJA)。
+            #   座標行の下3行までで最初に [..] がある行を見る(その下の [真方位] の行までは届かない)
+            br = []
+            for j in range(i+1, min(i+4, len(L))):
+                if COORD.search(L[j]) or DESIG.match(L[j]): break
+                br = re.findall(r'\[(FL\d+|\d+(?:\.\d+)?)\]', L[j])
+                if br: break
             if i+1 < len(L):
-                br = re.findall(r'\[(FL\d+|\d+(?:\.\d+)?)\]', L[i+1])
                 for b in br:
                     if b.startswith('FL'): seg['moca'] = b          # MOCA が FL で書かれる区間がある(Y60 MITOP-MEBNI [FL150])
                     elif '.' in b: seg['true'] = float(b)

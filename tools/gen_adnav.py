@@ -15,6 +15,8 @@ IFRの経路探索で「FIXから評定できる navaid へ飛ぶ」脚を引く
 ⚠ ENR 4.1 と重複するIDはそちらを優先(経路用の公示位置)
 """
 import os, re, sys, json, glob, subprocess
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from aip_pick import pick
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -35,7 +37,7 @@ def pdfs():
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f:
             latest = max(os.path.basename(os.path.dirname(os.path.dirname(x))) for x in f)
-            return [x for x in f if os.path.basename(os.path.dirname(os.path.dirname(x))) == latest]
+            return pick([x for x in f if os.path.basename(os.path.dirname(os.path.dirname(x))) == latest])   # 飛行場ごとに1版
     return []
 
 

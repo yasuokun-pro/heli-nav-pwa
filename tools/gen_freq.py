@@ -11,6 +11,8 @@
 使い方: python3 tools/gen_freq.py [--splice]
 """
 import re, glob, os, json, subprocess, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from aip_pick import pick
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -47,13 +49,13 @@ def main():
     if not base:
         print('AD2_Combine が見つかりません', file=sys.stderr); sys.exit(1)
     out = {}
-    for pdf in sorted(glob.glob(base + '/*.pdf')):
+    for pdf in pick(glob.glob(base + '/*.pdf')):   # 飛行場ごとに1版(後勝ちだと未来の版が出た)
         icao = os.path.basename(pdf).split('__')[0]
         rec = scan(pdf, r'AD 2\.18 ATS COMMUNICATION FACILITIES(.*?)AD 2\.19')
         if rec: out[icao] = rec
     # AD3(ヘリポート)は項番が AD 3.17
     ad3 = base.replace('AD2_Combine', 'AD3')
-    for pdf in sorted(glob.glob(ad3 + '/*.pdf')):
+    for pdf in pick(glob.glob(ad3 + '/*.pdf')):
         icao = os.path.basename(pdf).split('__')[0]
         rec = scan(pdf, r'AD 3\.17 ATS COMMUNICATION FACILITIES(.*?)AD 3\.18')
         if rec: out.setdefault(icao, rec)

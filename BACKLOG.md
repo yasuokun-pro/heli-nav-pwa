@@ -12,11 +12,10 @@ CLAUDE.mdから分離した「進行中・未着手タスク」。着手する�
    - 返事が来るまでにできること: DIPS ガイドラインの応答サンプルで、計画の表示を手元で試す(ガイドライン PDF を確保してから)
    - ログイン継続は確認済み(2026-10-14、20分以上で再ログインなし)
    - すべて済んだら **動作確認完了報告**(期限 **2027-01-29**)→ 本番環境の申請(申請書の項4)→ 本番の Client ID が来たら Vercel の DIPS_ENV=prod 等を差し替え
-2. **AIP 改正(AIRAC 2026-10-29)の差分を AIXM で反映する** — VM の受信(`aipdist`)に差分が届いているか、10/29 前後に確認する
-   (`ssh … sudo journalctl -u aipdist` / `/var/lib/aipdist/raw`)。届いたら:
-   - 差分(PERMDELTA/新しい BASELINE)を全件に当てる処理を作る(今は初回全件だけで動いている)
-   - `aixm_extract.py` → 各 `gen_*_aixm.py --at 2026-10-29` で作り直し、`aixm_compare.py` / `aixm_ifr_compare.py` で前の版と差を見る
-   - PDF 側の AIRAC 更新(SID/STAR・進入方式・PCA・TCA など AIXM に無いもの)は従来どおり(下の「AIRAC更新」)
+2. **AIRAC 2026-10-29** — PDF 版で作り直したものをブランチ `airac-20261029` に用意済み(2026-10-15)。10/29 09:00 JST 以降に airac-release.yml が main へ取り込む。
+   - AIXM の差分は 10/15 時点で未着。10/29 前後に VM を確認(`ssh … sudo journalctl -u aipdist` / `/var/lib/aipdist/raw`)。届いたら差分を全件に当てる処理を作り、
+     `--at 2026-10-29` で作り直して**ブランチの PDF 版の結果と突き合わせる**(初めての差分なので検証を兼ねる)
+   - 次の 2026-11-26 版は SWIM で 11/12 公開予定
 3. **AIXM の誤りの修正要望**(任意) — `tools/aixm_issues.md` に4件と文案あり(下総 ILS→宇都宮、三沢 ILS→新田原、羽田の移設末端なし、川口付近の 1,663ft 障害物)。
    送るときは原口さん(航空情報センター)とのやり取りの続きで下書きを作る
 4. ~~民訓の連絡先が無い12区画~~ **済(v6-220)**: `gen_civ_aixm.py` が ENR 5.3.1 の表を罫線で読む(pdfplumber)ようにして156区画全部 PDF の値に。
