@@ -1150,7 +1150,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-221';
+const VER_TAG='v6-222';
 const BUILD='2026-10-16';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7304,7 +7304,45 @@ document.getElementById('alertBar').onclick=function(){
   setTimeout(()=>{alertMuted=false},120000); // 2分で自動復帰
 };
 
+/* 他機の吹き出し(v6-222・ユーザー要望)。ADS-B の生データにある分だけ出す。
+   ⚠ **所属はデータに無い**(所有者・運航者の欄は日本の機体では空)。便名の頭3文字が航空会社コード(JAL123 など)
+     のときだけ会社名を出す(TFC_OPR)。JA6802 や 1JA03AP のような登録記号の便名は当たらない。
+   ⚠ 15秒ごとに描き直すので、開いていた機体(hex)を覚えて描き直したあと開き直す(閉じてしまうため) */
+let tfcOpen=null,tfcRedraw=false;
+const TFC_OPR={JAL:'日本航空',ANA:'全日空',JJP:'ジェットスター・ジャパン',APJ:'ピーチ',SKY:'スカイマーク',ADO:'エア・ドゥ',
+  SNJ:'ソラシドエア',SFJ:'スターフライヤー',IBX:'アイベックス',FDA:'フジドリームエアラインズ',JAC:'日本エアコミューター',
+  JTA:'日本トランスオーシャン航空',RAC:'琉球エアーコミューター',NCA:'日本貨物航空',AKX:'ANAウイングス',JLJ:'ジェイエア',
+  HAC:'北海道エアシステム',ORC:'オリエンタルエアブリッジ',TZP:'ZIPAIR',SJO:'スプリング・ジャパン',
+  KAL:'大韓航空',AAR:'アシアナ航空',JNA:'ジンエアー',TWB:'ティーウェイ航空',JJA:'チェジュ航空',ABL:'エアプサン',ASV:'エアソウル',
+  CPA:'キャセイパシフィック',HKE:'香港エクスプレス',EVA:'エバー航空',CAL:'チャイナエアライン',TTW:'タイガーエア台湾',SJX:'スターラックス',
+  CCA:'中国国際航空',CES:'中国東方航空',CSN:'中国南方航空',CSH:'上海航空',CQH:'春秋航空',
+  SIA:'シンガポール航空',THA:'タイ国際航空',MAS:'マレーシア航空',PAL:'フィリピン航空',CEB:'セブパシフィック',
+  VJC:'ベトジェット',HVN:'ベトナム航空',GIA:'ガルーダ',QFA:'カンタス',JST:'ジェットスター',ANZ:'ニュージーランド航空',
+  UAL:'ユナイテッド',DAL:'デルタ',AAL:'アメリカン',HAL:'ハワイアン',ACA:'エア・カナダ',
+  BAW:'ブリティッシュ・エアウェイズ',AFR:'エールフランス',KLM:'KLM',DLH:'ルフトハンザ',FIN:'フィンエアー',SWR:'スイス',
+  UAE:'エミレーツ',QTR:'カタール航空',ETD:'エティハド',THY:'ターキッシュ',FDX:'フェデックス',UPS:'UPS',GTI:'アトラス航空',CLX:'カーゴルクス'};
+function tfcOperator(cs){const m=/^([A-Z]{3})\d/.exec(cs||'');return m&&TFC_OPR[m[1]]?TFC_OPR[m[1]]:''}
+const TFC_SQ={'7500':'ハイジャック','7600':'通信機故障','7700':'緊急'};
+function tfcPop(a,demo){
+  const row=(k,v)=>v===''||v==null?'':`<dt>${k}</dt><dd>${v}</dd>`;
+  const opr=tfcOperator(a.cs);
+  const vs=a.vs==null?'':`${a.vs>0?'↑':a.vs<0?'↓':''}${Math.abs(Math.round(a.vs/10)*10).toLocaleString()} ft/min`;
+  const sq=a.sq?(TFC_SQ[a.sq]?`<b style="color:var(--red)">${a.sq} ${TFC_SQ[a.sq]}</b>`:a.sq+(a.sq==='1200'?' <small style="color:var(--dim)">(VFR)</small>':'')):'';
+  return `<div class="apPop"><h5 style="color:${a.heli?'var(--amb)':'var(--txt)'}">${a.heli?'🚁 ':''}${a.cs}${demo?' <span class="tag">DEMO</span>':''}</h5><dl>`+
+    row('登録記号',a.reg&&a.reg!==a.cs?a.reg:'')+
+    row('運航者',opr?opr+' <small style="color:var(--dim)">(便名から)</small>':'')+
+    row('区分',a.mil?'<b style="color:var(--amb)">軍用機</b>':'')+
+    row('型式',(a.typ||'')+(a.heli&&a.typ?' 回転翼':''))+
+    row('高度',`${a.alt.toLocaleString()} ft <small style="color:var(--dim)">気圧</small>`+(a.galt!=null?` / ${a.galt.toLocaleString()} ft <small style="color:var(--dim)">GPS</small>`:''))+
+    row('昇降率',vs)+
+    row('速度・針路',`${a.spd} kt / ${fmt3(Math.round(a.trk))}°T`)+
+    row('スコーク',sq)+
+    (a.emg?`<dt>緊急</dt><dd><b style="color:var(--red)">${a.emg}</b></dd>`:'')+
+    row('距離',a.dist!==undefined?a.dist.toFixed(1)+' NM':'')+
+    `</dl><div class="note">ADS-B/MLAT の受信データ。所属は分からない(運航者は便名の会社コードからの推定)。見張りの代わりにはならない</div></div>`;
+}
 function showTraffic(list,demo){
+  tfcRedraw=true;let reopen=null;
   acLayer.clearLayers();
   const body=document.getElementById('tfcBody');body.innerHTML='';
   /* ⚠ デモ機は**接近警報にも警告色にも絶対に入れない**。
@@ -7313,7 +7351,11 @@ function showTraffic(list,demo){
   list.forEach(a=>{
     const lv=lvOf(a);
     const mk=L.marker([a.lat,a.lng],{icon:acIcon(a.trk,a.heli,lv)}).addTo(acLayer);
-    mk.bindTooltip(`${a.heli?'🚁':''}${a.cs} ${a.alt}ft`,{direction:'top'});
+    mk.bindPopup(()=>tfcPop(a,demo),Object.assign(ntmPopOpt(),{maxWidth:240}));
+    const key=a.hex||a.cs;
+    mk.on('popupopen',e=>{tfcOpen=key;if(!tfcRedraw)ntmPopFit(e)});   // 帯の下に寄せるのは手で開いたときだけ(15秒ごとに地図が動かないように)
+    mk.on('popupclose',()=>{if(!tfcRedraw)tfcOpen=null});
+    if(key===tfcOpen)reopen=mk;
     const tr=document.createElement('tr');
     if(lv===2)tr.style.color='var(--red)';
     else if(lv===1)tr.style.color='var(--amb)';
@@ -7328,6 +7370,8 @@ function showTraffic(list,demo){
     };
     body.appendChild(tr);
   });
+  if(reopen)reopen.openPopup();
+  tfcRedraw=false;
   renderAlert(demo?[]:list);   // ⚠ デモ機で警報を鳴らさない
   document.getElementById('tfcStatus').innerHTML=demo
     ?`API未接続のためデモ表示<span class="tag">DEMO</span> <span style="color:var(--dim)">${tfcErr}</span>`
@@ -7368,7 +7412,10 @@ async function fetchTraffic(){
       alt:a.alt_baro==='ground'?0:Math.round(a.alt_baro||0),
       spd:Math.round(a.gs||0),trk:a.track||0,
       heli:isHeli(a),
-      dist:distNM({lat:c.lat,lng:c.lng},{lat:a.lat,lng:a.lon})
+      dist:distNM({lat:c.lat,lng:c.lng},{lat:a.lat,lng:a.lon}),
+      hex:a.hex,reg:a.r||'',typ:a.t||'',sq:a.squawk||'',
+      vs:a.baro_rate??a.geom_rate??null,galt:a.alt_geom!=null?Math.round(a.alt_geom):null,
+      mil:!!(a.dbFlags&1),emg:a.emergency&&a.emergency!=='none'?a.emergency:''
     })).filter(o=>o.alt>0); // 地上(0ft)の機体は表示しない
     if(!ac.length)throw new Error('empty');
     // ヘリ優先 → 距離順 → 自機高度に近い順
