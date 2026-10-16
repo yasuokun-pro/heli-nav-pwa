@@ -1156,7 +1156,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-228';
+const VER_TAG='v6-229';
 const BUILD='2026-10-16';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2374,13 +2374,30 @@ function obstLv(o){
   const m=ownAltFt-o[2];
   return m<=OBST_LV_FT[1]?2:m<=OBST_LV_FT[0]?1:0;
 }
+/* 障害物は航空図の記号に合わせて三角(Λ)で描く(v6-229・ユーザー要望)。NOTAM の点(丸・影響度の色)と見分けるため。
+   灯火ありは頂点に光の線。⚠ 600個まで描くので divIcon にせず Canvas に直接描く(当たり判定は CircleMarker のまま) */
+L.Canvas.include({_updateObstTri(layer){
+  if(!this._drawing||layer._empty())return;
+  const p=layer._point,ctx=this._ctx,r=Math.max(layer._radius,1);
+  ctx.beginPath();
+  ctx.moveTo(p.x,p.y-r*1.25);ctx.lineTo(p.x+r,p.y+r*.75);ctx.lineTo(p.x-r,p.y+r*.75);ctx.closePath();
+  this._fillStroke(ctx,layer);
+  if(layer.options.lit&&layer.options.stroke!==false){   // 灯火: 頂点から3本の短い線
+    const y=p.y-r*1.25,l=r*.8;ctx.beginPath();
+    ctx.moveTo(p.x,y-1.5);ctx.lineTo(p.x,y-1.5-l);
+    ctx.moveTo(p.x-2,y-1);ctx.lineTo(p.x-2-l*.7,y-1-l*.7);
+    ctx.moveTo(p.x+2,y-1);ctx.lineTo(p.x+2+l*.7,y-1-l*.7);
+    ctx.stroke();
+  }
+}});
+const ObstMarker=L.CircleMarker.extend({_updatePath(){this._renderer._updateObstTri(this)}});
 function obstMarker(o,lv){
   const[lat,lng,elev,hgt,ti,lit,ar]=o;
   if(lv===undefined)lv=obstLv(o);
   const ty=(OBST.types&&OBST.types[ti])||'OBSTACLE',a2=ar===2,col=lv?OBST_LV_COL[lv]:a2?'#ffb070':'#ffd24d';
   const d=lv&&ownAltFt!=null?Math.round(elev-ownAltFt):null;
-  return L.circleMarker([lat,lng],{renderer:obstRenderer,radius:lv?5.5:a2?2.8:3.5,color:lv?'#fff':col,weight:lv?1.5:1.5,
-      fillColor:col,fillOpacity:lv?.9:a2?.35:.55})
+  return new ObstMarker([lat,lng],{renderer:obstRenderer,radius:lv?6:a2?3.2:4.2,color:lv?'#fff':col,weight:lv?1.5:1.2,
+      fillColor:col,fillOpacity:lv?.9:a2?.35:.6,lit:!!lit})
     .bindTooltip(`${OBST_GLYPH[ti]||'▲'} ${OBST_JP[ty]||ty} ${elev}ft(AMSL) / 高${hgt}ft${lit?' 灯火有':''}${a2?' ・飛行場周辺(AREA2)':''}`+
       (d!=null?`<br><b style="color:${col}">自機(GPS高度)より ${d>=0?d+'ft 高い':(-d)+'ft 低い'}</b>`:''),
       {direction:'top',sticky:true});
