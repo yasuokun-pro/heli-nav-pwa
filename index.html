@@ -829,6 +829,7 @@
         <button id="btnAwy" title="航空路(AIP ENR 3.1 下層ATSルート / ENR 3.3 RNAV経路)">航空路</button>
         <button id="btnIls" title="ILS の最終進入経路(AIP AD 2.19)。滑走路末端から10NM、1NMごとに GP 上の高さの目安">ILS</button>
         <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AIP AD 1.4)と滑空場(ENR 5.5.1)">ヘリポート</button>
+        <button id="btnHrt" title="回転翼機の経路(ヘリの特別有視界飛行経路・ヘリポートの到着/出発経路)。AIP の本文・図から起こした目安">ヘリ経路</button>
         <button id="btnHpad" title="地域防災計画などが定める防災拠点(臨時離着陸場・緊急離着陸場・場外離着陸場)。応援機を受け入れる場所であって、緊急着陸の適地ではない。ズーム11以上">防災拠点</button>
         <button id="btnObst">障害物</button>
         <button id="btnPwln" title="送電線(OpenStreetMap power=line)。⚠ 配電線(電柱間の低圧線)はOSMにほぼ入っていないので描かれない。線が無い=安全ではない。ズーム10以上">送電線</button>
@@ -1151,7 +1152,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-226';
+const VER_TAG='v6-227';
 const BUILD='2026-10-16';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3181,6 +3182,53 @@ document.getElementById('btnHp').onclick=async function(){
   hpOn=!hpOn;this.classList.toggle('on',hpOn);
   if(hpOn){await loadHp();hpLayer.addTo(map)}else map.removeLayer(hpLayer);
   restackOverlays();nearUpdate(true);
+};
+/* ── 回転翼機の経路(v6-227・ユーザー要望) ──
+   羽田・成田のヘリの特別有視界飛行経路、調布・八尾・東京ヘリポート・奈多・嘉手納の回転翼機の到着/出発経路(heliroute.json)。
+   tools/gen_heliroute.py が AIP の Visual REP の表・navaid のラジアル・図の位置合わせ・OSM の川の中心線から起こす。
+   ⚠ 目安(Visual REP の丸めで 200m 程度、略図の嘉手納は 1km 程度ずれうる)。吹き出しに必ず出す */
+let HRT=null,hrtOn=false;
+const hrtLayer=L.layerGroup(),HRT_COL='#ff7ac8';
+const HRT_DIR={both:'到着・出発',arr:'到着',dep:'出発'};
+async function loadHrt(){
+  if(HRT)return HRT;
+  try{const r=await fetch('heliroute.json?v='+VER_TAG);HRT=await r.json()}catch(e){HRT={f:[]}}
+  return HRT;
+}
+function hrtPop(r){
+  const a=ASP.find(z=>z.icao===r.icao);
+  return `<div class="apPop"><h5 style="color:${HRT_COL}">🚁 ${r.n}</h5>`+
+    `<div style="font-size:11px;color:var(--dim)">${a?a.n:''} ${r.icao}</div><dl>`+
+    `<dt>向き</dt><dd>${HRT_DIR[r.dir]||''}</dd>`+
+    (r.alt?`<dt>高度</dt><dd>${r.alt}</dd>`:'')+
+    (r.note?`<dt>経路</dt><dd style="white-space:normal">${r.note}</dd>`:'')+
+    `<dt>長さ</dt><dd>${r.nm} NM</dd></dl>`+
+    `<div class="note">AIP ${r.src} から起こした目安(Visual REP の距離・方位の丸め、図の読み取り、地名は OpenStreetMap)。必ず AIP の図で確認</div></div>`;
+}
+function drawHrt(){
+  hrtLayer.clearLayers();
+  if(!hrtOn||!HRT)return;
+  HRT.f.forEach(r=>{
+    const dash=r.dir==='arr'?'9 6':r.dir==='dep'?'2 7':null;
+    L.polyline(r.pts,{renderer:ovRenderer,color:'#0d1b2a',weight:5.5,opacity:.7,interactive:false}).addTo(hrtLayer);
+    L.polyline(r.pts,{renderer:ovRenderer,color:HRT_COL,weight:3,dashArray:dash,opacity:.95,interactive:false}).addTo(hrtLayer);
+    // ⚠ 細い線は指で掴めないので、透明の太い線を当たり判定にする
+    L.polyline(r.pts,{renderer:ovRenderer,color:HRT_COL,weight:16,opacity:0}).bindPopup(()=>hrtPop(r),{maxWidth:260}).addTo(hrtLayer);
+    if(r.dir!=='both'&&r.pts.length>1){   // 向きの矢印(線の 6 割の所)
+      const seg=[];let tot=0;
+      for(let i=0;i<r.pts.length-1;i++){const d=distNM({lat:r.pts[i][0],lng:r.pts[i][1]},{lat:r.pts[i+1][0],lng:r.pts[i+1][1]});seg.push(d);tot+=d}
+      let t=tot*.6,i=0;while(i<seg.length-1&&t>seg[i]){t-=seg[i];i++}
+      const a=r.pts[i],b=r.pts[i+1],f=seg[i]?t/seg[i]:0,p=[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f];
+      const br=Math.atan2((b[1]-a[1])*Math.cos(a[0]*Math.PI/180),b[0]-a[0])*180/Math.PI;
+      L.marker(p,{interactive:false,icon:L.divIcon({className:'',iconSize:null,iconAnchor:[7,7],
+        html:`<div style="width:14px;height:14px;transform:rotate(${br}deg);color:${HRT_COL};font-size:14px;line-height:14px;text-align:center;text-shadow:0 0 2px #0d1b2a,0 0 2px #0d1b2a">▲</div>`})}).addTo(hrtLayer);
+    }
+  });
+}
+document.getElementById('btnHrt').onclick=async function(){
+  hrtOn=!hrtOn;this.classList.toggle('on',hrtOn);
+  if(hrtOn){await loadHrt();hrtLayer.addTo(map)}else map.removeLayer(hrtLayer);
+  drawHrt();restackOverlays();
 };
 document.getElementById('btnHpad').onclick=async function(){
   hpadOn=!hpadOn;this.classList.toggle('on',hpadOn);
@@ -8625,7 +8673,7 @@ function fixLogHead(){
    開き直すと ACA/TCA(hnav.aca)以外のボタンが全部オフに戻っていた。地図右のレイヤーの ON/OFF を hnav.layers に保存し、
    起動時にボタンを押して戻す。⚠ 「敵を置く」(操作)と「TRK UP」(T/O で自動)は対象外。GPS・ベース地図は別に扱っている */
 const LAYER_KEEP=['btnAsp','btnRes','btnTra','btnHat','btnCiv','btnSup','btnNuke','btnDid','btnThr','btnThrComp','btnThrRte',
-  'btnRing','btnLos','btnShade','btnEmerRte','btnAp','btnNav','btnFix','btnFixR','btnAwy','btnIls','btnHp','btnHpad','btnObst',
+  'btnRing','btnLos','btnShade','btnEmerRte','btnAp','btnNav','btnFix','btnFixR','btnAwy','btnIls','btnHp','btnHrt','btnHpad','btnObst',
   'btnPwln','btnJsdf','btnTfc2','btnRain','btnNtmMap','btnDips'];
 function layerSave(){
   const o={};
