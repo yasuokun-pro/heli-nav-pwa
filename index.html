@@ -1156,7 +1156,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-229';
+const VER_TAG='v6-230';
 const BUILD='2026-10-16';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2544,7 +2544,8 @@ function vrepPop(p,mk){
   const a=ASP.find(z=>z.icao===p.icao);
   const el=document.createElement('div');el.className='apPop';
   el.innerHTML=`<h5 style="color:${VREP_COL}">◉ ${p.n}</h5>`+
-    `<div style="font-size:11px;color:var(--dim)">${a?a.n:''} ${p.icao} の目視位置通報点</div><dl>`+
+    `<div style="font-size:11px;color:var(--dim)">${a?a.n:''} ${p.icao} の目視位置通報点`+
+    (p.also?`(${p.also.map(ic=>{const b=ASP.find(z=>z.icao===ic);return (b?b.n+' ':'')+ic}).join('・')} と共用)`:'')+`</div><dl>`+
     (p.rmk?`<dt>目標</dt><dd style="white-space:normal">${p.rmk}</dd>`:'')+
     `<dt>ARPから</dt><dd>${fmt3(p.brg)}°T / ${p.nm.toFixed(1)}NM</dd>`+
     `<dt>位置</dt><dd>${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}</dd></dl>`+
