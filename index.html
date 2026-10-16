@@ -678,6 +678,9 @@
   .apPop .adProc div{margin-top:3px;white-space:normal;line-height:1.45}
   .apPop .adProc b{color:var(--amb)}
   .apPop .adProc b.fw{color:var(--cyn)}
+  .vrep-ico{display:flex;align-items:center;gap:3px;white-space:nowrap;pointer-events:auto}
+  .vrep-ico svg{flex:none}
+  .vrep-ico span{font:600 10px var(--mono);color:#5fe0a0;text-shadow:0 0 2px #0d1b2a,0 0 2px #0d1b2a,0 0 3px #0d1b2a}
   .apPop .note{color:var(--dim);font-size:10px;margin-top:4px}
   /* 臨時空域は文言が長いので幅と高さを抑える */
   .supPop{max-width:240px;max-height:190px;overflow:auto}
@@ -826,6 +829,7 @@
         <button id="btnNav">NAV</button>
         <button id="btnFix" title="重要地点(AIP ENR 4.3)のうち navaid の方位/距離で評定できる点。▲義務位置通報点 △任意">FIX</button>
         <button id="btnFixR" title="RNAV専用の重要地点(navaidでの評定なし。GNSS/RNAV装置が要る)">RNAV点</button>
+        <button id="btnVrep" title="VFR の目視位置通報点(AIP AD 2.24 Visual REP)。ARP からの真方位・距離の表から計算した位置">通報点</button>
         <button id="btnAwy" title="航空路(AIP ENR 3.1 下層ATSルート / ENR 3.3 RNAV経路)">航空路</button>
         <button id="btnIls" title="ILS の最終進入経路(AIP AD 2.19)。滑走路末端から10NM、1NMごとに GP 上の高さの目安">ILS</button>
         <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AIP AD 1.4)と滑空場(ENR 5.5.1)">ヘリポート</button>
@@ -1152,7 +1156,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-227';
+const VER_TAG='v6-228';
 const BUILD='2026-10-16';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2507,6 +2511,56 @@ document.getElementById('btnFixR').onclick=async function(){
 //   このレイヤーのポップアップが開いている間は描き直さない(閉じた次の移動で追いつく)
 function popupOn(layer){const p=map._popup;return !!(p&&p.isOpen()&&p._source&&layer.hasLayer(p._source))}
 map.on('moveend zoomend',()=>{if((fixOn||fixrOn)&&!popupOn(fixLayer))drawFix()});
+
+/* ── VFR の目視位置通報点(v6-228・ユーザー要望) ──
+   vrep.json(tools/gen_vrep.py)= AIP AD 2.24 / AD 3.23 の Visual REP の図の下の表「呼び名 / ARP からの真方位・距離 / 備考」から
+   位置を計算したもの(80飛行場・507点)。⚠ 距離 0.1NM・方位 1° の丸めで最大 200m 程度ずれる。和名は AIP の図の文字化けで取れず英名だけ。
+   FIX と同じく画面内だけ描く(ズーム9以上・名前は11以上) */
+let VREP=null,vrepOn=false;
+const vrepLayer=L.layerGroup(),VREP_COL='#5fe0a0';
+async function loadVrep(){
+  if(VREP)return VREP;
+  try{const r=await fetch('vrep.json?v='+VER_TAG);VREP=await r.json()}catch(e){VREP={f:[]}}
+  return VREP;
+}
+function vrepPop(p,mk){
+  const a=ASP.find(z=>z.icao===p.icao);
+  const el=document.createElement('div');el.className='apPop';
+  el.innerHTML=`<h5 style="color:${VREP_COL}">◉ ${p.n}</h5>`+
+    `<div style="font-size:11px;color:var(--dim)">${a?a.n:''} ${p.icao} の目視位置通報点</div><dl>`+
+    (p.rmk?`<dt>目標</dt><dd style="white-space:normal">${p.rmk}</dd>`:'')+
+    `<dt>ARPから</dt><dd>${fmt3(p.brg)}°T / ${p.nm.toFixed(1)}NM</dd>`+
+    `<dt>位置</dt><dd>${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}</dd></dl>`+
+    `<div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>`+
+    `<div class="note">AIP AD 2.24 Visual REP の表(ARP からの真方位・距離)から計算した位置。丸めで最大 200m 程度ずれる。図で確認</div>`;
+  const nm=`${p.n}(${p.icao})`;
+  el.querySelector('.apDct').onclick=()=>{setDct({name:nm,lat:p.lat,lng:p.lng,isWp:false});mk.closePopup()};
+  el.querySelector('.add').onclick=()=>{pushUndo();addWp(p.lat,p.lng,nm);redraw();mk.closePopup()};
+  return el;
+}
+function drawVrep(){
+  vrepLayer.clearLayers();
+  if(!vrepOn||!VREP)return;
+  const z=map.getZoom();
+  if(z<9){
+    vrepLayer.addLayer(L.marker(map.getCenter(),{interactive:false,icon:L.divIcon({className:'',
+      html:'<div class="fix-ico" style="background:rgba(13,26,41,.9);padding:3px 7px;border-radius:4px">通報点: ズーム9以上で表示</div>',iconAnchor:[70,8]})}));
+    return;
+  }
+  const [s,n,w,e]=viewBox(),lab=z>=11;
+  VREP.f.filter(p=>p.lat>=s&&p.lat<=n&&p.lng>=w&&p.lng<=e).slice(0,300).forEach(p=>{
+    const mk=L.marker([p.lat,p.lng],{bubblingMouseEvents:false,icon:L.divIcon({className:'',iconSize:null,iconAnchor:[7,7],
+      html:`<div class="vrep-ico"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.6" fill="#0d1b2a" stroke="${VREP_COL}" stroke-width="1.8"/><circle cx="7" cy="7" r="2" fill="${VREP_COL}"/></svg>`+
+        (lab?`<span>${p.n}</span>`:'')+`</div>`})});
+    mk.bindPopup(()=>vrepPop(p,mk));mk.addTo(vrepLayer);
+  });
+}
+document.getElementById('btnVrep').onclick=async function(){
+  vrepOn=!vrepOn;this.classList.toggle('on',vrepOn);
+  if(vrepOn){await loadVrep();vrepLayer.addTo(map)}else map.removeLayer(vrepLayer);
+  drawVrep();
+};
+map.on('moveend zoomend',()=>{if(vrepOn&&!popupOn(vrepLayer))drawVrep()});
 
 /* ── 航空路レイヤー(AIP ENR 3.1 下層ATSルート71本 + ENR 3.3 RNAV経路296本 + ENR 3.5.1 直行経路226本・tools/gen_awy.py → awy.json) ──
    線はCanvas(ovRenderer)で画面内(3割の余白つき)の区間だけ。下層ATS=アンバー実線、RNAV=シアン破線、直行経路=緑の点線。
@@ -8673,7 +8727,7 @@ function fixLogHead(){
    開き直すと ACA/TCA(hnav.aca)以外のボタンが全部オフに戻っていた。地図右のレイヤーの ON/OFF を hnav.layers に保存し、
    起動時にボタンを押して戻す。⚠ 「敵を置く」(操作)と「TRK UP」(T/O で自動)は対象外。GPS・ベース地図は別に扱っている */
 const LAYER_KEEP=['btnAsp','btnRes','btnTra','btnHat','btnCiv','btnSup','btnNuke','btnDid','btnThr','btnThrComp','btnThrRte',
-  'btnRing','btnLos','btnShade','btnEmerRte','btnAp','btnNav','btnFix','btnFixR','btnAwy','btnIls','btnHp','btnHrt','btnHpad','btnObst',
+  'btnRing','btnLos','btnShade','btnEmerRte','btnAp','btnNav','btnFix','btnFixR','btnAwy','btnVrep','btnIls','btnHp','btnHrt','btnHpad','btnObst',
   'btnPwln','btnJsdf','btnTfc2','btnRain','btnNtmMap','btnDips'];
 function layerSave(){
   const o={};
