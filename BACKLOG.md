@@ -17,8 +17,8 @@ CLAUDE.mdから分離した「進行中・未着手タスク」。着手する�
    - 差分(PERMDELTA/新しい BASELINE)を全件に当てる処理を作る(今は初回全件だけで動いている)
    - `aixm_extract.py` → 各 `gen_*_aixm.py --at 2026-10-29` で作り直し、`aixm_compare.py` / `aixm_ifr_compare.py` で前の版と差を見る
    - PDF 側の AIRAC 更新(SID/STAR・進入方式・PCA・TCA など AIXM に無いもの)は従来どおり(下の「AIRAC更新」)
-3. **AIXM の誤りの修正要望**(任意) — `tools/aixm_issues.md` に4件と文案あり(下総 ILS→宇都宮、三沢 ILS→新田原、羽田の移設末端なし、川口付近の 1,663ft 障害物)。
-   送るときは原口さん(航空情報センター)とのやり取りの続きで下書きを作る
+3. ~~AIXM の誤りの修正要望~~ **送信済み(2026-10-16)**: 原口さん(Cc cab-swim-aisc)へ、AIP データ配信の申請スレッドの続きで。
+   下総 ILS→宇都宮・三沢 ILS→新田原・羽田の DISTHR なし・川口の 1,663ft 障害物・民訓の連絡先が無いこと(障害物の重複273件は送る前に削除)。返事を待つ
 4. ~~民訓の連絡先が無い12区画~~ **済(v6-220)**: `gen_civ_aixm.py` が ENR 5.3.1 の表を罫線で読む(pdfplumber)ようにして156区画全部 PDF の値に。
    ついでに前の版の誤り(KS12-2・TH12-3・TH13-4-7〜10・TH2-3〜2-5・CK1-5・KK2-4・KS3-4-5・KS3-8・KS4-6・HK2 の Hidaka APP 抜け)も直った
 5. ~~TCA を AIXM で~~ **調べた(2026-10-15)**: AIXM の TCA は AirTrafficControlService(type OTHER:TCA・192件)の**呼出符号と周波数だけ**で、
