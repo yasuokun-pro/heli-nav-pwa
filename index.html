@@ -1150,8 +1150,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-220';
-const BUILD='2026-10-15';
+const VER_TAG='v6-221';
+const BUILD='2026-10-16';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -2356,21 +2356,22 @@ function drawObst(){
   inview.sort((x,y)=>y[2]-x[2]); // 標高が高いものを優先
   // ⚠ v6-219 から AIXM の AREA2(飛行場周辺・100ft以上)も入る。低いので標高順だと押し出される。拡大したら多めに出す
   const z=map.getZoom(),lim=z>=13?600:z>=12?350:200;
-  inview.slice(0,lim).forEach(o=>{
-    const[lat,lng,elev,hgt,ti,lit,ar]=o;
-    const ty=(OBST.types&&OBST.types[ti])||'OBSTACLE',a2=ar===2,col=a2?'#ffb070':'#ffd24d';
-    L.circleMarker([lat,lng],{renderer:obstRenderer,radius:a2?2.8:3.5,color:col,weight:1.5,
+  inview.slice(0,lim).forEach(o=>obstMarker(o).addTo(obstLayer));
+}
+function obstMarker(o){
+  const[lat,lng,elev,hgt,ti,lit,ar]=o;
+  const ty=(OBST.types&&OBST.types[ti])||'OBSTACLE',a2=ar===2,col=a2?'#ffb070':'#ffd24d';
+  return L.circleMarker([lat,lng],{renderer:obstRenderer,radius:a2?2.8:3.5,color:col,weight:1.5,
       fillColor:col,fillOpacity:a2?.35:.55})
-      .bindTooltip(`${OBST_GLYPH[ti]||'▲'} ${OBST_JP[ty]||ty} ${elev}ft(AMSL) / 高${hgt}ft${lit?' 灯火有':''}${a2?' ・飛行場周辺(AREA2)':''}`,
-        {direction:'top',sticky:true})
-      .addTo(obstLayer);
-  });
+    .bindTooltip(`${OBST_GLYPH[ti]||'▲'} ${OBST_JP[ty]||ty} ${elev}ft(AMSL) / 高${hgt}ft${lit?' 灯火有':''}${a2?' ・飛行場周辺(AREA2)':''}`,
+      {direction:'top',sticky:true});
 }
 document.getElementById('btnObst').onclick=async function(){
+  nearReset();   // ⚠ 同じマーカーを近傍の組に入れているので、先に外す
   obstOn=!obstOn;this.classList.toggle('on',obstOn);
   if(obstOn){await loadObst();obstLayer.addTo(map)}else map.removeLayer(obstLayer);
   restackOverlays();
-  drawObst();
+  drawObst();nearUpdate(true);
 };
 map.on('moveend zoomend',()=>{if(obstOn){drawObst();restackOverlays()}});
 
@@ -2578,8 +2579,11 @@ const ILS_FW=0.32;          // 片側の幅(NM)
 function drawIls(){
   ilsLayer.clearLayers();
   if(!ilsOn||!ILS)return;
-  const z=map.getZoom();
-  ILS.ils.forEach(o=>{
+  drawIlsInto(ilsLayer,ILS.ils);
+}
+function drawIlsInto(layer,list){   // 自機の近く(nearUpdate)でも同じ描き方を使う
+  const ilsLayer=layer,z=map.getZoom();
+  list.forEach(o=>{
     const back=(o.crs+180)%360,rt=(o.crs+90)%360,lt=(o.crs+270)%360;   // 右・左は進入機から見て
     // 中心線上 d NM・横に w NM(+は進入機の右)の点
     const Q=(d,w)=>{const c=destLL(o.thr[0],o.thr[1],back,d);if(!w)return [c.lat,c.lng];const q=destLL(c.lat,c.lng,w>0?rt:lt,Math.abs(w));return [q.lat,q.lng]};
@@ -2613,9 +2617,10 @@ function drawIls(){
   });
 }
 document.getElementById('btnIls').onclick=async function(){
+  nearReset();   // ⚠ 同じマーカーを近傍の組に入れているので、先に外す
   ilsOn=!ilsOn;this.classList.toggle('on',ilsOn);
   if(ilsOn){await loadIls();ilsLayer.addTo(map)}else map.removeLayer(ilsLayer);
-  drawIls();restackOverlays();
+  drawIls();restackOverlays();nearUpdate(true);
 };
 map.on('zoomend',()=>{if(ilsOn&&!popupOn(ilsLayer))drawIls()});
 
@@ -2688,7 +2693,7 @@ async function loadJsdf(){
     };
     // 外形があれば描く。外形の有無にかかわらずピンは必ず立てる(一目で分かるように)
     if(f.p&&f.p.length>3)
-      L.polygon(f.p,{renderer:jsdfRenderer,color:col,weight:2,
+      f._pg=L.polygon(f.p,{renderer:jsdfRenderer,color:col,weight:2,
         fillColor:col,fillOpacity:.18}).bindPopup(pop).addTo(jsdfLayer);
     f._m=L.marker([f.lat,f.lng],{icon:jsIcon(f,false)}).bindPopup(pop).addTo(jsdfLayer);
   });
@@ -2714,12 +2719,13 @@ function jsRelabel(){ // 名称は拡大時だけ(全国324件を常時出すと
 }
 map.on('zoomend',()=>{if(jsdfOn)jsRelabel()});
 document.getElementById('btnJsdf').onclick=async function(){
+  nearReset();   // ⚠ 同じマーカーを近傍の組に入れているので、先に外す
   jsdfOn=!jsdfOn;this.classList.toggle('on',jsdfOn);
   if(jsdfOn){await loadJsdf();jsdfLayer.addTo(map)}else map.removeLayer(jsdfLayer);
   // ODbLは出典表示が条件なので、表示中は地図のクレジットにも出す
   const ac=map.attributionControl,cr='&copy; OpenStreetMap contributors / ウィキペディア';
   if(ac)jsdfOn?ac.addAttribution(cr):ac.removeAttribution(cr);
-  restackOverlays();
+  restackOverlays();nearUpdate(true);
 };
 
 /* ── 原子力施設レイヤー(AIP ENR 5.3.2.4) ──
@@ -3128,7 +3134,7 @@ async function loadHp(){
   try{const r=await fetch('hp.json?v='+VER_TAG);HP=await r.json()}catch(e){HP={f:[]}}
   HP.f.forEach(x=>{
     const s=HP_T[x.t]||HP_T.H;
-    L.marker([x.lat,x.lng],{icon:L.divIcon({className:'',iconSize:null,iconAnchor:[9,9],
+    x._m=L.marker([x.lat,x.lng],{icon:L.divIcon({className:'',iconSize:null,iconAnchor:[9,9],
       html:`<div class="hp-ico">${hpSvg(x.t,s.c,false)}`+
            `<span style="color:${s.c}">${x.n||''}</span></div>`})})
       .bindPopup(()=>{
@@ -3156,9 +3162,10 @@ async function loadHp(){
   return HP;
 }
 document.getElementById('btnHp').onclick=async function(){
+  nearReset();   // ⚠ 同じマーカーを近傍の組に入れているので、先に外す
   hpOn=!hpOn;this.classList.toggle('on',hpOn);
   if(hpOn){await loadHp();hpLayer.addTo(map)}else map.removeLayer(hpLayer);
-  restackOverlays();
+  restackOverlays();nearUpdate(true);
 };
 document.getElementById('btnHpad').onclick=async function(){
   hpadOn=!hpadOn;this.classList.toggle('on',hpadOn);
@@ -4924,6 +4931,60 @@ document.getElementById('btnRain').onclick=async function(){
 
 /* ───────── GPS / 追尾(自機中心+進行方向上) ───────── */
 let ownPos=null,ownMarker=null,gpsWatch=null,follow=false,ownAltFt=null;
+/* ── 自機の近くは非表示のレイヤーでも出す(v6-221・ユーザー要望) ──
+   ILS・ヘリポート 5NM / 自衛隊施設 3NM / 障害物 3NM かつ頂部(MSL)が自機の高度−500ft 以上。
+   ボタンが ON のレイヤーは普段どおり全部描くので対象外。GPS が OFF なら何も出さない。
+   ⚠ ヘリポート・自衛隊はレイヤーと**同じマーカー**を near の組に入れる。ボタンを切り替える前に nearReset() で外すこと
+     (外さずにレイヤーを足してから near を消すと、マーカーごと地図から消える)
+   ⚠ 障害物の高度は GPS 高度(気圧高度と100ft 以上ずれる)。高度が取れなければ高さで絞らない */
+const NEAR_NM={ils:5,hp:5,jsdf:3,obst:3},NEAR_OBST_DALT=500;
+const nearG={ils:L.layerGroup(),hp:L.layerGroup(),jsdf:L.layerGroup(),obst:L.layerGroup()};
+let nearAt=null,nearBusy=false;
+function nearReset(){Object.values(nearG).forEach(g=>{g.clearLayers();map.removeLayer(g)});nearAt=null}
+function segDistNM(p,a,b){   // 点 p から線分 ab まで(局所平面・NM)
+  const k=Math.cos(p.lat*Math.PI/180),X=q=>(q.lng-p.lng)*60*k,Y=q=>(q.lat-p.lat)*60;
+  const ax=X(a),ay=Y(a),bx=X(b),by=Y(b),dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy;
+  const t=L2?Math.max(0,Math.min(1,-(ax*dx+ay*dy)/L2)):0;
+  return Math.hypot(ax+t*dx,ay+t*dy);
+}
+async function nearUpdate(force){
+  if(!ownPos){nearReset();return}
+  const now=Date.now();
+  if(!force&&nearAt&&distNM(nearAt,ownPos)<0.1&&Math.abs((nearAt.alt??0)-(ownAltFt??0))<100&&now-nearAt.t<15000)return;
+  if(nearBusy)return;
+  if(nearAt&&Object.values(nearG).some(popupOn))return;   // 吹き出しを開いている間は描き直さない(閉じてしまう)
+  nearBusy=true;
+  try{
+    nearAt={lat:ownPos.lat,lng:ownPos.lng,alt:ownAltFt,t:now};
+    await Promise.all([ilsOn?0:loadIls(),hpOn?0:loadHp(),jsdfOn?0:loadJsdf(),obstOn?0:loadObst()]);
+    if(!ownPos)return;
+    const P=ownPos,near=(x,nm)=>distNM(P,{lat:x.lat,lng:x.lng})<=nm;
+    Object.values(nearG).forEach(g=>g.clearLayers());
+    if(!ilsOn&&ILS){
+      const list=ILS.ils.filter(o=>{const f=destLL(o.thr[0],o.thr[1],(o.crs+180)%360,ILS_NM);
+        return segDistNM(P,{lat:o.thr[0],lng:o.thr[1]},f)<=NEAR_NM.ils});
+      drawIlsInto(nearG.ils,list);
+    }
+    if(!hpOn&&HP)HP.f.forEach(x=>{if(x._m&&near(x,NEAR_NM.hp))nearG.hp.addLayer(x._m)});
+    if(!jsdfOn&&JSDF)JSDF.f.forEach(f=>{
+      let hit=near(f,NEAR_NM.jsdf);
+      if(!hit&&f.p&&f.p.length>3){   // 演習場は広いので敷地の外形からの距離も見る
+        hit=inArea(P.lat,P.lng,f.p);
+        for(let i=0;!hit&&i<f.p.length;i++){const a=f.p[i],b=f.p[(i+1)%f.p.length];
+          hit=segDistNM(P,{lat:a[0],lng:a[1]},{lat:b[0],lng:b[1]})<=NEAR_NM.jsdf}
+      }
+      if(hit){if(f._pg)nearG.jsdf.addLayer(f._pg);if(f._m)nearG.jsdf.addLayer(f._m)}
+    });
+    if(!obstOn&&OBST){
+      const k=Math.cos(P.lat*Math.PI/180),dl=NEAR_NM.obst/60,dg=dl/k,lo=ownAltFt==null?-1e9:ownAltFt-NEAR_OBST_DALT;
+      OBST.o.filter(o=>Math.abs(o[0]-P.lat)<=dl&&Math.abs(o[1]-P.lng)<=dg&&o[2]>=lo&&distNM(P,{lat:o[0],lng:o[1]})<=NEAR_NM.obst)
+        .sort((x,y)=>y[2]-x[2]).slice(0,400).forEach(o=>obstMarker(o).addTo(nearG.obst));
+    }
+    Object.entries(nearG).forEach(([key,g])=>{if(g.getLayers().length)g.addTo(map);else map.removeLayer(g)});
+    if(nearG.jsdf.getLayers().length)jsRelabel();
+  }finally{nearBusy=false}
+}
+map.on('zoomend',()=>{if(ownPos)nearUpdate(true)});   // ILS の目盛りはズームで描き分ける
 /* トラックアップ(進行方向を上にする)。leaflet-rotate の setBearing で地図ごと回す。
    ⚠ 向きの元は3段構え: ①GPSの対地トラック(3kt以上で動いているとき) ②自機→次ポイントの真方位
      ③直前のレグの真方位。**止まっている間はGPSのheadingがnullになる**ので②③が要る。
@@ -4990,6 +5051,7 @@ document.getElementById('btnGPS').onclick=function(){
     ownPos=null;ownSpdKt=null;ownAltFt=null;ownHdg=null;setFollow(false);
     if(ownMarker){map.removeLayer(ownMarker);ownMarker=null}
     if(ringOn)drawRing(); if(losOn)drawLos();
+    nearUpdate(true);
     this.classList.remove('on');renderLiveGs();redraw();return}
   if(!navigator.geolocation){alert('この環境では位置情報が使えません。');return}
   let firstFix=true;
@@ -5010,6 +5072,7 @@ document.getElementById('btnGPS').onclick=function(){
     trackRecord(); // 飛行中ならGPS軌跡を記録
     if(losOn){drawLos();updZmScale()}   // 自機の見通し円を実高度で追従させる
     if(ringOn)drawRing();
+    nearUpdate();                       // 非表示のレイヤーでも自機の近くのもの(ILS・ヘリポート・自衛隊・障害物)は出す
     shadeMaybe();                       // 0.5NM以上動いたら遮蔽を引き直す
     if(thrOn){                          // 脅威の露出判定。高度が300ft変わったら塗り直す
       if(Math.abs(thrMyAltFt()-(thrPaintedFt||0))>300)thrRefresh(false);
