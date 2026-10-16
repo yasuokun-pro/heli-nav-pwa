@@ -1150,7 +1150,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-223';
+const VER_TAG='v6-224';
 const BUILD='2026-10-16';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2355,14 +2355,28 @@ function drawObst(){
   inview.sort((x,y)=>y[2]-x[2]); // 標高が高いものを優先
   // ⚠ v6-219 から AIXM の AREA2(飛行場周辺・100ft以上)も入る。低いので標高順だと押し出される。拡大したら多めに出す
   const z=map.getZoom(),lim=z>=13?600:z>=12?350:200;
-  inview.slice(0,lim).forEach(o=>obstMarker(o).addTo(obstLayer));
+  const sh=inview.slice(0,lim).map(o=>[o,obstLv(o)]);
+  sh.sort((x,y)=>x[1]-y[1]).forEach(([o,lv])=>obstMarker(o,lv).addTo(obstLayer));   // 赤・紫は上に
 }
-function obstMarker(o){
+/* 自機との高度差で色を変える(v6-224・ユーザー要望): 頂部が自機の高度の 300ft 下より高い=赤、100ft 下より高い(自機より高いものを含む)=紫。
+   対象は自機から3NM(NEAR_NM.obst)以内だけ。GPS 高度が取れないときは色を変えない。
+   ⚠ GPS 高度は気圧高度と100ft 以上ずれることがある。目安 */
+const OBST_LV_FT=[300,100],OBST_LV_COL=['','#ff5c5c','#a855f7'];
+function obstLv(o){
+  if(!ownPos||ownAltFt==null)return 0;
+  if(distNM(ownPos,{lat:o[0],lng:o[1]})>NEAR_NM.obst)return 0;
+  const m=ownAltFt-o[2];
+  return m<=OBST_LV_FT[1]?2:m<=OBST_LV_FT[0]?1:0;
+}
+function obstMarker(o,lv){
   const[lat,lng,elev,hgt,ti,lit,ar]=o;
-  const ty=(OBST.types&&OBST.types[ti])||'OBSTACLE',a2=ar===2,col=a2?'#ffb070':'#ffd24d';
-  return L.circleMarker([lat,lng],{renderer:obstRenderer,radius:a2?2.8:3.5,color:col,weight:1.5,
-      fillColor:col,fillOpacity:a2?.35:.55})
-    .bindTooltip(`${OBST_GLYPH[ti]||'▲'} ${OBST_JP[ty]||ty} ${elev}ft(AMSL) / 高${hgt}ft${lit?' 灯火有':''}${a2?' ・飛行場周辺(AREA2)':''}`,
+  if(lv===undefined)lv=obstLv(o);
+  const ty=(OBST.types&&OBST.types[ti])||'OBSTACLE',a2=ar===2,col=lv?OBST_LV_COL[lv]:a2?'#ffb070':'#ffd24d';
+  const d=lv&&ownAltFt!=null?Math.round(elev-ownAltFt):null;
+  return L.circleMarker([lat,lng],{renderer:obstRenderer,radius:lv?5.5:a2?2.8:3.5,color:lv?'#fff':col,weight:lv?1.5:1.5,
+      fillColor:col,fillOpacity:lv?.9:a2?.35:.55})
+    .bindTooltip(`${OBST_GLYPH[ti]||'▲'} ${OBST_JP[ty]||ty} ${elev}ft(AMSL) / 高${hgt}ft${lit?' 灯火有':''}${a2?' ・飛行場周辺(AREA2)':''}`+
+      (d!=null?`<br><b style="color:${col}">自機(GPS高度)より ${d>=0?d+'ft 高い':(-d)+'ft 低い'}</b>`:''),
       {direction:'top',sticky:true});
 }
 document.getElementById('btnObst').onclick=async function(){
@@ -4961,7 +4975,7 @@ function polyNearNM(P,pts,nm){   // 多角形(外周+穴のリングでも可)�
 async function nearUpdate(force){
   if(!ownPos){nearReset();return}
   const now=Date.now();
-  if(!force&&nearAt&&distNM(nearAt,ownPos)<0.1&&Math.abs((nearAt.alt??0)-(ownAltFt??0))<100&&now-nearAt.t<15000)return;
+  if(!force&&nearAt&&distNM(nearAt,ownPos)<0.1&&Math.abs((nearAt.alt??0)-(ownAltFt??0))<50&&now-nearAt.t<15000)return;   // 障害物の色(100/300ft)のため高度は50ft
   if(nearBusy)return;
   if(nearAt&&Object.values(nearG).some(popupOn))return;   // 吹き出しを開いている間は描き直さない(閉じてしまう)
   nearBusy=true;
@@ -4993,8 +5007,9 @@ async function nearUpdate(force){
     if(!obstOn&&OBST){
       const k=Math.cos(P.lat*Math.PI/180),dl=NEAR_NM.obst/60,dg=dl/k,lo=ownAltFt==null?-1e9:ownAltFt-NEAR_OBST_DALT;
       OBST.o.filter(o=>Math.abs(o[0]-P.lat)<=dl&&Math.abs(o[1]-P.lng)<=dg&&o[2]>=lo&&distNM(P,{lat:o[0],lng:o[1]})<=NEAR_NM.obst)
-        .sort((x,y)=>y[2]-x[2]).slice(0,400).forEach(o=>obstMarker(o).addTo(nearG.obst));
+        .sort((x,y)=>y[2]-x[2]).slice(0,400).map(o=>[o,obstLv(o)]).sort((x,y)=>x[1]-y[1]).forEach(([o,lv])=>obstMarker(o,lv).addTo(nearG.obst));
     }
+    if(obstOn&&OBST)drawObst();   // レイヤー ON のときも自機との高度差で色を付け直す
     Object.entries(nearG).forEach(([key,g])=>{if(g.getLayers().length)g.addTo(map);else map.removeLayer(g)});
     if(nearG.jsdf.getLayers().length)jsRelabel();
     if(nearG.nuke.getLayers().length)nkRelabel();
