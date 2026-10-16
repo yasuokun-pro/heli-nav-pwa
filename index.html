@@ -1150,7 +1150,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-222';
+const VER_TAG='v6-223';
 const BUILD='2026-10-16';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2219,11 +2219,9 @@ const ASP_POLY_ICAO=new Set(ASP_POLY.flatMap(x=>[x.icao,...(x.alias||[])])); // 
 ASP.forEach(a=>{
   if(a.poly||a.t==='ap'||ASP_POLY_ICAO.has(a.icao))return; // AIP形状済み・圏なしは概略円を描かない
   const ctr=a.t==='ctr';
-  L.circle([a.lat,a.lng],{
-    renderer:aspRenderer,
-    radius:(a.r||9)*1000,
-    color:ctr?'#4da3ff':'#ffb02e',
-    weight:1.6,dashArray:ctr?null:'6 5',
+  a._asp=L.circle([a.lat,a.lng],{
+    renderer:aspRenderer,radius:(a.r||9)*1000,
+    color:ctr?'#4da3ff':'#ffb02e',weight:1.6,dashArray:ctr?null:'6 5',
     fillColor:ctr?'#4da3ff':'#ffb02e',fillOpacity:.07
   }).bindPopup(`<div style="font-family:var(--mono);font-size:12px"><b>${a.n}</b><br>`+
     `${ctr?'管制圏':'情報圏'}(※概略 半径${a.r||9}km)</div>`)
@@ -2247,7 +2245,7 @@ const ASP_TNAME={ctr:'管制圏',inf:'情報圏',pca:'特別管制区'};
    ⚠ 判定(airspaceAt)も点列を前提にしないこと → aspHit() を通す */
 ASP_POLY.forEach(a=>{
   // タップで開閉するpopupに統一(bindTooltipはhover起動のためタッチ端末で開いてもすぐ閉じる不具合があった)
-  (a.c?L.circle(a.c,Object.assign({radius:a.r},ASP_STYLE[a.t]))
+  a._l=(a.c?L.circle(a.c,Object.assign({radius:a.r},ASP_STYLE[a.t]))
       :L.polygon(a.pts,ASP_STYLE[a.t])).bindPopup(
     `<div style="font-family:var(--mono)"><b>${a.n}</b><br>`+
     `${a.lo>0?a.lo:'SFC'}-${a.up>0?a.up+'ft'+(a.upAgl?'(地表から)':''):'AIP参照'} ${ASP_TNAME[a.t]}<br>`+
@@ -2256,10 +2254,11 @@ ASP_POLY.forEach(a=>{
 });
 let aspOn=false;
 document.getElementById('btnAsp').onclick=function(){
+  nearReset();   // ⚠ 同じ図形を近傍の組に入れているので、先に外す
   aspOn=!aspOn;
   this.classList.toggle('on',aspOn);
   if(aspOn)aspLayer.addTo(map);else map.removeLayer(aspLayer);
-  restackOverlays();
+  restackOverlays();nearUpdate(true);
 };
 
 /* ── nav aids レイヤー(全国 ENR 4.1・タップで情報表示) ── */
@@ -2758,7 +2757,7 @@ async function loadNuke(){
         pushUndo();addWp(c[0],c[1],nm);redraw();map.closePopup()};
       return el;
     };
-    L.polygon(f.pts,{renderer:nukeRenderer,color:NK_COL,weight:2,dashArray:'6 3',
+    f._pg=L.polygon(f.pts,{renderer:nukeRenderer,color:NK_COL,weight:2,dashArray:'6 3',
       fillColor:NK_COL,fillOpacity:.2}).bindPopup(pop).addTo(nukeLayer);
     const c=f.pts.reduce((a,p)=>[a[0]+p[0]/f.pts.length,a[1]+p[1]/f.pts.length],[0,0]);
     f._m=L.marker(c,{icon:nkIcon(f,false)}).bindPopup(pop).addTo(nukeLayer);
@@ -2784,9 +2783,10 @@ function nkRelabel(){
 }
 map.on('zoomend',()=>{if(nukeOn)nkRelabel()});
 document.getElementById('btnNuke').onclick=async function(){
+  nearReset();
   nukeOn=!nukeOn;this.classList.toggle('on',nukeOn);
   if(nukeOn){await loadNuke();nukeLayer.addTo(map)}else map.removeLayer(nukeLayer);
-  restackOverlays();
+  restackOverlays();nearUpdate(true);
 };
 
 /* ── DID(人口集中地区)レイヤー ──
@@ -4886,15 +4886,17 @@ ASP.forEach(a=>{
     loadMetar(); // 最新METARを取りに行き、取れたらスロットを差し替え
     return el;
   });
-  mk.addTo(apLayer);
+  mk.addTo(apLayer);a._m=mk;
 });
 }
 buildApLayer();
 let apOn=false;
 document.getElementById('btnAp').onclick=async function(){
+  nearReset();
   apOn=!apOn;
   this.classList.toggle('on',apOn);
   if(apOn){await loadAd();apLayer.addTo(map)}else map.removeLayer(apLayer);
+  nearUpdate(true);
 };
 
 /* ───────── rain(気象庁ナウキャスト優先・RainViewerフォールバック) ───────── */
@@ -4932,13 +4934,14 @@ document.getElementById('btnRain').onclick=async function(){
 /* ───────── GPS / 追尾(自機中心+進行方向上) ───────── */
 let ownPos=null,ownMarker=null,gpsWatch=null,follow=false,ownAltFt=null;
 /* ── 自機の近くは非表示のレイヤーでも出す(v6-221・ユーザー要望) ──
-   ILS・ヘリポート 5NM / 自衛隊施設 3NM / 障害物 3NM かつ頂部(MSL)が自機の高度−500ft 以上。
+   飛行場・ILS・管制圏(情報圏・特別管制区を含む) 15NM / ヘリポート・原子力施設 5NM / 自衛隊施設 3NM /
+   障害物 3NM かつ頂部(MSL)が自機の高度−500ft 以上(v6-223 で飛行場・管制圏・原子力を足し、ILS を 5→15NM)。
    ボタンが ON のレイヤーは普段どおり全部描くので対象外。GPS が OFF なら何も出さない。
-   ⚠ ヘリポート・自衛隊はレイヤーと**同じマーカー**を near の組に入れる。ボタンを切り替える前に nearReset() で外すこと
+   ⚠ 飛行場・管制圏・ヘリポート・自衛隊・原子力はレイヤーと**同じ図形**を near の組に入れる。ボタンを切り替える前に nearReset() で外すこと
      (外さずにレイヤーを足してから near を消すと、マーカーごと地図から消える)
    ⚠ 障害物の高度は GPS 高度(気圧高度と100ft 以上ずれる)。高度が取れなければ高さで絞らない */
-const NEAR_NM={ils:5,hp:5,jsdf:3,obst:3},NEAR_OBST_DALT=500;
-const nearG={ils:L.layerGroup(),hp:L.layerGroup(),jsdf:L.layerGroup(),obst:L.layerGroup()};
+const NEAR_NM={ap:15,ils:15,asp:15,hp:5,nuke:5,jsdf:3,obst:3},NEAR_OBST_DALT=500;
+const nearG=Object.fromEntries(Object.keys(NEAR_NM).map(k=>[k,L.layerGroup()]));
 let nearAt=null,nearBusy=false;
 function nearReset(){Object.values(nearG).forEach(g=>{g.clearLayers();map.removeLayer(g)});nearAt=null}
 function segDistNM(p,a,b){   // 点 p から線分 ab まで(局所平面・NM)
@@ -4946,6 +4949,14 @@ function segDistNM(p,a,b){   // 点 p から線分 ab まで(局所平面・NM)
   const ax=X(a),ay=Y(a),bx=X(b),by=Y(b),dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy;
   const t=L2?Math.max(0,Math.min(1,-(ax*dx+ay*dy)/L2)):0;
   return Math.hypot(ax+t*dx,ay+t*dy);
+}
+function polyNearNM(P,pts,nm){   // 多角形(外周+穴のリングでも可)の中か、辺から nm 以内か
+  if(!pts||!pts.length)return false;
+  if(inArea(P.lat,P.lng,pts))return true;
+  const ring=typeof pts[0][0]==='number'?pts:pts[0];
+  for(let i=0;i<ring.length;i++){const a=ring[i],b=ring[(i+1)%ring.length];
+    if(segDistNM(P,{lat:a[0],lng:a[1]},{lat:b[0],lng:b[1]})<=nm)return true}
+  return false;
 }
 async function nearUpdate(force){
   if(!ownPos){nearReset();return}
@@ -4956,7 +4967,8 @@ async function nearUpdate(force){
   nearBusy=true;
   try{
     nearAt={lat:ownPos.lat,lng:ownPos.lng,alt:ownAltFt,t:now};
-    await Promise.all([ilsOn?0:loadIls(),hpOn?0:loadHp(),jsdfOn?0:loadJsdf(),obstOn?0:loadObst()]);
+    await Promise.all([ilsOn?0:loadIls(),hpOn?0:loadHp(),jsdfOn?0:loadJsdf(),obstOn?0:loadObst(),
+      apOn?0:loadAd(),nukeOn?0:loadNuke()]);
     if(!ownPos)return;
     const P=ownPos,near=(x,nm)=>distNM(P,{lat:x.lat,lng:x.lng})<=nm;
     Object.values(nearG).forEach(g=>g.clearLayers());
@@ -4966,13 +4978,16 @@ async function nearUpdate(force){
       drawIlsInto(nearG.ils,list);
     }
     if(!hpOn&&HP)HP.f.forEach(x=>{if(x._m&&near(x,NEAR_NM.hp))nearG.hp.addLayer(x._m)});
+    if(!apOn)ASP.forEach(a=>{if(a._m&&near(a,NEAR_NM.ap))nearG.ap.addLayer(a._m)});
+    if(!aspOn){
+      ASP_POLY.forEach(a=>{if(!a._l)return;
+        const hit=a.c?distNM(P,{lat:a.c[0],lng:a.c[1]})-a.r/1852<=NEAR_NM.asp:polyNearNM(P,a.pts,NEAR_NM.asp);
+        if(hit)nearG.asp.addLayer(a._l)});
+      ASP.forEach(a=>{if(a._asp&&distNM(P,a)-(a.r||9)/1.852<=NEAR_NM.asp)nearG.asp.addLayer(a._asp)});
+    }
+    if(!nukeOn&&NUKE)NUKE.f.forEach(f=>{if(f._pg&&polyNearNM(P,f.pts,NEAR_NM.nuke)){nearG.nuke.addLayer(f._pg);if(f._m)nearG.nuke.addLayer(f._m)}});
     if(!jsdfOn&&JSDF)JSDF.f.forEach(f=>{
-      let hit=near(f,NEAR_NM.jsdf);
-      if(!hit&&f.p&&f.p.length>3){   // 演習場は広いので敷地の外形からの距離も見る
-        hit=inArea(P.lat,P.lng,f.p);
-        for(let i=0;!hit&&i<f.p.length;i++){const a=f.p[i],b=f.p[(i+1)%f.p.length];
-          hit=segDistNM(P,{lat:a[0],lng:a[1]},{lat:b[0],lng:b[1]})<=NEAR_NM.jsdf}
-      }
+      const hit=near(f,NEAR_NM.jsdf)||(f.p&&f.p.length>3&&polyNearNM(P,f.p,NEAR_NM.jsdf));   // 演習場は広いので敷地の外形からの距離も見る
       if(hit){if(f._pg)nearG.jsdf.addLayer(f._pg);if(f._m)nearG.jsdf.addLayer(f._m)}
     });
     if(!obstOn&&OBST){
@@ -4982,6 +4997,8 @@ async function nearUpdate(force){
     }
     Object.entries(nearG).forEach(([key,g])=>{if(g.getLayers().length)g.addTo(map);else map.removeLayer(g)});
     if(nearG.jsdf.getLayers().length)jsRelabel();
+    if(nearG.nuke.getLayers().length)nkRelabel();
+    if(nearG.asp.getLayers().length)nearG.asp.eachLayer(l=>l.bringToBack&&l.bringToBack());   // 空域は下に(上の点を隠さない)
   }finally{nearBusy=false}
 }
 map.on('zoomend',()=>{if(ownPos)nearUpdate(true)});   // ILS の目盛りはズームで描き分ける
