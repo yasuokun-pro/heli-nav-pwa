@@ -1351,6 +1351,8 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
   - 形式は前と同じ [lat,lng,elevFt,heightFt,typeIdx,light] に **7番目 2 = AREA2** を足した。種類に CATENARY(架線)・TREE(樹木)、STACK は CHIMNEY に
   - ⚠ CATENARY は**線ではなく点**(架線を支える位置)。送電線レイヤー(OSM)の代わりにはならない
   - 表示はズーム13以上で600件・12で350件(AREA2 は低いので標高順だと押し出される)。AREA2 は淡い橙で小さく、吹き出しに「飛行場周辺(AREA2)」
+  - **記号は三角(Λ)・灯火ありは頂点に光の線**(v6-229・ユーザー要望。NOTAM の点(丸・影響度の色)と見分けるため)。600個描くので divIcon にせず
+    `ObstMarker`(CircleMarker の描画だけ差し替え・`L.Canvas` に `_updateObstTri`)。⚠ Leaflet 1.9 の Canvas に `_drawnLayers` は無い(古い版の手本を写すと落ちる)
 - **TCA は AIXM に空域として無い**(2026-10-15 確認): AirTrafficControlService の type `OTHER:TCA`(呼出符号・周波数・clientAirport)だけ。ACA の業務も clientAirspace を持たない
 - **AIXM 側の誤りの控え**: `tools/aixm_issues.md`(下総 ILS→宇都宮の滑走路、三沢 ILS→新田原の滑走路、羽田の移設末端なし)。要望の文案つき
 - **⭐ ILS は v6-217 から AIXM 由来**: `tools/gen_ils_aixm.py --compare / --write` → `ils.json`(**85本**= AIXM 82 + PDF 版3)。
