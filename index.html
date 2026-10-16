@@ -677,6 +677,7 @@
   .apPop .adProc summary{color:var(--cyn);cursor:pointer}
   .apPop .adProc div{margin-top:3px;white-space:normal;line-height:1.45}
   .apPop .adProc b{color:var(--amb)}
+  .apPop .adProc b.fw{color:var(--cyn)}
   .apPop .note{color:var(--dim);font-size:10px;margin-top:4px}
   /* 臨時空域は文言が長いので幅と高さを抑える */
   .supPop{max-width:240px;max-height:190px;overflow:auto}
@@ -1150,7 +1151,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-224';
+const VER_TAG='v6-226';
 const BUILD='2026-10-16';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4853,10 +4854,10 @@ async function loadAd(){
       if(x.elev!==undefined)a.elev=x.elev;
       if(x.rwy)a.rwy=x.rwy;
       if(x.n&&/^[A-Za-z ]+$/.test(a.n||''))a.n=x.n;
-      a.hr=x.hr;a.tp=x.tp;a.heli=x.heli;a.vfr=x.vfr;
+      a.hr=x.hr;a.tpf=x.tpf;a.tpr=x.tpr;a.tpn=x.tpn;a.tps=x.tps;a.vfr=x.vfr;
     }else{                       // 圏を持たない飛行場は新規に足す
       ASP.push({n:x.n,icao:x.icao,t:'ap',lat:x.lat,lng:x.lng,
-                elev:x.elev,rwy:x.rwy,hr:x.hr,tp:x.tp,heli:x.heli,vfr:x.vfr,
+                elev:x.elev,rwy:x.rwy,hr:x.hr,tpf:x.tpf,tpr:x.tpr,tpn:x.tpn,tps:x.tps,vfr:x.vfr,
                 aip:1,src:x.src||''});
     }
   });
@@ -4865,6 +4866,11 @@ async function loadAd(){
 }
 
 const apLayer=L.layerGroup();
+/* 飛行場の吹き出しは METAR・場周経路で長い。上の諸元の帯の下に収まるよう、高さと autoPan の余白を先に決める
+   (⚠ 開いたあとに METAR の欄が差し替わると Leaflet が既定の余白で autoPan し直し、帯の下に潜っていた) */
+function apPopOpt(){const o=parseFloat(getComputedStyle(document.querySelector('.mapwrap')||document.body).getPropertyValue('--ovlH'))||0;
+  return {maxWidth:290,maxHeight:Math.max(220,innerHeight-o-44-90-10),
+    autoPanPaddingTopLeft:L.point(10,o+44),autoPanPaddingBottomRight:L.point(10,90)}}
 function buildApLayer(){
 apLayer.clearLayers();
 ASP.forEach(a=>{
@@ -4885,11 +4891,12 @@ ASP.forEach(a=>{
         ${a.vfr?`<dt>交通</dt><dd>${a.vfr}</dd>`:''}
         <dt>位置</dt><dd>${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}</dd>
       </dl>
-      ${(a.tp||a.heli)?`<details class="adProc"><summary>場周経路・進入方式(AIP原文)</summary>`+
-        (a.heli?`<div><b>回転翼機</b> ${a.heli}</div>`:'')+
-        (a.tp?`<div><b>Traffic pattern</b> ${a.tp}</div>`:'')+
-        `</details>`
-        :`<div class="note">場周経路は本文に記載なし → AD 2.24のチャート参照</div>`}
+      ${a.tps?`<details class="adProc" open><summary>場周経路 <small style="color:var(--dim)">AIP ${a.tps}</small></summary>`+
+        (a.tpr?`<div><b>🚁 回転翼</b> ${a.tpr.join('<br>')}</div>`:'')+
+        (a.tpf?`<div><b class="fw">✈ 固定翼</b> ${a.tpf.join('<br>')}</div>`:'')+
+        (a.tpn?`<div style="color:var(--dim)">${a.tpn}</div>`:'')+
+        `<div style="color:var(--dim)">AIP 本文の要約(場周経路の形は載っていない)。必ず原文で確認</div></details>`
+        :`<div class="note">場周経路は AIP の本文に記載なし → AD 2.24 のチャート参照</div>`}
       <div class="row"><button class="apDct">D→ ここへ</button><button class="add">ルートに追加</button></div>
       <div class="note">${a.src?`位置は${a.src}。AIPにAD2/AD3のページが無い飛行場`
         :(a.elev!==undefined||a.rwy)?'標高・滑走路はAIP AD 2.2/2.12'
@@ -4899,7 +4906,9 @@ ASP.forEach(a=>{
     el.querySelector('.add').onclick=()=>{pushUndo();addWp(a.lat,a.lng,a.icao);redraw();mk.closePopup()};
     loadMetar(); // 最新METARを取りに行き、取れたらスロットを差し替え
     return el;
-  });
+  },apPopOpt());
+  // ⚠ buildApLayer は起動直後(諸元の帯の高さ --ovlH がまだ 0)に呼ばれるので、開いたときに余白を計り直して当て直す
+  mk.on('popupopen',e=>{Object.assign(e.popup.options,apPopOpt());e.popup.update();ntmPopFit(e)});
   mk.addTo(apLayer);a._m=mk;
 });
 }

@@ -13,8 +13,8 @@
   ⚠ AIPにAD2/AD3のページが無い飛行場は当然ここには入らない。
     GEN 2.4(位置指示記号)にだけ載る滝ヶ原RJATなどは `EXTRA` で座標を直書きする。
 
-出力: ad.json {"eff":..,"f":[{icao,n,en,lat,lng,elev,rwy,vfr,hr,tp,heli},...]}
-  hr=ATSの運用時間(UTC) tp=場周経路の記述 heli=回転翼機の方式(抜粋)
+出力: ad.json {"eff":..,"f":[{icao,n,en,lat,lng,elev,rwy,vfr,hr,tpf,tpr,tpn,tps},...]}
+  hr=ATSの運用時間(UTC) tpf/tpr=場周経路 固定翼/回転翼(tp_spec.json) tpn=注記 tps=出典の項
 
   ⚠ **場周経路は本文に書いてある飛行場が少ない**(高度を明記しているのは7空港のみ)。
     大半は AD 2.24 の**チャートにしか無い**ので、本文が取れないものは
@@ -72,12 +72,20 @@ def dms(la, lo):
 
 
 def latest_dir():
+    # --airac YYYYMMDD でその版に固定(発効前の版を main で回さないため)
+    want = sys.argv[sys.argv.index('--airac') + 1] if '--airac' in sys.argv else None
     for pat in (AIP_ROOT + '/1_AIP (PDF)/*',
                 AIP_ROOT + '/1_AIP (PDF)/*'):
         d = sorted(glob.glob(os.path.expanduser(pat)))
-        d = [x for x in d if os.path.isdir(os.path.join(x, 'AD2_Combine'))]
+        d = [x for x in d if os.path.isdir(os.path.join(x, 'AD2_Combine')) and (not want or os.path.basename(x) == want)]
         if d: return d[-1]
     return None
+
+
+# 場周経路(固定翼/回転翼)は書き方が飛行場ごとにばらばらで機械では読めないので、AIP 本文から手で写した表を使う。
+# AIRAC のたびに chk の文字列が原文にまだあるかを照合し、無ければ警告する(改正で変わった可能性 → 表を直す)
+TP_SPEC = {k: v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tp_spec.json'))).items() if k != '_'}
+TP_WARN = []
 
 
 def parse(pdf, sec):
@@ -122,25 +130,17 @@ def parse(pdf, sec):
                 v = re.sub(r'\s{2,}', ' ', v)[:110]
                 if v and v.lower() != 'nil': r['hr'] = v; break
 
-    # 場周経路: AD 2.20〜2.22 の英文側だけを拾う(和英2段組なのでASCII列を取る)
-    sec20 = re.search(r'AD %s\.20 (.*?)(?:AD %s\.23|$)' % (sec, sec), t, re.S)
-    if sec20:
-        body = sec20.group(1)
-        def en_of(ln):    # 和英2段組なので、行からASCIIのまとまりだけ取る
-            return ' '.join(re.findall(r'[ -~]{12,}', ln)).strip()
-        tp = [en_of(l) for l in body.split('\n') if re.search(r'[Tt]raffic pattern', en_of(l))]
-        if tp: r['tp'] = ' '.join(tp)[:300]
-        # 回転翼機の方式は「(ROTOR CRAFT)」等の見出しがある場合だけ。
-        # 「4. Parking area for helicopters」のような節見出しを拾わないよう、
-        # 括弧付きの見出しに限定し、次の括弧見出し/節番号までを本文とする
-        mh = re.search(r'[(（]\s*(?:ROTOR ?CRAFT|HELICOPTERS?)\s*[)）]', body, re.I)
-        if mh:
-            tail = body[mh.end():]
-            stop = re.search(r'\n\s*\d+\.\s|[(（]\s*FIXED', tail)
-            tail = tail[:stop.start()] if stop else tail[:2500]
-            hl = [en_of(l) for l in tail.split('\n')]
-            hl = [x for x in hl if len(x) > 20 and not re.search(r'Civil Aviation Bureau|AIP Japan', x)]
-            if hl: r['heli'] = ' '.join(hl)[:300]
+    # 場周経路: tp_spec.json(手で写した表)。⚠ 以前は AD 2.20〜2.22 から "traffic pattern" を含む行を拾っていたが、
+    #   断片(「3. Traffic pattern altitude (Fixed wing ACFT)」だけ等)で読めず、固定翼/回転翼の区別も無かった
+    sp = TP_SPEC.get(r['icao'])
+    if sp:
+        norm = ' '.join(t.split())
+        miss = [c for c in sp.get('chk', []) if ' '.join(c.split()) not in norm]
+        if miss: TP_WARN.append((r['icao'], miss))
+        if sp.get('fw'): r['tpf'] = sp['fw']
+        if sp.get('rw'): r['tpr'] = sp['rw']
+        if sp.get('note'): r['tpn'] = sp['note']
+        r['tps'] = sp.get('src', '')
 
     # 滑走路: AD 2.12 の「番号 / 真方位 / 寸法」から「10/28 890×25」の形に
     sec12 = re.search(r'AD %s\.12 RUNWAY PHYSICAL CHARACTERISTICS(.*?)(?:AD %s\.13|$)'
@@ -187,8 +187,11 @@ def main():
     print('  標高あり:', sum(1 for x in out if 'elev' in x),
           '/ 滑走路あり:', sum(1 for x in out if 'rwy' in x),
           '/ 運用時間あり:', sum(1 for x in out if 'hr' in x),
-          '/ 場周経路あり:', sum(1 for x in out if 'tp' in x),
-          '/ 回転翼記述あり:', sum(1 for x in out if 'heli' in x))
+          '/ 場周経路あり:', sum(1 for x in out if 'tps' in x),
+          '/ 回転翼の記述あり:', sum(1 for x in out if 'tpr' in x))
+    for ic, m in TP_WARN: print(f'  ⚠ {ic} 場周経路の原文に見当たらない(AIRAC で変わった可能性・tp_spec.json を確かめる):', m)
+    nf = sorted(set(TP_SPEC) - set(x['icao'] for x in out))
+    if nf: print('  ⚠ tp_spec.json にあるが飛行場が無い:', nf)
     miss = [x['icao'] for x in out if 'elev' not in x]
     if miss: print('  標高が読めない:', ' '.join(miss))
 
