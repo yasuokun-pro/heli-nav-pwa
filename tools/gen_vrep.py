@@ -53,7 +53,13 @@ def parse(path, page=None):
                        capture_output=True, text=True).stdout
     L = [fix(l) for l in t.split('\n')]
     hi = next((i for i, l in enumerate(L) if 'Call sign' in l and 'Remarks' in l), None)
-    if hi is None: return []
+    if hi is None: return [], None
+    # ⚠ 見出しが「BRG / DIST from NAGASAKI ARP」と**他の飛行場の ARP 基準**のことがある(大村の表は長崎と同じ)。
+    #   2行に割れるので前後の行をつないで見る。素の「from ARP」は自分の ARP
+    hd = ' '.join(L[max(0, hi - 3):hi + 4])
+    hd = re.sub(r'Call sign|Remarks', ' ', hd)          # 列名が「from」と「NAGASAKI ARP」の間に挟まる
+    mb = re.search(r'from\s+([A-Z][A-Z\-]{2,}(?:\s[A-Z][A-Z\-]+)*)\s+ARP', hd)
+    base = mb.group(1).strip() if mb else None
     c_call, c_rmk = L[hi].index('Call sign'), L[hi].index('Remarks')
 
     def segs(j):
@@ -61,6 +67,7 @@ def parse(path, page=None):
         for mm in re.finditer(r'\S(?:.*?\S)?(?=\s{2,}|$)', L[j]):
             s, col = mm.group(0), mm.start()
             if not re.fullmatch(r'[ -~]+', s) or not re.search(r'[A-Za-z0-9]', s) or BD.search(s) or s.startswith('CHANGE'): continue
+            if re.fullmatch(r'\d{1,2}/\d{1,2}/\d{2}', s): continue          # ページ下の日付(14/7/22)
             out.append((col, s))
         return out
     rows, used, idx = [], set(), [i for i in range(hi + 1, len(L)) if BD.search(L[i])]
@@ -87,7 +94,7 @@ def parse(path, page=None):
         if name:
             used.add(nline)
             rows.append({'n': name, 'rmk': rmk, 'brg': int(m.group(1)), 'nm': float(m.group(2))})
-    return rows
+    return rows, base
 
 
 def main():
@@ -103,13 +110,27 @@ def main():
             tx = subprocess.run(['pdftotext', '-f', str(p), '-l', str(p), '-layout', f, '-'], capture_output=True, text=True).stdout
             if 'Call sign' in tx and BD.search(tx): jobs.append((ic, f, p))
     for ic, f, pg in sorted(jobs, key=lambda x: x[0]):
-        rows = parse(f, pg)
+        rows, base = parse(f, pg)
         if not rows: none.append(ic); continue
-        a = AD.get(ic)
+        bic = ic
+        if base:
+            c = [k for k, v in AD.items() if (v.get('en') or '').upper().startswith(base)]
+            if len(c) == 1: bic = c[0]; print(f'  {ic}: 表は {base}({bic})の ARP 基準')
+            else: print(f'  ⚠ {ic}: 基準「{base} ARP」の飛行場が決まらない {c} → 自分の ARP で計算'); 
+        a = AD.get(bic)
         if not a: noarp.append(ic); continue
         for r in rows:
             r['lat'], r['lng'] = dest(a['lat'], a['lng'], r['brg'], r['nm'])
-            out.append(dict(icao=ic, **r))
+            out.append(dict(icao=ic, **r) | ({'base': bic} if bic != ic else {}))
+    # 他の飛行場と同じ通報点(大村の表=長崎の表)は1つにまとめ、もう一方を also に残す(地図で二重にしない)
+    keep = []
+    for x in out:
+        if x.get('base'):
+            t = next((y for y in out if y['icao'] == x['base'] and y['n'] == x['n'] and abs(y['lat'] - x['lat']) < 5e-4 and abs(y['lng'] - x['lng']) < 5e-4), None)
+            if t: t.setdefault('also', []).append(x['icao']); continue
+        keep.append(x)
+    if len(keep) != len(out): print(f'  共用の通報点を1つにまとめた: {len(out) - len(keep)} 点')
+    out = keep
     J = {'eff': issue, 'src': 'AIP Japan AD 2.24 Visual REP(ARP からの真方位・距離で計算)', 'f': out}
     json.dump(J, open(os.path.join(ROOT, 'vrep.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
     print(f'{len(out)} 点 / {len(set(x["icao"] for x in out))} 飛行場 → vrep.json  AIRAC:{issue}')
