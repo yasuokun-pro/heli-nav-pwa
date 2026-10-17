@@ -372,6 +372,9 @@
   @media print{ td.aspFrq{color:#000} }
   .metarRaw{font-family:var(--mono);font-size:11px;color:var(--txt);white-space:normal;word-break:break-all;margin-top:3px}
   .tafTag{display:inline-block;font-size:9px;line-height:1;padding:2px 4px;border-radius:3px;border:1px solid var(--cyn);color:var(--cyn);vertical-align:middle;font-family:var(--mono)}
+  .tafChkHd{margin-top:8px;font-size:11px;color:var(--dim);font-weight:700}
+  .tafChk{margin:4px 0;padding:4px 6px;border-left:2px solid var(--amb);font-size:12px;line-height:1.7}
+  .tafChk input{width:70px}
   .tafBox{margin:4px 0 6px;padding:4px 6px;border-left:2px solid var(--cyn);background:rgba(61,213,243,.06)}
   #metarList td{cursor:pointer}
   #searchBar{position:absolute;z-index:960;left:52px;top:calc(var(--ovlH) + 12px);width:min(72%,380px);display:none}
@@ -1166,7 +1169,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-235';
+const VER_TAG='v6-236';
 const BUILD='2026-10-17';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -3832,7 +3835,7 @@ async function loadMetar(force){
   renderMetarTab();
   document.querySelectorAll('.leaflet-popup .metarSlot').forEach(s=>s.innerHTML=metarHtml(s.dataset.icao));
   const w=document.getElementById('ifrWxLines');
-  if(w){const[d,t,al]=w.dataset.ids.split(',');w.innerHTML=ifrWxLinesHtml(d,t,al)}
+  if(w){const[d,t,al]=w.dataset.ids.split(',');w.innerHTML=ifrWxLinesHtml(d,t,al);ifrTafChkBind()}
 }
 /* 画面に出ている間は5分ごとに取り直す(METAR は毎時・SPECI は随時。中継側でも2分は使い回す) */
 setInterval(()=>{
@@ -8088,6 +8091,90 @@ function iacMinHtml(icao,sel){
 }
 let TOMIN=null;
 async function loadTomin(){if(TOMIN)return TOMIN;try{const r=await fetch('tomin.json?v='+VER_TAG);TOMIN=await r.json()}catch(e){TOMIN={f:{}}}return TOMIN}
+/* ── TAF とミニマの突き合わせ(IFR.md Stage 2) ──
+   TAF の原文を変化群(基本・FM・BECMG・TEMPO・PROB)に分け、時間帯の中で一番悪い視程・雲高を出す。
+   ・主の予報: 基本に FM・終わった BECMG を順に当てる。**変化中の BECMG は前後の悪い方**
+   ・TEMPO / PROB は主とは別に一番悪い値(下回るかどうかを分けて出す。判断はパイロット)
+   ・雲高 = BKN/OVC/VV の一番低い層。CAVOK・NSC・SKC は雲なし。書いていない要素は前の値を継ぐ
+   ⚠ 比べる値(ミニマ)は**パイロットが表から読んで入れる**(表は数値に解釈しない方針)。飛行場+方式ごとに hnav.wxMin に覚える */
+function tafParse(t){
+  if(!t||!t.raw||!t.from)return null;
+  const f=new Date(t.from*1000),Y=f.getUTCFullYear(),M=f.getUTCMonth(),D0=f.getUTCDate();
+  const at=(dd,hh,mm)=>{let m=M;if(dd<D0-15)m++;return Date.UTC(Y,m,dd,hh,mm||0)};   // 月またぎ
+  const tk=t.raw.trim().split(/\s+/);
+  let i=tk.findIndex(x=>/^\d{4}\/\d{4}$/.test(x));if(i<0)return null;i++;
+  const gs=[{k:'BASE',a:t.from*1000,b:t.to*1000,e:{}}];let g=gs[0];
+  const per=x=>{const m=/^(\d{2})(\d{2})\/(\d{2})(\d{2})$/.exec(x);return m?[at(+m[1],+m[2]),at(+m[3],+m[4])]:null};
+  for(;i<tk.length;i++){
+    const x=tk[i];let m;
+    if((m=/^FM(\d{2})(\d{2})(\d{2})$/.exec(x))){g={k:'FM',a:at(+m[1],+m[2],+m[3]),b:t.to*1000,e:{}};gs.push(g);continue}
+    if(x==='BECMG'||x==='TEMPO'||/^PROB\d{2}$/.test(x)){
+      let k=x,pr=null;if(/^PROB/.test(x)){pr=+x.slice(4);if(tk[i+1]==='TEMPO'){i++;}k='PROB'}
+      const p_=per(tk[i+1]);if(p_)i++;
+      g={k,pr,a:p_?p_[0]:t.from*1000,b:p_?p_[1]:t.to*1000,e:{}};gs.push(g);continue}
+    if(x==='CAVOK'){g.e.vis=10000;g.e.cig=Infinity;continue}
+    if((m=/^(\d{4})$/.exec(x))&&!/^\d{4}\/\d{4}$/.test(x)){g.e.vis=+m[1]>=9999?10000:+m[1];continue}
+    if((m=/^(P?)(\d+)(?:\/(\d+))?SM$/.exec(x))){g.e.vis=Math.round((m[3]?+m[2]/+m[3]:+m[2])*1609);continue}
+    if(/^(NSC|SKC|CLR|NCD)$/.test(x)){g.e.cig=Infinity;continue}
+    if((m=/^(BKN|OVC|VV)(\d{3})/.exec(x))){const h=+m[2]*100;if(g.e._c!==g){g.e._c=g;g.e.cig=h}else g.e.cig=Math.min(g.e.cig,h);continue}
+    if(/^(FEW|SCT)\d{3}/.test(x)&&g.e._c!==g){g.e._c=g;if(g.e.cig===undefined)g.e.cig=Infinity}
+  }
+  return {from:t.from*1000,to:t.to*1000,gs};
+}
+function tafWorst(T,w0,w1){
+  if(!T)return null;
+  const worse=(a,b)=>({vis:Math.min(a.vis??1e9,b.vis??1e9),cig:Math.min(a.cig??Infinity,b.cig??Infinity)});
+  const put=(s,e)=>({vis:e.vis??s.vis,cig:e.cig??s.cig});
+  let pw=null,tw=null,tk=[];
+  const t0=Math.max(w0,T.from),t1=Math.min(w1,T.to);
+  if(t1<t0)return {out:true};
+  for(let t=t0;t<=t1;t+=600e3){
+    let st=put({},T.gs[0].e),alt=null;
+    T.gs.slice(1).forEach(g=>{
+      if(g.k==='FM'&&g.a<=t)st=put(st,g.e);
+      if(g.k==='BECMG'){if(g.b<=t)st=put(st,g.e);else if(g.a<=t)alt=worse(alt||st,put(st,g.e))}
+    });
+    const cur=alt?worse(st,alt):st;pw=pw?worse(pw,cur):cur;
+    T.gs.forEach(g=>{if((g.k==='TEMPO'||g.k==='PROB')&&g.a<=t&&t<g.b){const v=put(cur,g.e);tw=tw?worse(tw,v):v;
+      const lb=g.k==='PROB'?'PROB'+g.pr:'TEMPO';if(!tk.includes(lb))tk.push(lb)}});
+  }
+  return {prev:pw,tempo:tw,tk,part:t0>w0||t1<w1};
+}
+const fmtVis=v=>v==null||v>=1e9?'?':v>=9999?'10km+':v+'m';
+const fmtCig=c=>c==null||c===Infinity?'なし':c.toLocaleString()+'ft';
+function ifrWxMinKey(icao,proc){return icao+':'+(proc||'-')}
+function ifrTafChkHtml(){
+  const X=ifrPlanRes&&ifrPlanRes.tafCtx;if(!X)return '';
+  const E=ntmEtd(),etd=E.t,mins=store.get('hnav.wxMin')||{};
+  const jhm=t=>jstHm(t)+'JST',zhm=t=>new Date(t).toISOString().slice(11,16)+'Z';
+  const row=(lb,icao,eta,key,what)=>{
+    const T=tafParse(METAR&&METAR.t&&METAR.t[icao]),w0=eta-3600e3,w1=eta+3600e3,r=tafWorst(T,w0,w1),mn=mins[key]||{};
+    const ok=v=>!v||(mn.cig==null||v.cig==null||v.cig>=mn.cig)&&(mn.vis==null||v.vis==null||v.vis>=mn.vis);
+    const has=mn.cig!=null||mn.vis!=null;
+    let res;
+    if(!T)res='<span class="ifrNa">TAFなし(IMOC等で確認)</span>';
+    else if(r.out)res='<span class="ifrNa">この時間帯は TAF の有効期間外</span>';
+    else res=`主 視程 <b>${fmtVis(r.prev.vis)}</b> 雲高 <b>${fmtCig(r.prev.cig)}</b>`+
+      (r.tempo?` ・ ${r.tk.join('/')} 視程 <b>${fmtVis(r.tempo.vis)}</b> 雲高 <b>${fmtCig(r.tempo.cig)}</b>`:'')+
+      (has?` → ${ok(r.prev)?'<span class="ifrOk">✓ 主は上回る</span>':'<span class="ifrNg">✗ 主で下回る</span>'}`+
+        (r.tempo?(ok(r.tempo)?' <span class="ifrOk">TEMPO等も上回る</span>':` <span style="color:var(--amb)">⚠ ${r.tk.join('/')} で下回る</span>`):''):'')+
+      (r.part?' <span style="color:var(--amb)">(時間帯の一部が TAF の期間外)</span>':'');
+    return `<div class="tafChk"><b>${lb} ${icao}</b> ${jhm(eta)}(${zhm(eta)})±1h ・ ${what}: 雲高 <input type="number" class="n5 wxMin" data-k="${key}" data-f="cig" step="100" value="${mn.cig??''}" placeholder="ft">ft `+
+      `視程 <input type="number" class="n5 wxMin" data-k="${key}" data-f="vis" step="100" value="${mn.vis??''}" placeholder="m">m<br>${res}</div>`;
+  };
+  return `<div class="tafChkHd">TAF とミニマの突き合わせ ・ 出発 ${E.set?jstYmd(etd)+' ':''}${jhm(etd)}${E.set?(E.past?'(過ぎたので今)':''):'(未設定=今。NOTAM タブの「出発」で設定)'}</div>`+
+    row('出発',X.dep,etd,ifrWxMinKey(X.dep,'TKOF'),'離陸ミニマ')+
+    row('目的',X.dst,etd+X.ete*3600e3,ifrWxMinKey(X.dst,X.iac),'進入ミニマ'+(X.iac?'('+X.iac+')':''))+
+    (X.alt?row('代替',X.alt,etd+(X.ete+X.eteA)*3600e3,ifrWxMinKey(X.alt,'ALTN:'+(X.iacA||'-')),'代替としての条件'+(X.iacA?'('+X.iacA+')':'')):'')+
+    `<div class="hint">比べる値は上の AIP の表と代替の規則から読んで入れる(飛行場+方式ごとに覚える)。時間帯は ETD・ETA の前後1時間(目安)で、`+
+    `主の予報(FM・BECMG を当てた値。変化中の BECMG は前後の悪い方)と TEMPO/PROB を分けて一番悪い値を出す。判断はパイロット</div>`;
+}
+function ifrTafChkBind(){
+  const el=document.getElementById('ifrTafChk');if(!el)return;
+  el.innerHTML=ifrTafChkHtml();
+  el.querySelectorAll('.wxMin').forEach(inp=>inp.onchange=()=>{const m=store.get('hnav.wxMin')||{};const o=m[inp.dataset.k]||{};
+    const v=parseFloat(inp.value);if(isNaN(v))delete o[inp.dataset.f];else o[inp.dataset.f]=v;m[inp.dataset.k]=o;store.set('hnav.wxMin',m);ifrTafChkBind()});
+}
 /* METAR の視程・雲高を判定せずに並べる(ミニマとの突き合わせはパイロット) */
 /* IFR 画面の気象欄。loadMetar が取り直したらここだけ描き直す(計画を組み直さなくても最新になる) */
 function ifrWxLinesHtml(dep,dst,alt){
@@ -8354,6 +8441,7 @@ function renderIfrOut(P){
   </div>
   <div class="ifrBox"><b class="k">気象(METAR・TAF)と AIP のミニマ</b>
     <div id="ifrWxLines" data-ids="${dep.icao},${dst.icao},${alt?alt.icao:''}">${ifrWxLinesHtml(dep.icao,dst.icao,alt?alt.icao:'')}</div>
+    <div id="ifrTafChk"></div>
     <div style="margin-top:8px"><b style="font-size:11px;color:var(--dim)">離陸ミニマ ${dep.icao}(AIP AD 2.22 原文)</b>
       ${tomin?aipTable(tomin):'<div class="ifrNa">AIP に記載なし(自衛隊・米軍飛行場など)</div>'}</div>
     ${iacMinHtml(dst.icao,S.iac)}
@@ -8365,6 +8453,8 @@ function renderIfrOut(P){
     <span class="${fob>=need?'ifrOk':'ifrNg'}">${fob>=need?'✓ 足りる':'✗ 不足 '+Math.round(need-fob)}</span>
     <div class="hint">予備燃料の規定(会社規程・法規)は別途。上昇・降下の燃料増減は見ていない</div>
   </div>`;
+  ifrPlanRes.tafCtx={dep:dep.icao,dst:dst.icao,alt:alt?alt.icao:'',ete,eteA,iac:S.iac?S.iac.p.n:'',iacA:S.iacA?S.iacA.p.n:''};
+  ifrTafChkBind();
   document.querySelectorAll('#ifrOut .ifrProc span').forEach(sp=>{sp.onclick=()=>{
     const k=sp.dataset.k,i=+sp.dataset.i,list={sid,star,iac,iacA}[k][i];
     if(list.ok!==1)return;
