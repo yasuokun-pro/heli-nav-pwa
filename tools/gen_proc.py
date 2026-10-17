@@ -80,6 +80,28 @@ def iaf_names(pg):
     return out
 
 
+def eq_by_page(txt):
+    """進入図の右上の「EQPT REQUIRED」の欄(DME / DME・VOR / TACAN / – など)→ {IAC番号: [装備…]}
+    欄の下 3 行の、見出しと同じ列のあたりの語だけを見る(図の他の文字を拾わないため)。「–」は不要=空リスト"""
+    res = {}
+    for pg in txt.split('\f'):
+        m = re.search(r'AD\s?2\.24-IAC-(\d+)', pg)
+        if not m: continue
+        L = pg.split('\n')
+        for i, ln in enumerate(L):
+            h = re.search(r'EQPT\s+REQUIRED', ln)
+            if not h: continue
+            eq, seen = [], False
+            for j in range(i + 1, min(i + 4, len(L))):
+                seg = L[j][max(0, h.start() - 12):h.start() + 30]
+                for w in re.findall(r'\b(DME|VOR|TACAN|ADF|NDB|GNSS|GPS)\b', seg):
+                    w = {'NDB': 'ADF', 'GPS': 'GNSS'}.get(w, w)
+                    if w not in eq: eq.append(w)
+                if re.search(r'[–ー-]', seg.strip()[:2] if seg.strip() else ''): seen = True
+            if eq or seen: res[int(m.group(1))] = eq
+    return res
+
+
 def iaf_by_page(txt):
     """各 IAC ページの "TOHNE(IAF)" ラベルを集める → {IAC番号: [FIX名…]}
     ⚠ ページ番号は脚注の "RJTL AD2.24-IAC-2" から。索引の IAC の並び順と同じ番号(n番目)
@@ -261,6 +283,9 @@ def parse_one(pdf):
                     if 'HELI' in name.upper() or 'COPTER' in name.upper(): rec['heli'] = 1
                 out.append(rec)
     # 進入図の IAF を、索引の IAC の n 番目に対応づける(AD2.24-IAC-n)
+    for n, eq in eq_by_page(txt).items():
+        iacs_ = [r for r in out if r['k'] == 'IAC']
+        if 1 <= n <= len(iacs_): iacs_[n-1]['eq'] = eq
     iaf = iaf_by_page(txt)
     iacs = [r for r in out if r['k'] == 'IAC']
     for n, names in iaf.items():
