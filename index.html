@@ -1171,7 +1171,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-239';
+const VER_TAG='v6-240';
 const BUILD='2026-10-17';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8004,6 +8004,12 @@ function procOk(p,ac){
   if(p.nn)return {ok:null,why:'索引に方式名が無い(図参照)'};
   if(p.k!=='IAC'){ if(p.rnav)return ac.gnss?{ok:1}:{ok:0,why:'RNAV方式'};
     return (ac.vor||ac.gnss||ac.tacan)?{ok:1}:{ok:0,why:'VORかTACANが要る'} }
+  // 図の右上の「EQPT REQUIRED」(gen_proc の eq)。進入の種類とは別に要る装備(百里 ILS Y は TACAN、ILS X は DME・VOR)
+  const eq=p.eq||[];
+  if(eq.includes('TACAN')&&!ac.tacan)return {ok:0,why:'TACAN(図の必要装備)'};
+  if(eq.includes('DME')&&!(ac.dme||ac.tacan))return {ok:0,why:'DME(図の必要装備)'};
+  if(eq.includes('VOR')&&!ac.vor)return {ok:0,why:'VOR(図の必要装備)'};
+  if(eq.includes('ADF')&&!ac.ndb)return {ok:0,why:'ADF(図の必要装備)'};
   const t=p.typ||'';
   if(/ILS|LOC|LDA/.test(t)){
     if(!ac.ils)return {ok:0,why:'ILS受信機'};
@@ -8195,10 +8201,10 @@ async function loadProc(){if(PROC)return PROC;try{const r=await fetch('proc.json
 
 /* SID を選び直したら、その SID から始まる経路に組み直す(v6-204)。ifrForceSid = {dep, n(方式名)}。
    「計画を作る」を押し直すと自動の選択に戻る */
-let ifrForceSid=null;
+let ifrForceSid=null,ifrForceIac=null;   // ifrForceIac = {dst, n}: 進入方式のチップで選び直した方式(その IAF へ組み直す)
 document.getElementById('ifrPlan').onclick=()=>ifrRunPlan(false);
 async function ifrRunPlan(keepForce){
-  if(!keepForce)ifrForceSid=null;
+  if(!keepForce){ifrForceSid=null;ifrForceIac=null}
   ifrSaveInputs();
   const out=document.getElementById('ifrOut');out.innerHTML='<div class="hint">計算中…</div>';
   const ac=acftGet(),mn=ifrMinGet();
@@ -8233,17 +8239,20 @@ async function ifrRunPlan(keepForce){
   // 与圧なしの上限内で繋がらなければ、上限を MEA の値ごとに上げて探し直し、**必要な高度が一番低い経路**を使う(capOff = その高さ)。
   //   以前は上限を外して最短経路を取っていたので、FL200 の Y 経路を選んで役に立たないことがあった。
   //   それでも無ければ上限を外す(capOff=true)。上限を気にしなければ短い経路があるかも見る(capShort)
+  // 進入方式を選び直したら、目的地はその方式の IAF だけで経路網に繋ぐ(STAR は使わない)
+  const fi=ifrForceIac&&ifrForceIac.dst===dst.icao?iac.filter(x=>x.p.n===ifrForceIac.n&&x.ok===1):null;
+  const starU=fi&&fi.length?[]:star,iacU=fi&&fi.length?fi:iac;
   const planWith=sl=>{
-    let g=ifrGraphA(ac,cap),a=ifrLinkAp(g,dep,'SID',sl,ac),b=ifrLinkAp(g,dst,'STAR',star,ac,iac),r=ifrRoute(g,a,b,vias),off=false,short=null;
+    let g=ifrGraphA(ac,cap),a=ifrLinkAp(g,dep,'SID',sl,ac),b=ifrLinkAp(g,dst,'STAR',starU,ac,iacU),r=ifrRoute(g,a,b,vias),off=false,short=null;
     if(r.err&&cap){
       const ms=[...new Set(Object.values(g.adj).flat().map(e=>e.mea).filter(m=>m!=null&&m>cap))].sort((x,y)=>x-y);
       for(const c of ms){
-        const g2=ifrGraphA(ac,c),a2=ifrLinkAp(g2,dep,'SID',sl,ac),b2=ifrLinkAp(g2,dst,'STAR',star,ac,iac),r2=ifrRoute(g2,a2,b2,vias);
+        const g2=ifrGraphA(ac,c),a2=ifrLinkAp(g2,dep,'SID',sl,ac),b2=ifrLinkAp(g2,dst,'STAR',starU,ac,iacU),r2=ifrRoute(g2,a2,b2,vias);
         if(!r2.err){g=g2;a=a2;b=b2;r=r2;off=c;break}
       }
-      if(off===false){g=ifrGraphA(ac,0);a=ifrLinkAp(g,dep,'SID',sl,ac);b=ifrLinkAp(g,dst,'STAR',star,ac,iac);r=ifrRoute(g,a,b,vias);off=true}
+      if(off===false){g=ifrGraphA(ac,0);a=ifrLinkAp(g,dep,'SID',sl,ac);b=ifrLinkAp(g,dst,'STAR',starU,ac,iacU);r=ifrRoute(g,a,b,vias);off=true}
       else{
-        const g0=ifrGraphA(ac,0),r0=ifrRoute(g0,ifrLinkAp(g0,dep,'SID',sl,ac),ifrLinkAp(g0,dst,'STAR',star,ac,iac),vias);
+        const g0=ifrGraphA(ac,0),r0=ifrRoute(g0,ifrLinkAp(g0,dep,'SID',sl,ac),ifrLinkAp(g0,dst,'STAR',starU,ac,iacU),vias);
         if(!r0.err&&r0.d<r.d-1)short={d:r0.d,mea:Math.max(0,...r0.legs.map(l=>l.e.mea||0))};
       }
     }
@@ -8264,7 +8273,13 @@ async function ifrRunPlan(keepForce){
     const c=document.getElementById('ifrEdClr');if(c)c.onclick=()=>{ifrEdSet([],[]);ifrRunPlan(true)};return}
   // 経路の最後が IAF ならその進入方式を選ぶ(そうでなければ ILS>RNP>… の優先順)。代替の起点に使うので先に決める
   const lastP=l=>l&&l.e.proc&&l.e.proc.p.k==='IAC'?l.e.proc:null;
-  const selIac=lastP(R.legs[R.legs.length-1])||bestIac(iac);
+  let selIac=lastP(R.legs[R.legs.length-1])||bestIac(iac);
+  if(fi&&fi.length){
+    if(lastP(R.legs[R.legs.length-1])&&lastP(R.legs[R.legs.length-1]).p===fi[0].p)
+      forceMsg+=`<div class="hint" style="color:var(--cyn)">進入方式「${fi[0].p.n}」の IAF(${(fi[0].p.iaf||[]).join('・')})へ向かう経路に組み直した。飛行ログを直すには「地図に反映」をもう一度(自動の選択に戻すには「計画を作る」)</div>`;
+    else forceMsg+=`<div class="ifrWarn">⚠ 進入方式「${fi[0].p.n}」は${fi[0].p.iaf?'IAF('+fi[0].p.iaf.join('・')+')まで繋がらない':'図から IAF が取れていない'}ので、経路は飛行場への仮の接続のまま。ミニマなどの表示だけこの方式にした</div>`;
+    selIac=fi[0];
+  }else if(ifrForceIac&&ifrForceIac.dst===dst.icao){forceMsg+=`<div class="ifrWarn">⚠ 選んだ進入方式「${ifrForceIac.n}」は今の装備では使えないので、自動の選択に戻した</div>`;ifrForceIac=null}
   let RA=null;
   if(alt){
     // ⚠ 代替へ向かうのは**進入復行(ミスドアプローチ)の待機点から**。目的地の選んだ進入方式の
@@ -8480,8 +8495,10 @@ function renderIfrOut(P){
     //   SID のチップが反応せず、次に進入方式を押した時の描き直しで SID だけ変わって見えていた
     if(k==='sid'){const cur=ifrPlanRes.sel.sid;if(cur&&cur.p===list.p)return;
       ifrForceSid={dep:ifrPlanRes.dep.icao,n:list.p.n};ifrRunPlan(true);return}
+    // 進入方式を選び直したら、その方式の IAF へ向かう経路に組み直す(SID と同じ)。代替の進入方式は表示だけ
+    if(k==='iac'){const cur=ifrPlanRes.sel.iac;if(cur&&cur.p===list.p)return;
+      ifrForceIac={dst:ifrPlanRes.dst.icao,n:list.p.n};ifrRunPlan(true);return}
     ifrPlanRes.sel[k]=list;
-    if(k==='iac'){const t=(store.get('hnav.todAlt')||{})[ifrTodKey()];if(t)ifrPlanRes.todAlt=t}   // IAF 高度は進入方式ごと
     renderIfrOut(P);
   }});
   // 経路の手直し: 経由(順番つき)と 通らない を入力欄に書いて組み直す。選び直した SID はそのまま(ifrRunPlan(true))
