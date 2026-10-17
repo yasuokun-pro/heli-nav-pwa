@@ -1171,7 +1171,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-240';
+const VER_TAG='v6-241';
 const BUILD='2026-10-17';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7915,6 +7915,14 @@ function pad3(v){return String(Math.round(v)).padStart(3,'0')}
 
 function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   const k='AP:'+ap.icao;G.nodes[k]={n:k,lat:ap.lat,lng:ap.lng,ap};G.adj[k]=G.adj[k]||[];
+  // 飛行場の navaid(装備で使えるもの)は**いつも**経路網に入れる(そのラジアルで標定して出入りできる)。
+  //   ⚠ 以前は IAF を繋ぐついでにしか入らず、百里の HUC は ILS Y(TAIYO)が使えない装備だと入らなかった →
+  //   KOGAR→HUC(R272)が無くなり宇都宮回りになった(v6-241 で発覚)
+  const navOk=t=>{t=String(t||'').toUpperCase();
+    if(/VORTAC/.test(t))return ac.vor||ac.tacan;if(/VOR/.test(t))return ac.vor;if(/TACAN/.test(t))return ac.tacan;if(/NDB/.test(t))return ac.ndb;return false};
+  {const ty={};   // 局ごとの種類(ENR 4.1 は VOR と TACAN を別の行で持つ → まとめる)
+    (ADNAV&&ADNAV.f?Object.values(ADNAV.f):[]).concat(NAVAIDS).forEach(a=>{if(a.id&&(a.icao===ap.icao||distNM(ap,a)<6))ty[a.id]=(ty[a.id]||'')+' '+a.t});
+    Object.entries(ty).forEach(([id,t])=>{if(navOk(t)||(/VOR/.test(t)&&/TACAN/.test(t)&&(ac.vor||ac.tacan)))navNode(G,id)})}
   const canRnav=ac.gnss||ac.rnav;
   const usable=n=>{const f=FIX&&FIX._ix[n];return canRnav||!f||!fixRnavOnly(f)};
   const add=(a,b,e)=>gAdd(G,a,b,e);
@@ -7930,7 +7938,11 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
     return true;
   };
   let linked=0;
-  (procs||[]).filter(x=>x.ok===1).forEach(x=>procEnd(G,ap,x).forEach(t=>{
+  // ⚠ 進入方式の形(IAC_DEF)がある飛行場では、STAR の終点→飛行場の直線の近道を作らない。STAR のあとも進入方式を飛ぶのに、
+  //   直線だと進入の長さが入らず STAR が必ず短く見える(百里: DAIGO の UGSIX→飛行場 26.4NM が ILS X の 57.2NM に勝った)。
+  //   STAR の終点は経路網の点として残るので、そこから IAF へは公示ルート・ラジアルで繋がる
+  const noStar=tag==='STAR'&&IAC_DEF[ap.icao]&&(iacs||[]).some(x=>x.ok===1&&x.p.iaf&&iacTrackOf(ap.icao,x.p.n));
+  (noStar?[]:(procs||[])).filter(x=>x.ok===1).forEach(x=>procEnd(G,ap,x).forEach(t=>{
     if(!join(t,tag+'→航空路(仮)'))return;
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
     // SID の形がある方式は、その経路長を辺の長さにする(直線だと反転 SID が 0.4NM で「ただ」に見える)
@@ -7938,10 +7950,13 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
     add(k,t,{d:sl||distNM(ap,G.nodes[t]),tr:1,tag,proc:x});linked++;
   }));
   // 進入方式の IAF(進入図の "TOHNE(IAF)" から拾ったもの)。STAR が無い飛行場でも IAF へ向かう経路になる
-  (iacs||[]).filter(x=>x.ok===1&&x.p.iaf).forEach(x=>x.p.iaf.forEach(t=>{
+  // 同じ IAF から入る方式が複数あれば、種類の優先順(ILS>RNP>LOC>VOR>TACAN>NDB)で上の方式をその IAF の辺にする
+  (iacs||[]).filter(x=>x.ok===1&&x.p.iaf).slice().sort((a,b)=>IAC_PRI(a.p.typ||'')-IAC_PRI(b.p.typ||'')).forEach(x=>x.p.iaf.forEach(t=>{
     if(!join(t,'IAF→航空路(仮)'))return;
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
-    add(k,t,{d:distNM(ap,G.nodes[t]),tr:1,tag:'IAF',proc:x});linked++;
+    // 進入方式の形(IAC_DEF)があれば IAF→滑走路の経路の長さ。無ければ直線(⚠ 飛行場の真上の IAF が短く見える)
+    const tk=ap.icao&&iacTrackOf(ap.icao,x.p.n),tl=tk&&tk.iaf===t?tk.len:0;
+    add(k,t,{d:tl||distNM(ap,G.nodes[t]),tr:1,tag:'IAF',proc:x,iacLen:tl});linked++;
   }));
   // 方式が無い/名前が繋がらない飛行場は、**その飛行場の navaid**へ(そこから先はラジアルと公示ルート)
   if(!linked&&ADNAV&&ADNAV.f){
@@ -8407,7 +8422,7 @@ function ifrTable(rows,key,warr,ac,dep,cruise,depAp){
         `<td class="r">${tod.before?'':'('+tod.fromStart.toFixed(1)+')'}</td><td class="r">${tod.before||!r.gs?'':'('+fmtHM(tod.fromStart/r.gs)+')'}</td><td class="r"></td>`+
         `<td colspan="2">${ng||`${todNm} まで ${tod.dist.toFixed(1)}NM・${fmtHM(tod.time)} の降下。このレグの内数`}</td></tr>`;
     }
-    const rn=e.tr?(e.proc?`<span style="color:var(--cyn)">${e.tag==='IAF'?(b.ap?'IAF→ '+e.proc.p.n+' 進入':e.proc.p.n+' の IAF'):e.proc.p.n+' '+e.tag}</span>`:`<i style="color:var(--dim)">${e.tag}</i>`)
+    const rn=e.tr?(e.proc?`<span style="color:var(--cyn)">${e.tag==='IAF'?(b.ap?'IAF→ '+e.proc.p.n+' 進入'+(e.iacLen?'(方式の経路)':'(直線・形なし)'):e.proc.p.n+' の IAF'):e.proc.p.n+' '+e.tag}</span>`:`<i style="color:var(--dim)">${e.tag}</i>`)
       :e.via?`<span style="color:${AWY_COL.LOW}">${e.via.id} R${pad3(e.via.rad)}</span> <i style="color:var(--dim)">(${e.r.n}と同じ線)</i>`
       :`<span style="color:${AWY_COL[e.r.k]}">${e.r.n}</span>`;
     const fx=FIX&&FIX._ix[b.n];
@@ -8773,6 +8788,59 @@ function sidLenMin(icao,name,end){
   return m;
 }
 function sidEndOf(A,k){const t=A.sids[k].then;return t?t[t.length-1].to:A.sids[k].fix}
+/* ── 進入方式の形(IAF → 滑走路)。図の飛び方を手で写したもの(SID_DEF と同じ考え方・まず百里) ──
+   手順: {at:'NAKAH'} 開始(IAF) / {to:'名前'|[緯度,経度]|{rd:[磁方位,DME]}} 直進 / {arc:DME,to:磁方位,dir:'R'|'L'} DME アーク
+         (今の点が別の距離なら、今のラジアル上でアークに乗る) / {thr:'03R'} 滑走路の進入端 / {mapt:{rd:[..]}} 周回進入の MAPt で終わり
+   放射線は nav の磁方位(var = 偏差 W+)。経路計算で IAF→飛行場の辺の長さに使う(以前は直線で、真上の IAF が「ただ」に見えた)。
+   ⚠ 旋回は角で折る(半径を見ない)。DME アークへの乗り方・FAF/MAPt の高度は見ていない(距離の目安) */
+const IAC_DEF={
+  /* 百里(RJAH AD2.24-IAC-1〜17・2026-05-14)。HUC は VORTAC(VAR 8°W)。ILS Z / LOC Z は IF(BUVDI)からでレーダー誘導前提なので書かない */
+  RJAH:(()=>{
+    const ll=(s)=>{const m=/^(\d{2})(\d{2})([\d.]+)N\/(\d{3})(\d{2})([\d.]+)E$/.exec(s);return [+m[1]+m[2]/60+m[3]/3600,+m[4]+m[5]/60+m[6]/3600]};
+    const thr={'03L':[36.170358,140.408258],'03R':[36.169714,140.410456],'21L':[36.192608,140.420658],'21R':[36.193244,140.418458]};
+    const P={H3L50:ll('361105.04N/1402849.68E'),TOMOE:ll('360720.65N/1403018.30E'),MEGAT:ll('360158.50N/1402754.58E'),
+      SUMIG:ll('360348.81N/1402138.67E'),WAKZI:ll('360723.66N/1402314.20E'),H3L51:ll('360848.49N/1402351.96E'),
+      MAGRY:ll('361839.54N/1402815.72E'),OMITT:ll('361521.72N/1402647.31E'),H1R52:ll('361357.00N/1402609.49E')};
+    const rd=(r,d)=>({rd:[r,d]});
+    const ilsY=[{at:'TAIYO'},{to:rd(81,12)},{arc:12,to:207,dir:'R'},{thr:'03R'}];
+    const ilsX=[{at:'NAKAH'},{to:'HUC'},{to:rd(115,10)},{arc:12,to:207,dir:'R'},{thr:'03R'}];
+    const vor03=r=>[{at:'NAKAH'},{to:'HUC'},{to:rd(116,11)},{arc:13,to:204,dir:'R'},{to:rd(204,1.1)},{thr:r}];
+    const vor21=(rad,r)=>[{at:'NAKAH'},{arc:15,to:rad,dir:'R'},{to:rd(rad,11)},{to:rd(rad,1.0)},{thr:r}];
+    const tac03=(rad,r)=>[{at:'TAIYO'},{to:rd(81,12)},{arc:12,to:rad,dir:'R'},{to:rd(rad,1.3)},{thr:r}];
+    const tac21=(rad,r)=>[{at:'TAIYO'},{to:rd(81,11)},{arc:11,to:rad,dir:'L'},{to:rd(rad,1.5)},{thr:r}];
+    return {nav:{HUC:{lat:36.187447,lng:140.413203,var:8}},navId:'HUC',thr,pts:P,iac:{
+      'ILS Y RWY03R':ilsY,'LOC Y RWY03R':ilsY,'ILS X RWY03R':ilsX,
+      'VOR RWY03R':vor03('03R'),'VOR RWY03L':vor03('03L'),'VOR RWY21L':vor21(38,'21L'),'VOR RWY21R':vor21(32,'21R'),
+      'VOR B':[{at:'NAKAH'},{to:rd(2,6)},{mapt:{rd:[2,0]}}],
+      'TACAN RWY03R':tac03(203,'03R'),'TACAN RWY03L':tac03(204,'03L'),'TACAN RWY21L':tac21(35,'21L'),'TACAN RWY21R':tac21(32,'21R'),
+      'TACAN A':[{at:'NAKAH'},{to:rd(2,11)},{mapt:{rd:[2,1.0]}}],
+      'RNP RWY03L':[{at:'NAKAH'},{to:'H3L50'},{to:'TOMOE'},{to:'MEGAT'},{to:'SUMIG'},{to:'WAKZI'},{to:'H3L51'},{thr:'03L'}],
+      'RNP RWY21R':[{at:'NAKAH'},{to:'MAGRY'},{to:'OMITT'},{to:'H1R52'},{thr:'21R'}]}};
+  })(),
+};
+function iacTrackOf(icao,name){
+  const D_=IAC_DEF[icao],st=D_&&D_.iac[name];if(!st)return null;
+  const N=D_.nav[D_.navId];
+  const rdPt=(r,d)=>d===0?{lat:N.lat,lng:N.lng}:destLL(N.lat,N.lng,(r-N.var+360)%360,d);
+  const named=n=>{if(D_.pts[n])return {lat:D_.pts[n][0],lng:D_.pts[n][1]};if(D_.nav[n])return D_.nav[n];
+    const f=FIX&&FIX._ix[n];if(f)return {lat:f.lat,lng:f.lng};const a=navPt(n);return a?{lat:a.lat,lng:a.lng}:null};
+  const pt=t=>typeof t==='string'?named(t):Array.isArray(t)?{lat:t[0],lng:t[1]}:t.rd?rdPt(t.rd[0],t.rd[1]):null;
+  const pts=[];let cur=null,iaf=null,end=null;
+  for(const x of st){
+    if(x.at){cur=named(x.at);iaf=x.at;if(!cur)return null;pts.push(cur);continue}
+    if(x.arc){                                           // ⚠ アークも to(行き先の磁方位)を持つので直進より先に見る
+      const r0=(trueBrg(N,cur)+N.var+360)%360;           // 今の磁方位
+      const on=rdPt(r0,x.arc);if(distNM(on,cur)>0.05)pts.push(on);
+      let span=x.dir==='R'?(x.to-r0+360)%360:(r0-x.to+360)%360;
+      for(let a=5;a<span;a+=5)pts.push(rdPt(x.dir==='R'?r0+a:r0-a,x.arc));
+      cur=rdPt(x.to,x.arc);pts.push(cur);continue}
+    if(x.to){const q=pt(x.to);if(!q)return null;cur=q;pts.push(q);continue}
+    if(x.thr){cur={lat:D_.thr[x.thr][0],lng:D_.thr[x.thr][1]};pts.push(cur);end='RWY'+x.thr;continue}
+    if(x.mapt){cur=pt(x.mapt);pts.push(cur);end='MAPt';continue}
+  }
+  let len=0;for(let i=1;i<pts.length;i++)len+=distNM(pts[i-1],pts[i]);
+  return {name,iaf,pts,len,end};
+}
 function sidTrackOf(icao,sidName,rwy,ac,endFix){
   const A=SID_DEF[icao];if(!A||!sidName)return null;
   const nm=sidName.toUpperCase(),keys=Object.keys(A.sids).filter(k=>nm.includes(k));
@@ -8903,6 +8971,9 @@ document.getElementById('ifrToMap').onclick=()=>{
     push(l);
     if(i===0&&(T||P.sidD))wp[wp.length-1].push(+(T?T.len:P.sidD).toFixed(1));   // SID終点までの距離を経路長で上書き
   });
+  // 進入方式の形があれば、最後の区間(IAF→飛行場)の距離をその経路の長さにして、線を描く
+  const LL=P.legs[P.legs.length-1],AT=LL&&LL.e.tag==='IAF'&&LL.e.proc?iacTrackOf(P.dst.icao,LL.e.proc.p.n):null;
+  if(AT&&AT.iaf===G.nodes[LL.from].n)wp[wp.length-1].push(+AT.len.toFixed(1));
   if(document.getElementById('ifrWithAlt').checked&&P.legsA)P.legsA.forEach(push);
   // 飛行ログ側の風を IFR の共通の風に揃える(時間を合わせるため。レグ別の風は飛行ログには持てない)
   document.getElementById('wDir').value=W.base.d;document.getElementById('wSpd').value=W.base.s;
@@ -8913,6 +8984,8 @@ document.getElementById('ifrToMap').onclick=()=>{
   sidLayer.clearLayers();
   if(T)L.polyline(T.pts.map(q=>[q.lat,q.lng]),{renderer:ovRenderer,color:'#3df5ff',weight:2,dashArray:'5 4',opacity:.9})
     .bindTooltip(`${T.name} RWY${T.rwy} ${T.len.toFixed(1)}NM(SIDの形・上昇率${ac.roc}ft/min ${ac.vcl}kt で算出)`,{sticky:true}).addTo(sidLayer);
+  if(AT&&AT.iaf===G.nodes[LL.from].n)L.polyline(AT.pts.map(q=>[q.lat,q.lng]),{renderer:ovRenderer,color:'#ffb347',weight:2,dashArray:'5 4',opacity:.9})
+    .bindTooltip(`${AT.name} ${AT.iaf}→${AT.end} ${AT.len.toFixed(1)}NM(進入方式の形・図から写した目安)`,{sticky:true}).addTo(sidLayer);
   document.getElementById('ifrModal').style.display='none';
   document.querySelector('.tabs button[data-tab="wp"]').click();
 };
