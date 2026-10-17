@@ -19,6 +19,8 @@ SID / STAR / 計器進入(IAC) の**名前と種別だけ**を取る。形(経�
     ミニマは別途、手で表を持つか諦める
 """
 import os, re, sys, json, glob, subprocess
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from aip_pick import pick
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -35,7 +37,8 @@ def pdfs():
         if f:
             # ⚠ 日付フォルダが複数あると全AIRACのPDFが混ざる(2026-09 に踏んだ)。最新の日付フォルダだけ
             latest = max(os.path.basename(os.path.dirname(os.path.dirname(x))) for x in f)
-            return [x for x in f if os.path.basename(os.path.dirname(os.path.dirname(x))) == latest]
+            if '--airac' in sys.argv: latest = sys.argv[sys.argv.index('--airac') + 1]     # 版を固定(発効前の版がある時)
+            return pick([x for x in f if os.path.basename(os.path.dirname(os.path.dirname(x))) == latest])   # 飛行場ごとに1版
     return []
 
 
