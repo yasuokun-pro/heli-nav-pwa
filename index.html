@@ -470,6 +470,13 @@
   table.ifrLog td.r{text-align:right}
   table.ifrLog td.brg{font-size:10px;color:var(--dim);line-height:1.25;white-space:nowrap}
   table.ifrLog tr.rca td{color:var(--amb);font-style:italic}
+  /* 経路の手直し(行の 固定/✕/＋)。指で押せる大きさにする */
+  .ifrEd{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle}
+  .ifrEd button{font:11px var(--mono);padding:1px 6px;min-width:24px;min-height:22px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--dim);cursor:pointer}
+  .ifrEd button.on{border-color:var(--cyn);color:var(--cyn)}
+  .ifrEdBar{font-size:11px;margin:2px 0 6px;color:var(--dim)}
+  .ifrEdBar b{color:var(--cyn);font-family:var(--mono);font-weight:400}
+  .ifrEdBar .av{color:var(--amb)}
   /* AIPの表(原文の並びのまま本物の表にしたもの) */
   pre.tomin{font-family:var(--mono);font-size:10px;line-height:1.35;background:var(--bg);border:1px solid var(--line);
     border-radius:6px;padding:6px 8px;overflow:auto;max-height:280px;margin:4px 0;white-space:pre}
@@ -1128,6 +1135,7 @@
     <label>目的 <span class="apWrap"><input type="text" id="ifrDst" class="ap" placeholder="RJNA" autocomplete="off" autocapitalize="characters"><div class="apDrop"></div></span><span class="nm" id="ifrDstN"></span></label>
     <label>代替 <span class="apWrap"><input type="text" id="ifrAlt" class="ap" placeholder="RJGG" autocomplete="off" autocapitalize="characters"><div class="apDrop"></div></span><span class="nm" id="ifrAltN"></span></label>
     <label>経由(任意) <input type="text" id="ifrVia" style="width:200px" placeholder="FIX名 空白区切り" autocapitalize="characters"></label>
+    <label title="経路探索でこの点を通らない(経路の表の ✕ でも入る)">通らない(任意) <input type="text" id="ifrAvoid" style="width:160px" placeholder="FIX名 空白区切り" autocapitalize="characters"></label>
     <label id="ifrRwyL" style="display:none">出発RWY <select id="ifrRwy"></select></label>
   </div>
 
@@ -1158,7 +1166,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-234';
+const VER_TAG='v6-235';
 const BUILD='2026-10-17';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7686,7 +7694,7 @@ function ifrSaveInputs(){
   store.set('hnav.acft',acftGet());
   store.set('hnav.ifr',{dep:document.getElementById('ifrDep').value.trim().toUpperCase(),
     dst:document.getElementById('ifrDst').value.trim().toUpperCase(),alt:document.getElementById('ifrAlt').value.trim().toUpperCase(),
-    via:document.getElementById('ifrVia').value.trim().toUpperCase(),withAlt:document.getElementById('ifrWithAlt').checked,rwy:document.getElementById('ifrRwy').value});
+    via:document.getElementById('ifrVia').value.trim().toUpperCase(),avoid:document.getElementById('ifrAvoid').value.trim().toUpperCase(),withAlt:document.getElementById('ifrWithAlt').checked,rwy:document.getElementById('ifrRwy').value});
 }
 function apOf(icao){return icao?ASP.find(a=>a.icao===icao):null}
 function ifrApName(id,nid){const a=apOf(document.getElementById(id).value.trim().toUpperCase());document.getElementById(nid).textContent=a?a.n:''}
@@ -7698,7 +7706,7 @@ async function openIfr(){
     acftSet(Object.assign({},ACFT_DEF,store.get('hnav.acft')||{}));
     const f=store.get('hnav.ifr')||{};
     document.getElementById('ifrDep').value=f.dep||'';document.getElementById('ifrDst').value=f.dst||'';
-    document.getElementById('ifrAlt').value=f.alt||'';document.getElementById('ifrVia').value=f.via||'';
+    document.getElementById('ifrAlt').value=f.alt||'';document.getElementById('ifrVia').value=f.via||'';document.getElementById('ifrAvoid').value=f.avoid||'';
     document.getElementById('ifrWithAlt').checked=!!f.withAlt;
     document.getElementById('ifrRwy').dataset.want=f.rwy||'';
   }
@@ -7947,6 +7955,7 @@ function dijkstra(G,src,dst){
     if(u===dst)break;
     (G.adj[u]||[]).forEach(e=>{
       if(e.blk||done[e.to])return;
+      if(G.avoid&&G.avoid.has(e.to)&&e.to!==dst)return;   // 手直しで「通らない」にした点
       if(e.to.startsWith('AP:')&&e.to!==dst)return;      // 他の飛行場は経由しない
       // ⚠ 方式の向きを守る。SID で飛行場に**入らない**、STAR・IAF で飛行場から**出ない**。
       //   辺は両向きに張ってあるので、代替=出発地(立川→宇都宮→立川)だと SID を逆走して着陸していた(v6-177)
@@ -8111,10 +8120,21 @@ async function ifrRunPlan(keepForce){
   await Promise.all([loadFix(),loadAwy(),loadProc(),loadMetar(),loadTomin(),loadIacMin(),loadAdnav()]);
   document.getElementById('ifrEff').textContent=`AIP ${AWY.eff||''} 現在`;
   const cap=ac.press?0:ac.maxAlt;
-  let G=ifrGraph(ac,cap),capOff=false;
+  // 手直し: 経由(必ず通る・順番どおり)と 通らない。どちらも経路の表のボタンからも入る
   const vias=document.getElementById('ifrVia').value.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  const avoids=new Set(document.getElementById('ifrAvoid').value.trim().toUpperCase().split(/\s+/).filter(Boolean));
+  const ifrGraph0=ifrGraph,ifrGraphA=(a,c)=>{const g=ifrGraph0(a,c);g.avoid=avoids;return g};
+  let G=ifrGraphA(ac,cap),capOff=false;
+  // navaid は経路網では名前(SEKIYADO)で持っている。略号(SYE)で入れたら名前に直し、入力欄も書き換える
+  const byId={};Object.values(G.nodes).forEach(n=>{if(n.id&&!G.nodes[n.id])byId[n.id]=n.n});
+  const fixN=v=>G.nodes[v]?v:(byId[v]||v);
+  vias.splice(0,vias.length,...vias.map(fixN));
+  [...avoids].forEach(v=>{const w=fixN(v);if(w!==v){avoids.delete(v);avoids.add(w)}});
+  ifrEdSet(vias,[...avoids]);ifrSaveInputs();
   const badVia=vias.filter(v=>!G.nodes[v]);
-  if(badVia.length){out.innerHTML=`<div class="ifrWarn">経由FIXが航空路上に無い: ${badVia.join(' ')}(航空路に乗っていない点は経由に使えない)</div>`;return}
+  if(badVia.length){out.innerHTML=`<div class="ifrWarn">経由FIXが航空路上に無い: ${badVia.join(' ')}(航空路に乗っていない点は経由に使えない)</div>`+
+    `<div class="ifrEdBar"><button class="btn" id="ifrEdClr" style="padding:1px 8px;font-size:11px">${badVia.join(' ')} を経由から外す</button></div>`;
+    document.getElementById('ifrEdClr').onclick=()=>{ifrEdSet(vias.filter(v=>!badVia.includes(v)),ifrEdAvoid());ifrRunPlan(true)};return}
   const sid=procList(dep.icao,'SID',ac),star=procList(dst.icao,'STAR',ac),iac=procList(dst.icao,'IAC',ac),iacA=alt?procList(alt.icao,'IAC',ac):[];
   const starA=alt?procList(alt.icao,'STAR',ac):[];
   // 選び直した SID があれば、出発飛行場はその方式だけで経路網に繋ぐ
@@ -8124,18 +8144,20 @@ async function ifrRunPlan(keepForce){
   let kd=ifrLinkAp(G,dep,'SID',sidUse,ac),kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);
   let R=ifrRoute(G,kd,kt,vias);
   if(R.err&&cap){          // 上限内では繋がらない → 上限を外してもう一度(高度の警告で知らせる)
-    G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sidUse,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
+    G=ifrGraphA(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sidUse,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
   }
   if(fs&&fs.length){
     const via=R.legs&&R.legs[0]&&R.legs[0].e.proc&&R.legs[0].e.proc.p.n===ifrForceSid.n;
     if(R.err||!via){        // その SID の終点が経路網に繋がっていない(横田 TIMAP など) → 自動に戻す
       forceMsg=`<div class="ifrWarn">⚠ 選んだ SID「${ifrForceSid.n}」の終点から先の経路が作れないので、自動の選択に戻した</div>`;
-      ifrForceSid=null;G=ifrGraph(ac,cap);capOff=false;
+      ifrForceSid=null;G=ifrGraphA(ac,cap);capOff=false;
       kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
-      if(R.err&&cap){G=ifrGraph(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias)}
+      if(R.err&&cap){G=ifrGraphA(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias)}
     }else forceMsg=`<div class="hint" style="color:var(--cyn)">SID「${ifrForceSid.n}」から始まる経路に組み直した(自動の選択に戻すには「計画を作る」)</div>`;
   }
-  if(R.err){out.innerHTML=`<div class="ifrWarn">${R.err}</div>`;return}
+  if(R.err){out.innerHTML=`<div class="ifrWarn">${R.err}</div>`+((vias.length||avoids.size)?
+    `<div class="ifrEdBar">経由 ${vias.join(' → ')||'—'}・通らない ${[...avoids].join(' ')||'—'} の指定で繋がらない。 <button class="btn" id="ifrEdClr" style="padding:1px 8px;font-size:11px">手直しを全部外す</button></div>`:'');
+    const c=document.getElementById('ifrEdClr');if(c)c.onclick=()=>{ifrEdSet([],[]);ifrRunPlan(true)};return}
   // 経路の最後が IAF ならその進入方式を選ぶ(そうでなければ ILS>RNP>… の優先順)。代替の起点に使うので先に決める
   const lastP=l=>l&&l.e.proc&&l.e.proc.p.k==='IAC'?l.e.proc:null;
   const selIac=lastP(R.legs[R.legs.length-1])||bestIac(iac);
@@ -8275,7 +8297,9 @@ function ifrTable(rows,key,warr,ac,dep,cruise,depAp){
     const w=warr[i]||{same:true};
     const wcell=`<span class="wIn"><input type="checkbox" class="wsame" data-k="${key}" data-i="${i}" ${w.same?'checked':''} title="前のレグ(先頭は共通の風)と同じ">＝前
       <input type="number" class="wd" data-k="${key}" data-i="${i}" value="${w.same?r.w.d:(w.d!=null?w.d:'')}" min="0" max="360" ${w.same?'disabled':''}>/<input type="number" class="ws" data-k="${key}" data-i="${i}" value="${w.same?r.w.s:(w.s!=null?w.s:'')}" min="0" ${w.same?'disabled':''}></span>`;
-    h+=`<tr${e.tr?' class="ap"':''}><td>${b.ap?b.ap.icao+' '+b.ap.n:b.n}</td><td>${rn}</td><td class="r">${fmt3(r.mc)}°</td><td>${wcell}</td>`+
+    const ed=depAp&&!b.ap?`<span class="ifrEd"><button data-ed="fix" data-n="${b.n}" class="${ifrEdVia().includes(b.n)?'on':''}" title="この点を必ず通る(経由に固定)">固定</button>`+
+      `<button data-ed="avoid" data-n="${b.n}" title="この点を通らない経路に組み直す">✕</button><button data-ed="ins" data-n="${b.n}" title="この点のあとに経由点を足す">＋</button></span>`:'';
+    h+=`<tr${e.tr?' class="ap"':''}><td>${b.ap?b.ap.icao+' '+b.ap.n:b.n}${ed}</td><td>${rn}</td><td class="r">${fmt3(r.mc)}°</td><td>${wcell}</td>`+
       `<td class="r">${r.bad?'<span class="ifrNg">不可</span>':fw(r.wca)+'°'}</td><td class="r">${r.mh==null?'—':fmt3(r.mh)+'°'}</td><td class="r">${r.ch==null?'—':fmt3(r.ch)+'°'}</td>`+
       `<td class="r">${f0(r.gs)}</td><td class="r">${e.d.toFixed(1)}</td><td class="r">${fmtHM(r.ete)}</td><td class="r">${fmtHM(r.t)}</td><td class="r">${e.mea!=null?e.mea:'—'}</td><td class="brg">${ev}</td></tr>`;
   });
@@ -8307,6 +8331,9 @@ function renderIfrOut(P){
       　SID実距離 <input type="number" id="ifrSidD" class="n5" step="0.1" value="${ifrPlanRes.sidD||''}" placeholder="${ifrPlanRes.sidTrack?ifrPlanRes.sidTrack.len.toFixed(1):R.legs[0].e.d.toFixed(1)}" title="図から読んだSIDの経路長。空なら${ifrPlanRes.sidTrack?'SIDの形から算出':'飛行場→終点の直線'}">NM
       ${ifrPlanRes.sidTrack?`<span style="color:var(--cyn)">SIDの形: ${ifrPlanRes.sidTrack.name} RWY${ifrPlanRes.sidTrack.rwy} ${ifrPlanRes.sidTrack.len.toFixed(1)}NM${ifrPlanRes.sidTrack.assumed?'(会合針路は30°会合と仮定)':''}${ifrPlanRes.sidTrack.approx?'(図の旋回は固定翼の大きな半径。この上昇速度の旋回では公示の針路でラジアルに交わらないので、ラジアル上の点へ直進で近似)':''}</span>${ifrPlanRes.sidTrack.rwyNote?` <span style="color:var(--amb)">⚠ ${ifrPlanRes.sidTrack.rwyNote}</span>`:''}${ifrPlanRes.sidTrack.off?` <span style="color:var(--amb)">⚠ この SID の終点 ${ifrPlanRes.sidTrack.fix} は経路の最初の点 ${ifrPlanRes.sidTrack.off} と違うので、距離と RCA には使わない</span>`:''}${sidGradHtml(ifrPlanRes.sidTrack,ac)}`:''}
       <span class="hint" style="display:inline;margin-left:8px">レグごとに変えるときは行の「＝前」を外して入力。以後のレグは「＝前」でそれを継ぐ</span></div>
+    <div class="ifrEdBar">経路の手直し: 行の <b>固定</b>=必ず通る・<b>✕</b>=通らない・<b>＋</b>=この点のあとに経由点を足す(押すと組み直す)。
+      ${ifrEdVia().length?`経由 <b>${ifrEdVia().join(' → ')}</b> `:''}${ifrEdAvoid().length?`通らない <span class="av">${ifrEdAvoid().join(' ')}</span> `:''}
+      ${ifrEdVia().length||ifrEdAvoid().length?'<button class="btn" id="ifrEdClr" style="padding:1px 8px;font-size:11px">手直しを全部外す</button>':''}</div>
     <div style="overflow:auto"><table class="ifrLog">${ifrTable(rows,'main',W.main,ac,dep,CA.alt,dep)}</table></div>
     <div class="hint">MC/MH は区間中点の偏差(AUTO)。CH は機体の自差表(装備欄)。評定 = ENR 4.3 のnavaid方位/距離(磁方位)、<span style="color:#6fc3ff">RNAV専用</span>の点は navaid では評定できない。(RCA) は出発標高→巡航高度の上昇に要る距離/時間、(TOD) は巡航高度から IAF 高度への降下を始める点(レグの始めからの距離/時間)で、どちらもそのレグの内数</div>
     ${bad?'<div class="ifrWarn">⚠ 風が強すぎて成立しないレグがある(横風≥TAS または GS≤0)</div>':''}
@@ -8350,6 +8377,22 @@ function renderIfrOut(P){
     if(k==='iac'){const t=(store.get('hnav.todAlt')||{})[ifrTodKey()];if(t)ifrPlanRes.todAlt=t}   // IAF 高度は進入方式ごと
     renderIfrOut(P);
   }});
+  // 経路の手直し: 経由(順番つき)と 通らない を入力欄に書いて組み直す。選び直した SID はそのまま(ifrRunPlan(true))
+  const names=R.legs.map(l=>G.nodes[l.to]).filter(n=>!n.ap).map(n=>n.n);
+  document.querySelectorAll('#ifrOut .ifrEd button').forEach(bt=>bt.onclick=()=>{
+    let via=ifrEdVia(),av=ifrEdAvoid();const n=bt.dataset.n,k=names.indexOf(n);
+    const ord=v=>v.slice().sort((a,b)=>(names.indexOf(a)<0?1e9:names.indexOf(a))-(names.indexOf(b)<0?1e9:names.indexOf(b)));
+    if(bt.dataset.ed==='fix')via=via.includes(n)?via.filter(x=>x!==n):ord(via.concat(n));
+    else if(bt.dataset.ed==='avoid'){via=via.filter(x=>x!==n);if(!av.includes(n))av.push(n)}
+    else{
+      const x=(prompt(`${n} のあとに通る点(FIX名・navaid の略号)`)||'').trim().toUpperCase();if(!x)return;
+      const before=via.filter(v=>names.indexOf(v)>=0&&names.indexOf(v)<=k),after=via.filter(v=>!before.includes(v));
+      if(!before.includes(n))before.push(n);       // 足した点の手前の点も固定しないと、順番が保てない
+      via=ord(before).concat(x,after.filter(v=>v!==x));av=av.filter(v=>v!==x);
+    }
+    ifrEdSet(via,av);ifrRunPlan(true);
+  });
+  const clr=document.getElementById('ifrEdClr');if(clr)clr.onclick=()=>{ifrEdSet([],[]);ifrRunPlan(true)};
   // 風の入力: change で確定して表を作り直す(input だと1文字ごとに作り直してフォーカスが切れる)
   const rerender=()=>{ifrSaveWind();renderIfrOut(P)};
   document.getElementById('ifrWd').onchange=e=>{W.base.d=parseFloat(e.target.value)||0;rerender()};
@@ -8363,6 +8406,10 @@ function renderIfrOut(P){
   document.querySelectorAll('#ifrOut .wd,#ifrOut .ws').forEach(inp=>inp.onchange=()=>{const w=W[inp.dataset.k][+inp.dataset.i];
     w[inp.classList.contains('wd')?'d':'s']=parseFloat(inp.value)||0;w.same=false;rerender()});
 }
+/* 経路の手直しの状態は入力欄(経由・通らない)そのもの */
+function ifrEdVia(){return document.getElementById('ifrVia').value.trim().toUpperCase().split(/\s+/).filter(Boolean)}
+function ifrEdAvoid(){return document.getElementById('ifrAvoid').value.trim().toUpperCase().split(/\s+/).filter(Boolean)}
+function ifrEdSet(via,av){document.getElementById('ifrVia').value=via.join(' ');document.getElementById('ifrAvoid').value=av.join(' ')}
 /* Assigned ALT と SID実距離は 出発空港+SID名 ごとに覚える(同じSIDなら次回も使える) */
 function ifrSidKey(){const P=ifrPlanRes;return P.dep.icao+':'+(P.sel.sid?P.sel.sid.p.n:'-')}
 function ifrSaveSid(){const m=store.get('hnav.sidDist')||{};m[ifrSidKey()]={asg:ifrPlanRes.asg||0,sidD:ifrPlanRes.sidD||0};store.set('hnav.sidDist',m)}
