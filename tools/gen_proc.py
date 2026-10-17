@@ -61,6 +61,25 @@ KNOWN = None
 MINIMA = {}
 IAF_RE = re.compile(r'([A-Z]{2,7})\s*\(IAF[^)]{0,10}\)')
 
+def iaf_names(pg):
+    """"(IAF)" の名前。同じ行の直前の語か、上の行で**列が重なる語**(名前の下に "(IAF)" が来る組み方)。
+    ⚠ 上の行の行末の語を取ってはいけない。百里 ILS Y の断面図は「TAIYO ……(右端に)HUC」の下に "(IAF)" があり、
+      行をまたいで直前の語を取ると HUC を IAF にしていた(HUC は IAF ではない・ユーザー指摘で発覚)"""
+    L = pg.split('\n'); out = []
+    for i, ln in enumerate(L):
+        for m in re.finditer(r'\(IAF[^)]{0,10}\)', ln):
+            c = m.start()
+            mb = re.search(r'([A-Z]{2,7})\s{0,2}$', ln[:c])
+            if mb: out.append(mb.group(1)); continue
+            for j in (i - 1, i - 2):
+                if j < 0: break
+                ws = [(w.start(), w.end(), w.group()) for w in re.finditer(r'[A-Z]{2,7}', L[j])]
+                hit = [w for a, b, w in ws if a <= c + 6 and b >= c - 2]
+                if hit: out.append(hit[0]); break
+                if L[j].strip(): break
+    return out
+
+
 def iaf_by_page(txt):
     """各 IAC ページの "TOHNE(IAF)" ラベルを集める → {IAC番号: [FIX名…]}
     ⚠ ページ番号は脚注の "RJTL AD2.24-IAC-2" から。索引の IAC の並び順と同じ番号(n番目)
@@ -74,7 +93,7 @@ def iaf_by_page(txt):
         if not m: continue
         n = int(m.group(1))
         names = []
-        for nm in IAF_RE.findall(pg):
+        for nm in iaf_names(pg):
             if (not KNOWN or nm in KNOWN) and nm not in names: names.append(nm)
         if names: res.setdefault(n, [])
         for nm in names:
