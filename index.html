@@ -478,6 +478,8 @@
   .ifrEd button{font:11px var(--mono);padding:1px 6px;min-width:24px;min-height:22px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--dim);cursor:pointer}
   .ifrEd button.on{border-color:var(--cyn);color:var(--cyn)}
   .ifrEdBar{font-size:11px;margin:2px 0 6px;color:var(--dim)}
+  .ifrCapList{font-size:12px;margin:4px 0;color:var(--red)}
+  .ifrCapList b{font-family:var(--mono);font-weight:400}
   .ifrEdBar b{color:var(--cyn);font-family:var(--mono);font-weight:400}
   .ifrEdBar .av{color:var(--amb)}
   /* AIPの表(原文の並びのまま本物の表にしたもの) */
@@ -1169,7 +1171,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-236';
+const VER_TAG='v6-237';
 const BUILD='2026-10-17';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8228,18 +8230,33 @@ async function ifrRunPlan(keepForce){
   const fs=ifrForceSid&&ifrForceSid.dep===dep.icao?sid.filter(x=>x.p.n===ifrForceSid.n):null;
   let forceMsg='';
   const sidUse=fs&&fs.length?fs:sid;
-  let kd=ifrLinkAp(G,dep,'SID',sidUse,ac),kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);
-  let R=ifrRoute(G,kd,kt,vias);
-  if(R.err&&cap){          // 上限内では繋がらない → 上限を外してもう一度(高度の警告で知らせる)
-    G=ifrGraphA(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sidUse,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
-  }
+  // 与圧なしの上限内で繋がらなければ、上限を MEA の値ごとに上げて探し直し、**必要な高度が一番低い経路**を使う(capOff = その高さ)。
+  //   以前は上限を外して最短経路を取っていたので、FL200 の Y 経路を選んで役に立たないことがあった。
+  //   それでも無ければ上限を外す(capOff=true)。上限を気にしなければ短い経路があるかも見る(capShort)
+  const planWith=sl=>{
+    let g=ifrGraphA(ac,cap),a=ifrLinkAp(g,dep,'SID',sl,ac),b=ifrLinkAp(g,dst,'STAR',star,ac,iac),r=ifrRoute(g,a,b,vias),off=false,short=null;
+    if(r.err&&cap){
+      const ms=[...new Set(Object.values(g.adj).flat().map(e=>e.mea).filter(m=>m!=null&&m>cap))].sort((x,y)=>x-y);
+      for(const c of ms){
+        const g2=ifrGraphA(ac,c),a2=ifrLinkAp(g2,dep,'SID',sl,ac),b2=ifrLinkAp(g2,dst,'STAR',star,ac,iac),r2=ifrRoute(g2,a2,b2,vias);
+        if(!r2.err){g=g2;a=a2;b=b2;r=r2;off=c;break}
+      }
+      if(off===false){g=ifrGraphA(ac,0);a=ifrLinkAp(g,dep,'SID',sl,ac);b=ifrLinkAp(g,dst,'STAR',star,ac,iac);r=ifrRoute(g,a,b,vias);off=true}
+      else{
+        const g0=ifrGraphA(ac,0),r0=ifrRoute(g0,ifrLinkAp(g0,dep,'SID',sl,ac),ifrLinkAp(g0,dst,'STAR',star,ac,iac),vias);
+        if(!r0.err&&r0.d<r.d-1)short={d:r0.d,mea:Math.max(0,...r0.legs.map(l=>l.e.mea||0))};
+      }
+    }
+    return {G:g,kd:a,kt:b,R:r,capOff:off,short};
+  };
+  let kd,kt,R,capShort=null;
+  ({G,kd,kt,R,capOff,short:capShort}=planWith(sidUse));
   if(fs&&fs.length){
     const via=R.legs&&R.legs[0]&&R.legs[0].e.proc&&R.legs[0].e.proc.p.n===ifrForceSid.n;
     if(R.err||!via){        // その SID の終点が経路網に繋がっていない(横田 TIMAP など) → 自動に戻す
       forceMsg=`<div class="ifrWarn">⚠ 選んだ SID「${ifrForceSid.n}」の終点から先の経路が作れないので、自動の選択に戻した</div>`;
-      ifrForceSid=null;G=ifrGraphA(ac,cap);capOff=false;
-      kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias);
-      if(R.err&&cap){G=ifrGraphA(ac,0);capOff=true;kd=ifrLinkAp(G,dep,'SID',sid,ac);kt=ifrLinkAp(G,dst,'STAR',star,ac,iac);R=ifrRoute(G,kd,kt,vias)}
+      ifrForceSid=null;
+      ({G,kd,kt,R,capOff,short:capShort}=planWith(sid));
     }else forceMsg=`<div class="hint" style="color:var(--cyn)">SID「${ifrForceSid.n}」から始まる経路に組み直した(自動の選択に戻すには「計画を作る」)</div>`;
   }
   if(R.err){out.innerHTML=`<div class="ifrWarn">${R.err}</div>`+((vias.length||avoids.size)?
@@ -8272,7 +8289,7 @@ async function ifrRunPlan(keepForce){
   // レグごとの風: 既定は全部「＝前」(共通の風を継ぐ)。共通の風は前回値か飛行ログ側の風
   const wb=store.get('hnav.ifrWind')||{d:num('wDir')||0,s:num('wSpd')||0};
   const wind={base:{d:wb.d||0,s:wb.s||0},main:R.legs.map(()=>({same:true})),alt:RA?RA.legs.map(()=>({same:true})):[]};
-  CA.capOff=capOff;
+  CA.capOff=capOff;CA.capShort=capShort;
   // 経路が通った SID/STAR をそのまま選択にする(通らなければ使える最初のもの)
   const pr=l=>l&&l.e.proc?l.e.proc:null;
   const sidSel=pr(R.legs[0])||sid.find(x=>x.ok===1)||null;
@@ -8388,7 +8405,7 @@ function ifrTable(rows,key,warr,ac,dep,cruise,depAp){
       `<button data-ed="avoid" data-n="${b.n}" title="この点を通らない経路に組み直す">✕</button><button data-ed="ins" data-n="${b.n}" title="この点のあとに経由点を足す">＋</button></span>`:'';
     h+=`<tr${e.tr?' class="ap"':''}><td>${b.ap?b.ap.icao+' '+b.ap.n:b.n}${ed}</td><td>${rn}</td><td class="r">${fmt3(r.mc)}°</td><td>${wcell}</td>`+
       `<td class="r">${r.bad?'<span class="ifrNg">不可</span>':fw(r.wca)+'°'}</td><td class="r">${r.mh==null?'—':fmt3(r.mh)+'°'}</td><td class="r">${r.ch==null?'—':fmt3(r.ch)+'°'}</td>`+
-      `<td class="r">${f0(r.gs)}</td><td class="r">${e.d.toFixed(1)}</td><td class="r">${fmtHM(r.ete)}</td><td class="r">${fmtHM(r.t)}</td><td class="r">${e.mea!=null?e.mea:'—'}</td><td class="brg">${ev}</td></tr>`;
+      `<td class="r">${f0(r.gs)}</td><td class="r">${e.d.toFixed(1)}</td><td class="r">${fmtHM(r.ete)}</td><td class="r">${fmtHM(r.t)}</td><td class="r"${e.mea!=null&&!ac.press&&e.mea>ac.maxAlt?' style="color:var(--red);font-weight:700" title="与圧なしの上限を超える"':''}>${e.mea!=null?e.mea:'—'}</td><td class="brg">${ev}</td></tr>`;
   });
   return h;
 }
@@ -8430,7 +8447,7 @@ function renderIfrOut(P){
   <div class="ifrBox"><b class="k">巡航高度</b>
     <span style="font-family:var(--mono);font-size:18px;color:${CA.over?'var(--red)':'var(--grn)'}">${CA.alt>=18000?'FL'+CA.alt/100:CA.alt.toLocaleString()+'ft'}</span>
     <span class="hint" style="display:inline;margin-left:8px">最大MEA ${CA.mea?CA.mea.toLocaleString()+'ft':'記載なし'}${CA.meaLeg?'('+G.nodes[CA.meaLeg.from].n+'→'+G.nodes[CA.meaLeg.to].n+')':''}・全体の磁針路 ${fmt3(CA.mc)}° → ${CA.odd?'奇数':'偶数'}千ft</span>
-    ${CA.over?`<div class="ifrWarn">⚠ 与圧なしの上限 ${CA.cap.toLocaleString()}ft を超える${CA.capOff?'(上限内の経路が見つからなかったので上限を外して探した)':''}。MEAの低い経路(経由FIX指定)か与圧/酸素の検討を</div>`:''}
+    ${CA.over?ifrCapHtml(CA,R,G):''}
     ${R.legs.some(l=>l.e.sg&&l.e.sg.inh)?'<div class="hint">MEAは記載の無い区間に前の区間の値を継いだものを含む</div>':''}
   </div>
   <div class="ifrBox"><b class="k">方式(装備で使えるもの。タップで選択)</b>
@@ -8495,6 +8512,22 @@ function renderIfrOut(P){
     if(!w.same&&w.d==null){const cur=ifrWindOf(W[c.dataset.k],+c.dataset.i,W.base);w.d=cur.d;w.s=cur.s}rerender()});
   document.querySelectorAll('#ifrOut .wd,#ifrOut .ws').forEach(inp=>inp.onchange=()=>{const w=W[inp.dataset.k][+inp.dataset.i];
     w[inp.classList.contains('wd')?'d':'s']=parseFloat(inp.value)||0;w.same=false;rerender()});
+}
+/* 与圧なしの上限を超えるときの案内。上限を超える区間・必要な高度・上限を気にしない場合の短い経路・対策 */
+function ifrCapHtml(CA,R,G){
+  const cap=CA.cap,f=h=>h>=18000?'FL'+h/100:h.toLocaleString()+'ft';
+  const over=R.legs.filter(l=>l.e.mea!=null&&l.e.mea>cap);
+  const nm=k=>{const n=G.nodes[k];return n.ap?n.ap.icao:n.n};
+  let h=`<div class="ifrWarn">⚠ 与圧なしの上限 ${f(cap)} を超える(巡航 ${f(CA.alt)})。`;
+  if(typeof CA.capOff==='number')h+=`上限内では経路が繋がらないので、<b>必要な高度が一番低い経路</b>にした(区間の MEA 最大 ${f(CA.capOff)})。`;
+  else if(CA.capOff===true)h+='上限をどう上げても繋がらず、上限を外して探した。';
+  else if(!over.length)h+=`区間の MEA(最大 ${f(CA.mea)})は上限内だが、磁針路 ${fmt3(CA.mc)}° の${CA.odd?'奇数':'偶数'}千ft で上限を超える。`;
+  h+='</div>';
+  if(over.length)h+=`<div class="ifrCapList">上限を超える区間: ${over.map(l=>`<b>${nm(l.from)}→${nm(l.to)}</b> ${l.e.r?l.e.r.n:''} MEA ${f(l.e.mea)}`).join('・')}</div>`;
+  if(CA.capShort)h+=`<div class="hint">上限を気にしなければ ${CA.capShort.d.toFixed(1)}NM 短い経路もある(区間の MEA 最大 ${f(CA.capShort.mea)})</div>`;
+  h+=`<div class="hint">対策: 上の経路の表の <b>✕</b>(その点を通らない)・<b>固定/＋</b>(別の点を経由)で MEA の低い経路を探す/与圧・酸素の検討/その区間の気象(VMC)の確認。`+
+    `表の MEA が赤い区間が上限を超えている</div>`;
+  return h;
 }
 /* 経路の手直しの状態は入力欄(経由・通らない)そのもの */
 function ifrEdVia(){return document.getElementById('ifrVia').value.trim().toUpperCase().split(/\s+/).filter(Boolean)}
