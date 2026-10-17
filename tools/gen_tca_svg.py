@@ -277,9 +277,12 @@ def build(ic, issue, verbose=True):
                     for t in q[::max(1, len(q) // 6)]:
                         X, Y = nm(*t); ang = math.atan2(X - c0[0], Y - c0[1])
                         S_.append((t[0], -t[1])); D_.append((c0[0] + rnm * math.sin(ang), c0[1] + rnm * math.cos(ang)))
-            keep = {}
-            for a_, b_ in zip(S_, D_): keep.setdefault((round(a_[0], 1), round(a_[1], 1)), (a_, b_))   # 同じ弧が2本のパスに入っている
-            S_, D_ = [v[0] for v in keep.values()], [v[1] for v in keep.values()]
+            # ⚠ 同じ弧が2本のパスに入っていて、ほとんど同じ位置に別々の点ができると曲面が大きくうねる(10/29 版の中部で区画が崩れた)。
+            #   2pt より近い点は先の1つだけ残す(位置合わせの点が先に入っている)
+            kS, kD = [], []
+            for a_, b_ in zip(S_, D_):
+                if all(math.hypot(a_[0] - c_[0], a_[1] - c_[1]) >= 2 for c_ in kS): kS.append(a_); kD.append(b_)
+            S_, D_ = kS, kD
             T_ = tps_fit(S_, D_)
             if verbose:
                 lo_ = []
@@ -307,7 +310,7 @@ def build(ic, issue, verbose=True):
         for j, (a0, b0, a1, b1, w2) in enumerate(W):
             l = alt(w2)
             if l is None or l >= u: continue
-            if -0.5 < b0 - y1 < 12 and abs((a0 + a1) / 2 - (x0 + x1) / 2) < 8:
+            if -1.5 < b0 - y1 < 12 and abs((a0 + a1) / 2 - (x0 + x1) / 2) < 8:      # 上段と下段の枠が少し重なる版がある(10/29 の中部で 0.84pt)
                 cand.append((abs(b0 - y1) + abs((a0 + a1) / 2 - (x0 + x1) / 2), i, j))
     bi, bj = {}, {}
     for c in cand:
