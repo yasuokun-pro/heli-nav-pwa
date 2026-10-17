@@ -50,6 +50,40 @@ CFG = {
                          ((365.8, 336.6), (32.083611, 131.451389))], 'eps': 0.25,
              'lead_min': 4,           # 縮尺が小さく引き出し線が短い(鹿児島 CTR の 10000/3001 は 11pt)
              'lead_w': 0.45},         # 引き出し線は 0.29〜0.39pt。区画の線(0.49pt)の端が文字の近くに来る(宮崎 CTR の 193°T)
+    'RJCC': {'name': 'CHITOSE TCA', 'jp': '千歳ターミナルコントロールエリア', 'center': (42.775278, 141.6925), 'center_id': 'RJCC ARP',
+             'ref_r_nm': 30, 'rot': -1.5, 'spec': 'spec_rjcc'},
+    'RJGG': {'name': 'CHUBU TCA', 'jp': '中部ターミナルコントロールエリア', 'center': (34.858333, 136.805278), 'center_id': 'RJGG ARP',
+             'ref_r_nm': 30, 'rot': 0,
+             # 地図の上に縮尺どおり(5.0pt/NM)に描かれている。CTR の円(中部・名古屋・明野)の中心で位置合わせ
+             'anchors': [((289.1, 458.0), (34.858333, 136.805278)), ((322.6, 343.6), (35.255, 136.924444)),
+                         ((257.5, 554.1), (34.533889, 136.671667))],
+             # 弧: KCC(名古屋 VOR)から 14/18/25/30NM・CBE から 14/18/30NM の上の点も正しい半径に合わせる(薄板スプライン)
+             'tps': [((315.6, 341.6), (35.26527, 136.91493), r) for r in (14, 18, 25, 30)]
+                    + [((288.5, 458.6), (34.85801, 136.80317), r) for r in (14, 18, 30)],
+             # 灰色の箱(中部 PCA)の角 = ASP_POLY の PCA の頂点(AD 2.17 本文の座標)。名古屋 PCA の箱は図では KCC 13NM で切れていて角が対応しない
+             'tps_pts': [((303.2, 479.8), (34.78853, 136.86036)), ((280.2, 482.4), (34.77972, 136.77222)),
+                         ((288.9, 550.2), (34.55805, 136.80414)), ((318.4, 546.1), (34.57222, 136.91444)),
+                         ((295.2, 433.1), (34.94052, 136.82431)), ((283.4, 369.5), (35.15668, 136.76826)),
+                         ((254.5, 377.0), (35.13361, 136.65806)), ((272.5, 438.0), (34.92113, 136.73829))],
+             'eps': 0.15, 'lead_w': 0.45, 'line_w': 0.5, 'lead_min': 6, 'tip_ext': 1.5, 'lead_owner': 1,   # 区画の線は 0.59pt 以上。引き出し線・海岸線は 0.28〜0.31pt
+             'legend': {'P1': [(10000, 4001)], 'P2': [(10000, 5501)], 'P3': [(1799, 1500), (10000, 7001)],
+                        'P4': [(2499, 1500), (10000, 7001)], 'P5': [(10000, 7001)], 'P6': [(2999, 2501), (10000, 7001)],
+                        'P7': [(2499, 1800), (10000, 7001)], 'P8': [(2999, 2500), (10000, 7001)], 'P9': [(10000, 5001)]}},
+    # 関西 TCA(RJBB AD2-19)は横倒しのページに図が2つ。右 = 関西・伊丹・神戸・八尾(縮尺どおりの地図・CTR 4つで残差 0.02〜0.04NM)、
+    #   左 = 岡山・高松(別の縮尺。KTE からの弧で薄板スプライン)
+    'RJBB': {'name': 'KANSAI TCA', 'jp': '関西ターミナルコントロールエリア', 'center': (34.434167, 135.232778), 'center_id': 'RJBB ARP',
+             'ref_r_nm': 20, 'rot': 0, 'turn': 1, 'clip': (395, 100, 745, 400), 'line_wmax': 5.5,   # 外周の太線は 3〜5pt
+             'eps': 0.15, 'lead_w': 0.5, 'line_w': 0.5, 'lead_owner': 1, 'tip_ext': 1.5, 'lead_min': 4,   # 区画の線 0.74pt〜・引き出し線 0.3pt(短いものは 5pt)
+             'anchors': [((589.8, 209.0), (34.784444, 135.439167)), ((541.4, 298.4), (34.434167, 135.232778)),
+                         ((622.4, 259.4), (34.596667, 135.600556)), ((541.6, 246.6), (34.63278, 135.22389))]},
+    'RJBB_W': {'name': 'KANSAI TCA', 'jp': '関西ターミナルコントロールエリア', 'icao': 'RJBB', 'center': (34.214167, 134.015556),
+               'center_id': 'KTE', 'ref_r_nm': 45, 'rot': 0, 'turn': 1, 'clip': (40, 100, 395, 425), 'line_wmax': 5.5,
+               'eps': 0.15, 'lead_w': 0.5, 'line_w': 0.5, 'lead_owner': 1, 'tip_ext': 1.5, 'lead_min': 6,
+               'anchors': [((237.8, 210.5), (34.756944, 133.855278)), ((273.8, 344.0), (34.214167, 134.015556))],
+               'tps': [((273.7, 345.5), (34.2125, 134.02259), r) for r in (10, 25, 40, 45)],
+               'add_lines': [[(289.5, 331.5), (294.7, 347.4)]],
+               'marks': [('1', (271.7, 330.7)), ('2', (318.0, 337.0)), ('3', (299.9, 340.4))],
+               'legend': {'1': [(9000, 3001)], '2': [(6000, 4501)], '3': [(9000, 4501)]}},
 }
 
 
@@ -113,6 +147,22 @@ def fitc(P):
     return c[0], c[1], r, float(np.abs(np.hypot(x - c[0], y - c[1]) - r).max())
 
 
+def tps_fit(S, D):
+    """薄板スプライン(図の点 S → 平面の点 D を正確に通る滑らかな写像)"""
+    S, D = np.asarray(S, float), np.asarray(D, float); n = len(S)
+    r = np.hypot(S[:, None, 0] - S[None, :, 0], S[:, None, 1] - S[None, :, 1])
+    K = np.where(r > 0, r * r * np.log(r + 1e-12), 0)
+    Pm = np.c_[np.ones(n), S]; A = np.zeros((n + 3, n + 3)); A[:n, :n] = K + np.eye(n) * 1e-6; A[:n, n:] = Pm; A[n:, :n] = Pm.T
+    return S, np.linalg.solve(A, np.r_[D, np.zeros((3, 2))])
+
+
+def tps_eval(m, p):
+    S, sol = m; p = np.atleast_2d(np.asarray(p, float))
+    r = np.hypot(p[:, None, 0] - S[None, :, 0], p[:, None, 1] - S[None, :, 1])
+    U = np.where(r > 0, r * r * np.log(r + 1e-12), 0)
+    return U @ sol[:len(S)] + np.c_[np.ones(len(p)), p] @ sol[len(S):]
+
+
 def split_run(q, tol=0.5):
     """⚠ 半径の違う円弧が続けて1本の C の列になっていることがある(松島: 外周 30NM と霞目 CTZ の半円)。
     先頭から1つの円に乗る間だけ伸ばして切り分ける"""
@@ -136,10 +186,14 @@ def find_page(ic, issue):
     raise SystemExit(f'{ic}: TCA の図のページが見つからない')
 
 
-def words(f, p):
+def words(f, p, turn=False):
     h = subprocess.run(['pdftotext', '-f', str(p), '-l', str(p), '-bbox', f, '-'], capture_output=True, text=True).stdout
-    return [(float(a), float(b), float(c), float(d), html_un(w)) for a, b, c, d, w in
-            re.findall(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)</word>', h)]
+    W = [(float(a), float(b), float(c), float(d), html_un(w)) for a, b, c, d, w in
+         re.findall(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)</word>', h)]
+    if turn:      # 横倒しの図を起こす(build の svg と同じ変換)
+        Hp = float(re.search(r'<page width="[\d.]+" height="([\d.]+)"', h).group(1))
+        W = [(Hp - y1, x0, Hp - y0, x1, w) for x0, y0, x1, y1, w in W]
+    return W
 
 
 def html_un(s):
@@ -155,9 +209,18 @@ def alt(s):
 
 def build(ic, issue, verbose=True):
     C = CFG[ic]
-    f, p = find_page(ic, issue)
+    f, p = find_page(C.get('icao', ic), issue)
     svg = subprocess.run(['pdftocairo', '-svg', '-f', str(p), '-l', str(p), f, '-'], capture_output=True, text=True).stdout
     P = svg_paths(svg)
+    if C.get('turn'):
+        # ⚠ 図が横倒しに描かれたページ(関西: 北がページの左)。図を時計回りに 90° 起こした座標で扱う(文字の上段/下段もそろう)
+        Hp = float(re.search(r'viewBox="0 0 [\d.]+ ([\d.]+)"', svg).group(1))
+        tr = lambda q: (Hp - q[1], q[0])
+        for x in P: x['pts'] = [tr(q) for q in x['pts']]; x['runs'] = [[tr(q) for q in r] for r in x['runs']]
+    if C.get('clip'):
+        # 1ページに別々の図が2つある(関西: 右=関西・伊丹・神戸、左=岡山・高松。縮尺も違う)。範囲の中の線だけ使う
+        x0_, y0_, x1_, y1_ = C['clip']
+        P = [x for x in P if all(x0_ <= q[0] <= x1_ and y0_ <= q[1] <= y1_ for q in x['pts'])]
     # 外周(ref_r_nm)の円弧で中心(=基準 navaid)と縮尺を決める。⚠ 外周は短い円弧に分かれていたり(仙台)、直線と1本のパスに
     #   つながっていたり(三沢)する。円弧の区間ごとに当てはめ、0.3rad 以上回る円弧のうち半径が一番大きいもの(=外周)を採る
     #   (短い円弧ほど中心が不安定・記号の小さな円は除く)
@@ -197,13 +260,43 @@ def build(ic, issue, verbose=True):
         if verbose: print(f'     位置合わせ: {abs(ka) ** -1:.3f} pt/NM・図の上 {math.degrees(-np.angle(ka)):+.2f}°・残差 {[round(r, 2) for r in res]} NM')
         def nm(x, y):
             w = ka * complex(x, -y) + kb; return (w.real, w.imag)
+        if C.get('tps'):
+            # ⚠ 図の中で縮尺が違う(中部: KCC と名古屋 CTR の位置関係が 0.7NM 狂っている)。位置合わせの点(CTR の中心・navaid)と
+            #   弧(KCC・CBE からの半径)の上の点を正確に通る薄板スプラインで合わせる。弧は正しい半径に、CTR は正しい位置に来る
+            S_, D_ = [], []
+            for z, w in zip(Z, W_): S_.append((z.real, z.imag)); D_.append((w.real, w.imag))
+            for (px, py), (la, lo) in C.get('tps_pts', []):         # 図の点と座標の分かっている点(PCA の箱の角など)
+                bb, dd = _bd(C['center'][0], C['center'][1], la, lo)
+                S_.append((px, -py)); D_.append((dd * math.sin(math.radians(bb)), dd * math.cos(math.radians(bb))))
+            arcs = [(fitc(q), q) for x in P if not x['dash'] for q in [r for rr in x['runs'] for r in split_run(rr)] if len(q) >= 4]
+            for (px, py), (la, lo), rnm in C['tps']:
+                bb, dd = _bd(C['center'][0], C['center'][1], la, lo)
+                c0 = (dd * math.sin(math.radians(bb)), dd * math.cos(math.radians(bb)))
+                for (a, b, r, e), q in arcs:
+                    if math.hypot(a - px, b - py) > 6 or abs(r * abs(ka) - rnm) > 1.5: continue
+                    for t in q[::max(1, len(q) // 6)]:
+                        X, Y = nm(*t); ang = math.atan2(X - c0[0], Y - c0[1])
+                        S_.append((t[0], -t[1])); D_.append((c0[0] + rnm * math.sin(ang), c0[1] + rnm * math.cos(ang)))
+            keep = {}
+            for a_, b_ in zip(S_, D_): keep.setdefault((round(a_[0], 1), round(a_[1], 1)), (a_, b_))   # 同じ弧が2本のパスに入っている
+            S_, D_ = [v[0] for v in keep.values()], [v[1] for v in keep.values()]
+            T_ = tps_fit(S_, D_)
+            if verbose:
+                lo_ = []
+                for i in range(len(Z)):
+                    m_ = tps_fit(np.delete(np.array(S_), i, 0), np.delete(np.array(D_), i, 0))
+                    lo_.append(round(float(np.hypot(*(tps_eval(m_, S_[i])[0] - D_[i]))), 2))
+                print(f'     薄板スプライン: 点 {len(S_)}(弧の上 {len(S_) - len(Z)})・1点ずつ外したときの誤差 {lo_} NM')
+            def nm(x, y):
+                v = tps_eval(T_, (x, -y))[0]; return (float(v[0]), float(v[1]))
     # 円弧の半径の一覧(検算用)
     if verbose:
         rs = sorted({round(math.hypot(*nm(*fitc(x['pts'])[:2])), 1) for x in P if x['curve'] and len(x['pts']) >= 8 and fitc(x['pts'])[3] < 0.5 and not x['dash']})
         rads = sorted({round(fitc(x['pts'])[2] / sc, 1) for x in P if x['curve'] and len(x['pts']) >= 8 and fitc(x['pts'])[3] < 0.5 and not x['dash']
                        and math.hypot(*nm(*fitc(x['pts'])[:2])) < 0.5})
         print(f'     基準 navaid を中心とする円弧の半径(NM): {rads}')
-    W = words(f, p)
+    W = words(f, p, C.get('turn'))
+    if C.get('clip'): W = [w for w in W if C['clip'][0] <= w[0] and w[2] <= C['clip'][2] and C['clip'][1] <= w[1] and w[3] <= C['clip'][3]]
     # 高度の分数「上限 / 下限」(上下に並ぶ2語)
     # ⚠ 縮尺の小さい図(鹿児島)では隣の分数の下段と次の分数の上段も 12pt 以内に並ぶ(「4200」と「3000」で 4200/3000 ができた)。
     #   上段・下段とも互いに一番近い相手どうしだけを組にする
@@ -233,8 +326,10 @@ def build(ic, issue, verbose=True):
         if x['w'] >= 0.9 and any(inbox(x, w_[:4], 1.0) for w_ in W): return True      # 輪郭は 0.98/1.96pt(区画の短い弧 0.49pt は「10NM」の枠に収まる)
         return (not x['curve'] and len(x['pts']) == 2 and abs(x['pts'][0][1] - x['pts'][1][1]) < 0.3
                 and any(inbox(x, q['box'], 1.5) for q in fr))
-    lines = [LineString([nm(*q) for q in x['pts']]) for x in P if not x['dash'] and 0.3 <= x['w'] <= 2.5 and len(x['pts']) >= 2
+    lines = [LineString([nm(*q) for q in x['pts']]) for x in P if not x['dash'] and C.get('line_w', 0.3) <= x['w'] <= C.get('line_wmax', 2.5) and len(x['pts']) >= 2
              and not deco(x)]
+    # 図では破線で描かれていて拾えないが区画の境になっている線(関西の左: 高松 CTR の東の破線 = 高松 PCA の箱の西の辺)
+    lines += [LineString([nm(*q) for q in L]) for L in C.get('add_lines', [])]
     # ⚠ 線の端どうしが図の上でわずかに(0.1pt 程度)離れていて polygonize では面が閉じない。線に太さ EPS を持たせてつなぎ、
     #   囲まれた穴を区画にして EPS だけ太らせて戻す
     EPS = C.get('eps', 0.06)
@@ -268,19 +363,24 @@ def build(ic, issue, verbose=True):
         elif len(w2) == 1 and 0x2460 <= ord(w2) <= 0x2473: m = str(ord(w2) - 0x245F)
         elif len(w2) == 1 and 0x4DF5 <= ord(w2) <= 0x4E08: m = str(ord(w2) - 0x4DF4)
         elif len(w2) == 1 and 0x0518 <= ord(w2) <= 0x052B: m = str(ord(w2) - 0x0517)        # 小松: ①=U+0518
+        elif re.fullmatch(r'P\d', w2) and w == w2: m = w2          # 中部の P1〜P9(凡例の行は「P1凬」で区別)
         elif re.fullmatch(r'\d{1,2}', w2) and any(math.hypot(mx - c0, my - c1) < c2 + 1 for c0, c1, c2 in circ): m = w2
         if m: marks.append({'m': m, 'x': mx, 'y': my, 'abc': m.isalpha(), 'x1': x1})
+    for m_, (mx_, my_) in C.get('marks', []):      # 図形の「*」と数字で描かれた印(関西の左の *1〜*3)は位置を設定で与える
+        marks.append({'m': m_, 'x': mx_, 'y': my_, 'abc': False, 'x1': mx_ + 3})
     # ⚠ 英字は回転した文字の切れ端(「SDE」の E など)と区別がつかない。凡例は「A :」とコロンが続くものだけ
     colon = [((x0 + x1) / 2, (y0 + y1) / 2) for x0, y0, x1, y1, w in W if w.strip() in (':', '：')]
     # 凡例: 記号の右の同じ行にある分数(「① 2999/2001 & 20000/8001」は2段)。次の記号の手前まで
     legend, used = {}, set()
     for mk in marks:
+        if C.get('legend'): break                 # 凡例を設定で与える図(中部)。図中の「P8」の右の 10000/1900 を凡例と取り違えた
         if mk['abc'] and not any(0 < cx_ - mk['x1'] < 12 and abs(cy_ - mk['y']) < 5 for cx_, cy_ in colon): continue
         nxt = min([o['x'] for o in marks if o is not mk and abs(o['y'] - mk['y']) < 6 and o['x'] > mk['x']] or [1e9])
         row = sorted([i for i, q in enumerate(fr) if 0 < q['x'] - mk['x'] < 160 and q['x'] < nxt and abs(q['y'] - mk['y']) < 7], key=lambda i: fr[i]['x'])
         if row and fr[row[0]]['x'] - mk['x'] > 45: row = []          # 記号のすぐ右(45pt 以内)から始まる行だけ
         if row:
             legend[mk['m']] = [fr[i]['b'] for i in row]; used.update(row); mk['leg'] = True
+    legend.update(C.get('legend', {}))
     if verbose and legend: print('     凡例:', {k: v for k, v in legend.items()})
     # 区画に付ける印: 凡例に使っていない分数 + 凡例のある記号(凡例の行そのものは除く)。座標は図(pt)のまま
     labs = [(q['b'], (q['x'], q['y']), q['box']) for i, q in enumerate(fr) if i not in used]
@@ -302,17 +402,45 @@ def build(ic, issue, verbose=True):
     pts = []
     def dbox(q, bx):        # 点から文字の枠までの距離(pt)
         return math.hypot(max(bx[0] - q[0], 0, q[0] - bx[2]), max(bx[1] - q[1], 0, q[1] - bx[3]))
-    for bnd, (lx, ly), bx in labs:
-        tips = []
-        for a2, b2 in leaders:
+    # 引き出し線の端はいちばん近いラベルのもの(中部: 帯の外の「P5」の線が中の「P7」「P8」の横を通る)
+    #   両端がそれぞれ別のラベルの近くにあるときは、ラベルの中心から外へ向かって伸びている度合いが大きい方
+    boxes = [bx for _, _, bx in labs]
+    own = {}
+    for k_, (a2, b2) in enumerate(leaders):
+        best_ = None
+        for j, bx in enumerate(boxes):
             for e0, e1 in ((a2, b2), (b2, a2)):
+                if dbox(e0, bx) < 6 and dbox(e1, bx) > C.get('lead_min', 12):
+                    c0 = ((bx[0] + bx[2]) / 2, (bx[1] + bx[3]) / 2)
+                    u_ = (e0[0] - c0[0], e0[1] - c0[1]); v_ = (e1[0] - e0[0], e1[1] - e0[1])
+                    cs = (u_[0] * v_[0] + u_[1] * v_[1]) / (math.hypot(*u_) * math.hypot(*v_) + 1e-9)
+                    if best_ is None or cs > best_[0]: best_ = (cs, j)
+        if best_: own[k_] = boxes[best_[1]]
+    leaders_k = list(enumerate(leaders))
+    for li, (bnd, (lx, ly), bx) in enumerate(labs):
+        tips = []
+        for k_, (a2, b2) in leaders_k:
+            for e0, e1 in ((a2, b2), (b2, a2)):
+                if C.get('lead_owner') and own.get(k_) is not bx: continue
                 # ⚠ 文字の「中心から」で見ると、近くを通る別の矢印(注記の箱から出る線)を拾った(仙台 4000)。文字の枠から 6pt 以内
                 # ⚠ もう一方の端がほかの文字に付いている線はその文字の引き出し線(「KAGOSHIMA PCA」の線の先が 10000/5001 の横に来る)
                 if dbox(e0, bx) < 6 and dbox(e1, bx) > C.get('lead_min', 12) and math.hypot(e1[0] - e0[0], e1[1] - e0[1]) < 60 \
                         and not any(dbox(e1, w_[:4]) < 3 and re.search(r'[A-Za-z]{2}', w_[4]) and not (bx[0] - 1 <= w_[0] and w_[2] <= bx[2] + 1 and bx[1] - 1 <= w_[1] and w_[3] <= bx[3] + 1) for w_ in W):
-                    tips.append(e1)
+                    # 矢印の先は境界線の上に乗りがち。向きに沿って 1.5pt 先を見る(中部の P5 は帯の端の細い区画を指す)
+                    L_ = math.hypot(e1[0] - e0[0], e1[1] - e0[1])
+                    tips.append([(e1[0] + (e1[0] - e0[0]) / L_ * k, e1[1] + (e1[1] - e0[1]) / L_ * k)
+                                 for k in (C.get('tip_ext', 0), 3, 4.5)])
         if tips and verbose: print(f'     矢印: {bnd[0]}/{bnd[1]} → {len(tips)} 本')
-        for t in (tips or [(lx, ly)]): pts.append((bnd, nm(*t), bool(tips)))
+        for t in (tips or [[(lx, ly)]]):
+            # 矢印の先がラベル自身と同じ面にあるなら、もう少し先(3・4.5pt)を見る(関西の 10000/2501 は小さな三角を指す)
+            q_ = t[0]
+            if tips and C.get('tip_ext'):
+                own_ = next((i for i, g_ in enumerate(cells) if g_.contains(Point(nm(lx, ly)))), None)
+                for cand_ in t:
+                    q_ = cand_
+                    if next((i for i, g_ in enumerate(cells) if g_.contains(Point(nm(*cand_)))), None) != own_: break
+                else: q_ = t[0]
+            pts.append((bnd, nm(*q_), bool(tips)))
     def cell_of(pt, arrow):
         P0 = Point(pt)
         for i, g in enumerate(cells):
@@ -334,7 +462,10 @@ def build(ic, issue, verbose=True):
         if verbose: print(f'     区画の合計 {sum(g.area for g in S.values()):.1f} NM² / 和 {unary_union(list(S.values())).area:.1f} NM²')
         geo = lambda cs: [dest(C['center'][0], C['center'][1], (math.degrees(math.atan2(X, Y)) + 360) % 360, math.hypot(X, Y)) for X, Y in cs]
         for n, g in S.items():
-            bands = [n] if isinstance(n, tuple) else legend[str(n)]
+            if isinstance(n, tuple):
+                t = [v for v in n if not isinstance(v, str)]          # 先頭の文字は区画の見分け用。数字は 上限/下限 の組(2段なら4つ)
+                bands = [(t[j], t[j + 1]) for j in range(0, len(t), 2)]
+            else: bands = legend[str(n)]
             ch = sorted({round(cells[ci].area, 1) for mk in marks if mk['m'] == str(n) and not mk.get('leg')
                          for ci in [cell_of(nm(mk['x'], mk['y']), False)] if ci is not None} |
                         {round(cells[ci].area, 1) for bnd, ci in labs if bnd in bands})
@@ -344,7 +475,7 @@ def build(ic, issue, verbose=True):
                 q = q.simplify(0.005)
                 ring = geo(q.exterior.coords) if not q.interiors else [geo(q.exterior.coords)] + [geo(h.coords) for h in q.interiors]
                 for u, l in bands:
-                    out.append({'n': f"{C['name']} {u}/{l}", 'jp': C['jp'], 'k': 'TCA', 'icao': ic, 'up': u, 'lo': l, 'src': 'def',
+                    out.append({'n': f"{C['name']} {u}/{l}", 'jp': C['jp'], 'k': 'TCA', 'icao': C.get('icao', ic), 'up': u, 'lo': l, 'src': 'def',
                                 'rmk': f"AD 2.17 添付図に書かれた定義({C['center_id']} からの弧・放射線、平行線、CTR)から作図", 'pts': ring,
                                 '_a': round(q.area, 1)})
         return out, [], (cx, cy, sc, nm)
@@ -360,7 +491,7 @@ def build(ic, issue, verbose=True):
         # 穴(区画の中の別の区画=CTZ など)があれば [外周, 穴…] のリングの配列で持つ(inArea・L.polygon がそのまま扱える)
         ring = geo(g.exterior.coords) if not g.interiors else [geo(g.exterior.coords)] + [geo(h.coords) for h in g.interiors]
         for u, l in bands:          # 1つの区画に高度帯が2つ以上(千歳の「2999/2001 & 20000/8001」)なら帯ごとに
-            out.append({'n': f"{C['name']} {u}/{l}", 'jp': C['jp'], 'k': 'TCA', 'icao': ic, 'up': u, 'lo': l, 'src': 'svg',
+            out.append({'n': f"{C['name']} {u}/{l}", 'jp': C['jp'], 'k': 'TCA', 'icao': C.get('icao', ic), 'up': u, 'lo': l, 'src': 'svg',
                         'rmk': f"AD 2.17 添付図の線(ベクタ)から起こした近似の形({C['center_id']} 基準・"
                                f"{'CTR の円で位置合わせ' if C.get('anchors') else '図の縮尺で変換'}・誤差 0.1〜0.5NM 程度)", 'pts': ring,
                         '_a': round(g.area, 1)})
@@ -412,13 +543,23 @@ class Kit:
         n = max(2, int((a2 - a1) / 0.5))
         return Polygon([(0, 0)] + [(60 * self.u(a1 + (a2 - a1) * k / n)[0], 60 * self.u(a1 + (a2 - a1) * k / n)[1]) for k in range(n + 1)])
 
-    def aca(self, ic, up):
-        """進入管制区(aca.json の AIXM 由来)の区画の形"""
+    def aca(self, ic, up, lo=None, big=True):
+        """進入管制区(aca.json の AIXM 由来)の区画の形。同じ上下限が2つあれば big で大きい方/小さい方"""
+        c = []
         for x in json.load(open(os.path.join(ROOT, 'aca.json')))['f']:
-            if x.get('k') == 'ACA' and x.get('icao') == ic and x.get('up') == up:
+            if x.get('k') == 'ACA' and x.get('icao') == ic and x.get('up') == up and (lo is None or x.get('lo') == lo):
+                r = x['pts'] if isinstance(x['pts'][0][0], (int, float)) else x['pts'][0]
+                c.append(Polygon([self.xy(*q) for q in r]).buffer(0))
+        if not c: raise SystemExit(f'{ic} ACA {lo}/{up} が aca.json に無い')
+        return sorted(c, key=lambda g: g.area)[-1 if big else 0]
+
+    def res(self, name):
+        """制限空域(res.json)の形"""
+        for x in json.load(open(os.path.join(ROOT, 'res.json')))['f']:
+            if (x.get('n') or '').startswith(name) and x.get('pts'):
                 r = x['pts'] if isinstance(x['pts'][0][0], (int, float)) else x['pts'][0]
                 return Polygon([self.xy(*q) for q in r]).buffer(0)
-        raise SystemExit(f'{ic} ACA 上限 {up} が aca.json に無い')
+        raise SystemExit(f'{name} が res.json に無い')
 
     def ctr(self, ic):
         """管制圏(ASP_POLY・AIXM)の形"""
@@ -528,13 +669,78 @@ def spec_rjnh(C):
     }
 
 
+def spec_rjcc(C):
+    """千歳 TCA(RJCC AD2-19)を図の定義から組む。⚠ 図は真北が上だが場所で縮尺が歪み、どう位置合わせしても最大 0.6〜1.2NM ずれる
+    ・西側は千歳 ACA(AIXM)の区画そのもの: FL200/11000 → 20000/11001・FL200/13000 → ④ 20000/13001・
+      8000/FL160 の三角 → ② 16000/8001・SFC/FL200 の小さい方(南西)→ 20000/8000。北の上限 16000 は SFC/FL160 の区画
+    ・中央は滑走路軸(ARP を通る磁方位 360°・偏差 9°W)から西 13/9/6/2NM・東 2.75/8/20NM の平行線と ARP からの放射線
+      030/070/120/140/220/310/330°、ARP から 19・20・30NM の弧、CTZ = ARP 5NM
+    ・千歳 PCA(AD2-17)= ZYT 中心 18NM の円で軸の西 2NM より東。軸の方向に ZYT から ±11NM で区切る(端は 8000/1000、
+      中は CTZ を除いて 2000/700 と 6000/3000)。TCA はその上下のすき間: ① 2999/2001 & 20000/6001 など
+    ・R-138 は除く。W9 と W6 の間の R-138 より南の区画は図に高度が無く、R-138 の北の 20000/3000 の続きとした"""
+    k = Kit(C, 9); D, wedge = k.D, k.wedge
+    AX = 360 - 9
+    def par(d, east):          # 軸から d NM(東 +)の平行線の東側/西側
+        return k.half(k.off((0, 0), AX, d), AX, east)
+    def rad(m, left):          # ARP からの磁方位 m の放射線の左/右
+        return k.half((0, 0), m - 9, not left)
+    def along(a, north):       # 軸の方向に a NM の垂線の北側/南側
+        ux, uy = k.u(AX); P = (ux * a, uy * a)
+        return k.half(P, AX + 90, not north)
+    A16, A8 = k.aca('RJCC', 16000, 700), k.aca('RJCC', 16000, 8000)
+    A11, A13 = k.aca('RJCC', 20000, 11000), k.aca('RJCC', 20000, 13000)
+    A20, A20s = k.aca('RJCC', 20000, 700, True), k.aca('RJCC', 20000, 700, False)
+    R138 = k.res('R-138')
+    D30 = D(30)
+    ZYT = k.xy(42.76444, 141.67361)
+    PCA = k.Point(*ZYT).buffer(18, 256) & par(-2, True)
+    za = ZYT[0] * k.u(AX)[0] + ZYT[1] * k.u(AX)[1]          # ZYT の軸上の位置(ARP の南 約 0.5NM)
+    CTZ = D(5)
+    N16 = (A16 & D30) - A8
+    S = (A20 & D30) - R138
+    E275, E8, E20 = par(2.75, True), par(8, True), par(20, True)
+    cell = {}
+    cell[(16000, 2000)] = (N16 & D(19) & rad(30, True)) - PCA
+    cell[(16000, 3000)] = (N16 & rad(30, True)) - D(19) - PCA
+    cell[(16000, 4000)] = (N16 & rad(30, False) & par(20, False)) - PCA
+    cell[(16000, 7000)] = (N16 & E20) - PCA
+    cell[2] = (A8 & D30) | (N16 & PCA & (par(2.75, False) | E8))
+    cell[3] = N16 & PCA & E275 & par(8, False)
+    cell[(20000, 11001)] = A11 & D30
+    cell[4] = A13 & D30
+    cell[(20000, 8000)] = A20s & D30
+    cell[(20000, 6001)] = CTZ & S
+    strip = (S & PCA & par(2.75, False)) - CTZ
+    cell[('g', 20000, 8001)] = strip & along(za + 11, True)
+    cell[1] = strip & along(za + 11, False) & along(za - 11, True)
+    cell[('i', 20000, 8001)] = strip & along(za - 11, False)
+    cell[('k', 20000, 8001, 2999, 2001)] = (S & PCA & E275 & par(8, False)) - CTZ
+    cell[('m', 20000, 8001)] = (S & PCA & E8 & rad(120, True)) - CTZ
+    cell[('l', 20000, 8001, 3999, 2000)] = (S & PCA & E8 & rad(120, False)) - CTZ
+    out_pca = S - PCA - CTZ
+    cell[(20000, 7000)] = out_pca & E20 & rad(70, True)
+    cell[(20000, 5000)] = out_pca & E20 & rad(70, False) & rad(120, True)
+    cell[(20000, 4000)] = out_pca & E8 & par(20, False) & rad(120, True)
+    cell[(20000, 3000)] = out_pca & wedge(120, 140) & (D30 - D(20))
+    W13, W9, W6 = par(-13, False), par(-9, False), par(-6, False)
+    N220 = rad(220, False)
+    cell[(20000, 6000)] = out_pca & W13 & N220
+    cell[('5', 20000, 5000)] = out_pca & par(-13, True) & W9 & rad(310, True) & N220
+    cell[('3', 20000, 3000)] = out_pca & par(-13, True) & W6 & rad(330, True) & (rad(310, False) | par(-9, True)) & N220
+    used = unary_union([g for kk, g in cell.items()])
+    cell[(20000, 2000)] = S - used
+    return cell
+
+
 def main():
     issue = sys.argv[sys.argv.index('--airac') + 1] if '--airac' in sys.argv else sorted(os.listdir(AIP))[-1]
-    ics = [a for a in sys.argv[1:] if re.fullmatch(r'[A-Z]{4}', a)] or list(CFG)
+    ics = [a for a in sys.argv[1:] if re.fullmatch(r'[A-Z]{4}(_W)?', a)] or list(CFG)
     res = {ic: build(ic, issue)[0] for ic in ics}
     if '--write' in sys.argv:
         A = json.load(open(os.path.join(ROOT, 'aca.json')))
-        A['f'] = [x for x in A['f'] if not (x.get('k') == 'TCA' and x.get('icao') in res)]
+        rep = {CFG[ic].get('icao', ic) for ic in res}            # 関西は左右2つの図(RJBB・RJBB_W)をまとめて差し替える
+        if 'RJBB' in rep and not ({'RJBB', 'RJBB_W'} <= set(res)): raise SystemExit('RJBB と RJBB_W は一緒に回すこと')
+        A['f'] = [x for x in A['f'] if not (x.get('k') == 'TCA' and x.get('icao') in rep)]
         for ic, v in res.items():
             for o in v: o.pop('_a', None); A['f'].append(o)
         json.dump(A, open(os.path.join(ROOT, 'aca.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
