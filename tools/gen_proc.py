@@ -37,6 +37,7 @@ def pdfs():
         if f:
             # ⚠ 日付フォルダが複数あると全AIRACのPDFが混ざる(2026-09 に踏んだ)。最新の日付フォルダだけ
             latest = max(os.path.basename(os.path.dirname(os.path.dirname(x))) for x in f)
+            if '--airac' in sys.argv: latest = sys.argv[sys.argv.index('--airac') + 1]     # 版を固定(発効前の版がある時)
             return pick([x for x in f if os.path.basename(os.path.dirname(os.path.dirname(x))) == latest])   # 飛行場ごとに1版
     return []
 
