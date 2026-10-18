@@ -1188,7 +1188,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-249';
+const VER_TAG='v6-250';
 const BUILD='2026-10-18';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7324,8 +7324,12 @@ function renderLogs(){
 }
 /* ───────── ログ印刷(A4横に同じログを2面付け→切るとA5×2枚) ───────── */
 new Image().src='wordmark-brown.png';   // 印刷はボタンの処理の中ですぐ呼ぶので、ロゴは先に読んでおく
+let prLast=0;
 document.getElementById('btnPrint').onclick=()=>{
   if(!wps.length){alert('ポイントがありません');return}
+  // ⚠ 続けて押すと iOS が2回目の print() を「自動的な印刷」とみなして確認を出す。印刷画面が開くまでの2秒は受け付けない
+  if(Date.now()-prLast<2000)return;
+  prLast=Date.now();
   const src=document.querySelector('table.fltlog');
   const build=()=>{
     const t=src.cloneNode(true);
@@ -7399,16 +7403,24 @@ document.getElementById('btnPrint').onclick=()=>{
   const area=document.getElementById('printArea');
   const t0=`FLIGHT LOG${dep?`　${dep}${dst?' → '+dst:''}`:''}`;
   // 画面外に同じ寸法で置いて面の高さを測る(印刷と同じ mm/pt 指定なので、印刷の高さと同じになる)
+  // ⚠ 点を1つずつ足して測り直すと iPhone で数百 ms〜かかり、ボタンの反応が遅れて「自動的な印刷」の確認も出た。
+  //   全部の行を入れた1面を1回だけ測り、行の高さを足し算して面に分ける
   area.className='measure';
   const H=168*96/25.4-4;   // 1面の高さ 168mm(px)。罫線ぶん少し引く
-  const fits=html=>{area.innerHTML=page([html]);return area.querySelector('.prCopy').offsetHeight<=H};
+  area.innerHTML=page([pane(t0,full.outerHTML,true)]);
+  const cp=area.querySelector('.prCopy'),c0=cp.getBoundingClientRect().top;
+  const fa=[...cp.querySelectorAll('tbody tr.fixA')];
+  const bot=fa.map(r=>{const b=r.nextElementSibling&&r.nextElementSibling.classList.contains('fixB')?r.nextElementSibling:r;return b.getBoundingClientRect().bottom-c0});
+  const top0=fa.length?fa[0].getBoundingClientRect().top-c0:0;              // 題名+NOTES+見出し行
+  const tot=cp.querySelector('tbody tr.total');const totH=tot?tot.getBoundingClientRect().height:0;
+  const hd=cp.querySelector('.prHead');const hdH=hd?hd.getBoundingClientRect().height+3+(cp.querySelector('.prLogo')?.getBoundingClientRect().height||0):0;
   const copies=[];
   for(let from=0;from<n;){
-    const first=from===0;
-    const mk=to=>pane(first?t0:t0+`（続き ${from+1}-${to}）`,half(from,to),first);
+    const first=from===0,base=first?0:hdH;                                   // 続きの面は NOTES 等が無いぶん上に詰まる
+    const start=from?bot[from-1]:top0;                                     // この面の1行目の上端(1面目の座標)
     let to=from+1;
-    while(to<n&&fits(mk(to+1)))to++;
-    copies.push(mk(to));from=to;
+    while(to<n&&(bot[to]-start)+(top0-base)+(to+1===n?totH:0)<=H)to++;
+    copies.push(pane(first?t0:t0+`（続き ${from+1}-${to}）`,half(from,to),first));from=to;
   }
   area.className='';
   // 1面に収まれば同じものを2面(切って2枚使える)。収まらなければ前半・続きを順に並べ、A4 1枚に2面ずつ
