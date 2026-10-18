@@ -284,34 +284,36 @@
   table.fltlog thead th.cFix{z-index:4;background:var(--panel2)}
   tr.nextwp td:first-child{background:linear-gradient(rgba(61,213,243,.12),rgba(61,213,243,.12)) var(--panel)}
   tr.dctOnRow td:first-child{background:linear-gradient(rgba(61,213,243,.08),rgba(61,213,243,.08)) var(--panel)}
-  /* 印刷: A4横に2面(切るとA5×2枚)。面の中身は #printArea の下だけに効かせる(印刷の前に画面外で高さを測って面割りするため) */
-  #printArea{display:none}
-  #printArea.measure{display:block;position:fixed;left:-10000px;top:0;visibility:hidden}
-  /* 1ページ = 255×168mm。⚠ iPhone は @page の余白を無視して上下左右に約19mm(54pt)の余白で刷る(A4 の印刷範囲 ≒ 259×172mm)。
-     以前の 277×190mm では縦向きに回したとき題名と右の列が紙の外に出た(2026-10-18 実機の PDF で確認)。
-     横向きは幅いっぱい(100%)にして2面の境目を紙の中央に。高さ(=面割りの基準)は 168mm */
-  #printArea.measure{width:255mm}
-  #printArea .prPage{position:relative;width:100%;height:168mm;overflow:hidden;break-after:page;page-break-after:always}
+  /* 印刷: A4横に2面(切るとA5×2枚)。面の中身は #printArea の下だけに効かせる(印刷の前に画面外で高さを測って面割りするため)
+     ⚠ 寸法はすべて --u(1単位 ≒ 1mm)で書く。iPhone は mm/pt を約1.15倍に拡大して刷り(2026-10-19 実機 PDF)、余白(約19mm)の指定も効かない。
+       印刷では --u を「紙の印刷範囲の幅(100vw)÷ 面の幅」にして、どの拡大率でも紙の幅にぴったり合わせる。
+       画面外の計測では --u=1mm。全部 --u で比例するので、計測した面割りは印刷でもそのまま成り立つ */
+  #printArea{display:none;--u:1mm}
+  #printArea.measure{display:block;position:fixed;left:-10000px;top:0;visibility:hidden;width:calc(255*var(--u))}
+  /* 1ページ = 255×168 単位。横向きは幅いっぱい(2面の境目が紙の中央)、縦向きは90°回す(下の @media) */
+  #printArea .prPage{position:relative;width:100%;height:calc(168*var(--u));overflow:hidden;break-after:page;page-break-after:always}
   #printArea .prPage:last-child{break-after:auto;page-break-after:auto}
-  #printArea .prRot{display:flex;align-items:flex-start;width:100%;height:168mm;color:#000;background:#fff}
-  #printArea .prCopy{width:50%;height:100%;padding:0 3mm;box-sizing:border-box;border-right:1px dashed #999;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
+  #printArea .prRot{display:flex;align-items:flex-start;width:100%;height:calc(168*var(--u));color:#000;background:#fff}
+  #printArea .prCopy{width:50%;height:100%;padding:0 calc(3*var(--u));box-sizing:border-box;border-right:1px dashed #999;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
   #printArea .prCopy:last-child{border-right:none}
   #printArea.measure .prCopy{height:auto}
-  #printArea .prTitle{text-align:center;font-weight:700;font-size:11pt;border-bottom:2px solid #000;padding-bottom:2px;margin-bottom:3px}
-  #printArea .prLogo{text-align:right;margin:0 0 1px}
-  #printArea .prLogo img{height:4.2mm;width:auto}
-  #printArea .prHead{width:100%;border-collapse:collapse;font-size:7.5pt;margin-bottom:3px}
-  #printArea .prHead th,#printArea .prHead td{border:1px solid #000;padding:2px 3px;text-align:left;color:#000;white-space:normal;font-family:inherit}
-  #printArea .prHead .v{font-size:11pt;font-style:italic;text-align:center}
-  #printArea .adNote{font-size:6.8pt;line-height:1.3;white-space:normal}
-  #printArea .adNote b{font-size:7pt}
+  #printArea .prTitle{text-align:center;font-weight:700;font-size:calc(3.88*var(--u));border-bottom:2px solid #000;padding-bottom:calc(0.5*var(--u));margin-bottom:calc(0.8*var(--u))}
+  #printArea .prLogo{text-align:right;margin:0 0 calc(0.3*var(--u))}
+  #printArea .prLogo img{height:calc(4.2*var(--u));width:auto}
+  #printArea .prHead{width:100%;border-collapse:collapse;font-size:calc(2.65*var(--u));margin-bottom:calc(0.8*var(--u))}
+  #printArea .prHead th,#printArea .prHead td{border:1px solid #000;padding:calc(0.5*var(--u)) calc(0.8*var(--u));text-align:left;color:#000;white-space:normal;font-family:inherit}
+  #printArea .prHead td.nt{height:calc(12*var(--u));vertical-align:top}
+  #printArea .prHead td.fill{height:calc(7*var(--u))}
+  #printArea .prHead .v{font-size:calc(3.88*var(--u));font-style:italic;text-align:center}
+  #printArea .adNote{font-size:calc(2.4*var(--u));line-height:1.3;white-space:normal}
+  #printArea .adNote b{font-size:calc(2.47*var(--u))}
   /* ⚠ 画面の表の最小幅(56px/52px)を継ぐと1面(A5)の幅を超え、右の列が隣の面の下に隠れていた */
-  #printArea table.prLog{width:100%;border-collapse:collapse;font-size:8pt}
-  #printArea table.prLog th,#printArea table.prLog td{border:1px solid #000;padding:1.5px 2px;text-align:center;min-width:0;
+  #printArea table.prLog{width:100%;border-collapse:collapse;font-size:calc(2.82*var(--u))}
+  #printArea table.prLog th,#printArea table.prLog td{border:1px solid #000;padding:calc(0.4*var(--u)) calc(0.5*var(--u));text-align:center;min-width:0;
     color:#000;background:#fff!important;font-family:inherit}
-  #printArea table.prLog th{font-size:6pt;line-height:1.1;font-weight:400}
+  #printArea table.prLog th{font-size:calc(2.12*var(--u));line-height:1.1;font-weight:400}
   #printArea table.prLog td.fixNo{text-align:left;font-style:italic;white-space:normal}
-  #printArea table.prLog td.fixName{text-align:left;font-size:8.5pt;white-space:normal}
+  #printArea table.prLog td.fixName{text-align:left;font-size:calc(3*var(--u));white-space:normal}
   #printArea table.prLog td.cNum{text-align:left}
   #printArea table.prLog td.cNum.rem{text-align:right}
   #printArea table.prLog td.cNav{text-align:left}
@@ -320,14 +322,16 @@
     @page{size:A4 landscape;margin:6mm}
     html,body{background:#fff!important}
     body>*{display:none!important}
-    #printArea{display:block!important}
+    #printArea{display:block!important;--u:calc(100vw / 256)}
     .noprint{display:none!important}
   }
   /* ⚠ iPhone の印刷画面は既定が「縦向き」で、@page の size(A4 横)は効かない。
-     紙が縦のときは横向きの2面をページごと90°回して縦の A4 に載せる(切ると同じく A5×2枚)。横向きを選べばそのまま */
+     紙が縦のときは横向きの2面をページごと90°回して縦の A4 に載せる(切ると同じく A5×2枚)。横向きを選べばそのまま。
+     縦の印刷範囲は幅:高さ ≒ 172:259(iPhone)なので、面の高さ 168 単位を幅の 98% に */
   @media print and (orientation:portrait){
-    #printArea .prPage{width:168mm;height:255mm}
-    #printArea .prRot{position:absolute;left:0;top:0;width:255mm;transform-origin:0 0;transform:translateX(168mm) rotate(90deg)}
+    #printArea{--u:calc(100vw / 171.5)}
+    #printArea .prPage{width:calc(168*var(--u));height:calc(255*var(--u))}
+    #printArea .prRot{position:absolute;left:0;top:0;width:calc(255*var(--u));transform-origin:0 0;transform:translateX(calc(168*var(--u))) rotate(90deg)}
   }
   /* 接近警告 */
   /* 左右のボタン列と重ならないよう、地図下部いっぱいに横長で出す */
@@ -1188,7 +1192,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-250';
+const VER_TAG='v6-251';
 const BUILD='2026-10-18';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7378,9 +7382,9 @@ document.getElementById('btnPrint').onclick=()=>{
   // 印刷はニーボードで使うので、どのアプリで出した紙か分かるように名前を入れる
   const head=`<div class="prLogo"><img src="wordmark-brown.png" alt="yasuokun_pro"></div>
   <table class="prHead">
-    <tr><th style="width:14%">NOTES</th><td colspan="4" style="height:12mm;vertical-align:top">${notes}</td></tr>
+    <tr><th style="width:14%">NOTES</th><td colspan="4" class="nt">${notes}</td></tr>
     <tr><th>AIRCRAFT<br>IDENT</th><th>DEPARTURE<br>TIME</th><th>TOTAL<br>DISTANCE</th><th>TOTAL<br>EET</th><th>TOTAL<br>AMT FUEL</th></tr>
-    <tr><td style="height:7mm"></td><td></td><td class="v">${totD}</td><td class="v">${totE}</td><td class="v">${totF}</td></tr>
+    <tr><td class="fill"></td><td></td><td class="v">${totD}</td><td class="v">${totE}</td><td class="v">${totF}</td></tr>
   </table>`;
   // 面(A5)に入るだけポイントを載せ、入りきらなければ次の面へ続ける(以前は1面16点の固定で、NOTES が長いと下が切れた)
   const half=(from,to)=>{
