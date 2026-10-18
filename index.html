@@ -284,38 +284,47 @@
   table.fltlog thead th.cFix{z-index:4;background:var(--panel2)}
   tr.nextwp td:first-child{background:linear-gradient(rgba(61,213,243,.12),rgba(61,213,243,.12)) var(--panel)}
   tr.dctOnRow td:first-child{background:linear-gradient(rgba(61,213,243,.08),rgba(61,213,243,.08)) var(--panel)}
-  /* 印刷: A4横に同じログを2面付け(切るとA5×2枚) */
+  /* 印刷: A4横に2面(切るとA5×2枚)。面の中身は #printArea の下だけに効かせる(印刷の前に画面外で高さを測って面割りするため) */
   #printArea{display:none}
+  #printArea.measure{display:block;position:fixed;left:-10000px;top:0;visibility:hidden}
+  /* 1ページ = 印刷範囲 277×190mm(@page の余白 6mm より内側に余裕。iPhone は余白の指定も効かないことがある) */
+  #printArea .prPage{position:relative;width:277mm;height:190mm;overflow:hidden;break-after:page;page-break-after:always}
+  #printArea .prPage:last-child{break-after:auto;page-break-after:auto}
+  #printArea .prRot{display:flex;align-items:flex-start;width:277mm;height:190mm;color:#000;background:#fff}
+  #printArea .prCopy{width:50%;height:100%;padding:0 4mm;box-sizing:border-box;border-right:1px dashed #999;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
+  #printArea .prCopy:last-child{border-right:none}
+  #printArea.measure .prCopy{height:auto}
+  #printArea .prTitle{text-align:center;font-weight:700;font-size:11pt;border-bottom:2px solid #000;padding-bottom:2px;margin-bottom:3px}
+  #printArea .prLogo{text-align:right;margin:0 0 1px}
+  #printArea .prLogo img{height:4.2mm;width:auto}
+  #printArea .prHead{width:100%;border-collapse:collapse;font-size:7.5pt;margin-bottom:3px}
+  #printArea .prHead th,#printArea .prHead td{border:1px solid #000;padding:2px 3px;text-align:left;color:#000;white-space:normal;font-family:inherit}
+  #printArea .prHead .v{font-size:11pt;font-style:italic;text-align:center}
+  #printArea .adNote{font-size:6.8pt;line-height:1.3;white-space:normal}
+  #printArea .adNote b{font-size:7pt}
+  /* ⚠ 画面の表の最小幅(56px/52px)を継ぐと1面(A5)の幅を超え、右の列が隣の面の下に隠れていた */
+  #printArea table.prLog{width:100%;border-collapse:collapse;font-size:8pt}
+  #printArea table.prLog th,#printArea table.prLog td{border:1px solid #000;padding:1.5px 2px;text-align:center;min-width:0;
+    color:#000;background:#fff!important;font-family:inherit}
+  #printArea table.prLog th{font-size:6pt;line-height:1.1;font-weight:400}
+  #printArea table.prLog td.fixNo{text-align:left;font-style:italic;white-space:normal}
+  #printArea table.prLog td.fixName{text-align:left;font-size:8.5pt;white-space:normal}
+  #printArea table.prLog td.cNum{text-align:left}
+  #printArea table.prLog td.cNum.rem{text-align:right}
+  #printArea table.prLog td.cNav{text-align:left}
+  #printArea table.prLog tr.fixA td{border-bottom:none}
   @media print{
     @page{size:A4 landscape;margin:6mm}
+    html,body{background:#fff!important}
     body>*{display:none!important}
-    #printArea{display:flex!important;gap:0;width:100%;color:#000;background:#fff}
-    .prCopy{width:50%;padding:0 4mm;box-sizing:border-box;border-right:1px dashed #999}
-    .prCopy:last-child{border-right:none}
-    .prTitle{text-align:center;font-weight:700;font-size:11pt;border-bottom:2px solid #000;padding-bottom:2px;margin-bottom:3px}
-    .prLogo{text-align:right;margin:0 0 1px}
-    .prLogo img{height:4.2mm;width:auto}
-    .prHead{width:100%;border-collapse:collapse;font-size:7pt;margin-bottom:3px}
-    .prHead th,.prHead td{border:1px solid #000;padding:2px 3px;text-align:left}
-    .prHead .v{font-size:11pt;font-style:italic;text-align:center}
-    .adNote{font-size:6.2pt;line-height:1.35;white-space:normal}
-    .adNote b{font-size:6.6pt}
-    table.prLog{width:100%;border-collapse:collapse;font-size:7pt}
-    table.prLog th,table.prLog td{border:1px solid #000;padding:1.5px 2px;text-align:center;
-      color:#000;background:#fff!important;font-family:inherit}
-    table.prLog th{font-size:5.6pt;line-height:1.1;font-weight:400}
-    table.prLog td.fixNo{text-align:left;font-style:italic}
-    table.prLog td.fixName{text-align:left;font-size:7.5pt}
-    table.prLog td.cNum{text-align:left}
-    table.prLog td.cNum.rem{text-align:right}
-    table.prLog td.cNav{text-align:left}
-    table.prLog tr.fixA td{border-bottom:none}
+    #printArea{display:block!important}
     .noprint{display:none!important}
   }
-  /* ⚠ iPhone/iPad の Safari などは @page の size(A4 横)を無視して**縦**で刷る。そのままだと2面が縦長に潰れて複数ページになる。
-     紙が縦のときは横向きの2面(A4 横の印刷範囲 ≒ 280×194mm)をまるごと90°回して縦の A4 に載せる。切ると同じく A5×2枚 */
+  /* ⚠ iPhone の印刷画面は既定が「縦向き」で、@page の size(A4 横)は効かない。
+     紙が縦のときは横向きの2面をページごと90°回して縦の A4 に載せる(切ると同じく A5×2枚)。横向きを選べばそのまま */
   @media print and (orientation:portrait){
-    #printArea{position:absolute;left:0;top:0;width:280mm;height:194mm;transform-origin:0 0;transform:translateX(194mm) rotate(90deg)}
+    #printArea .prPage{width:190mm;height:277mm}
+    #printArea .prRot{position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(190mm) rotate(90deg)}
   }
   /* 接近警告 */
   /* 左右のボタン列と重ならないよう、地図下部いっぱいに横長で出す */
@@ -924,8 +933,8 @@
 
   <div class="tabbody" id="tab-wp">
     <div class="btnrow">
-      <button class="btn sh" id="btnPrint">🖨 ログ印刷 (A4横 2面)</button>
-      <span class="hint" style="align-self:center;margin:0">切り取るとA5×2枚(ニーボード用)。名前が (…) のポイントは注記点(RCA等)で、区間の内数として括弧で出る。距離の * は SID の経路長(直線でない)</span>
+      <button class="btn sh" id="btnPrint">🖨 ログ印刷 (A4 に A5×2面)</button>
+      <span class="hint" style="align-self:center;margin:0">切り取るとA5×2枚(ニーボード用)。iPhone は印刷画面の「方向」を横向きにするとそのまま、縦向きなら90°回して載る。1面に入りきらない長いルートは続きの面・ページへ。名前が (…) のポイントは注記点(RCA等)で、区間の内数として括弧で出る。距離の * は SID の経路長(直線でない)</span>
     </div>
     <div class="logwrap">
     <table class="fltlog">
@@ -1176,7 +1185,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-247';
+const VER_TAG='v6-248';
 const BUILD='2026-10-18';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7311,6 +7320,7 @@ function renderLogs(){
     b.appendChild(tr)});
 }
 /* ───────── ログ印刷(A4横に同じログを2面付け→切るとA5×2枚) ───────── */
+new Image().src='wordmark-brown.png';   // 印刷はボタンの処理の中ですぐ呼ぶので、ロゴは先に読んでおく
 document.getElementById('btnPrint').onclick=()=>{
   if(!wps.length){alert('ポイントがありません');return}
   const src=document.querySelector('table.fltlog');
@@ -7365,8 +7375,7 @@ document.getElementById('btnPrint').onclick=()=>{
     <tr><th>AIRCRAFT<br>IDENT</th><th>DEPARTURE<br>TIME</th><th>TOTAL<br>DISTANCE</th><th>TOTAL<br>EET</th><th>TOTAL<br>AMT FUEL</th></tr>
     <tr><td style="height:7mm"></td><td></td><td class="v">${totD}</td><td class="v">${totE}</td><td class="v">${totF}</td></tr>
   </table>`;
-  // ルートが長い場合は左に前半・右に続きを載せる(A5相当の1面あたり最大16FIX)
-  const PER=16;
+  // 面(A5)に入るだけポイントを載せ、入りきらなければ次の面へ続ける(以前は1面16点の固定で、NOTES が長いと下が切れた)
   const half=(from,to)=>{
     const t=full.cloneNode(true);
     const tb=t.querySelector('tbody');
@@ -7380,22 +7389,33 @@ document.getElementById('btnPrint').onclick=()=>{
     if(to<fixA.length)tb.querySelector('tr.total')?.remove(); // 続きがある面には合計を出さない
     return t.outerHTML;
   };
-  const n=wps.length;
+  const n=full.querySelectorAll('tbody tr.fixA').length;
   const pane=(title,inner,withHead)=>`<div class="prCopy">
     <div class="prTitle">${title}</div>${withHead?head:''}${inner}</div>`;
+  const page=copies=>`<div class="prPage"><div class="prRot">${copies.join('')}</div></div>`;
   const area=document.getElementById('printArea');
   const t0=`FLIGHT LOG${dep?`　${dep}${dst?' → '+dst:''}`:''}`;
-  if(n<=PER){
-    // 短いルートは同じものを2面付け(切って2枚使える)
-    const one=pane(t0,full.outerHTML,true);
-    area.innerHTML=one+one;
-  }else{
-    // 長いルートは左=前半, 右=続き
-    area.innerHTML=pane(t0,half(0,PER),true)+pane(t0+`（続き ${PER+1}-${n}）`,half(PER,n),false);
+  // 画面外に同じ寸法で置いて面の高さを測る(印刷と同じ mm/pt 指定なので、印刷の高さと同じになる)
+  area.className='measure';
+  const H=190*96/25.4-4;   // 1面の高さ 190mm(px)。罫線ぶん少し引く
+  const fits=html=>{area.innerHTML=page([html]);return area.querySelector('.prCopy').offsetHeight<=H};
+  const copies=[];
+  for(let from=0;from<n;){
+    const first=from===0;
+    const mk=to=>pane(first?t0:t0+`（続き ${from+1}-${to}）`,half(from,to),first);
+    let to=from+1;
+    while(to<n&&fits(mk(to+1)))to++;
+    copies.push(mk(to));from=to;
   }
-  const done=()=>{area.innerHTML='';window.removeEventListener('afterprint',done)};
-  window.addEventListener('afterprint',done);
-  setTimeout(()=>window.print(),60);
+  area.className='';
+  // 1面に収まれば同じものを2面(切って2枚使える)。収まらなければ前半・続きを順に並べ、A4 1枚に2面ずつ
+  const list=copies.length===1?[copies[0],copies[0]]:copies;
+  let out='';for(let k=0;k<list.length;k+=2)out+=page(list.slice(k,k+2));
+  area.innerHTML=out;
+  // ⚠ iPhone(ホーム画面のアプリ)では、印刷画面を開いたあとに「方向」などを変えると印刷内容を描き直す。
+  //   以前は afterprint で中身を消していて、横向きにすると真っ黒(アプリの背景だけ)になった。中身は残す(画面では非表示・次の印刷で上書き)
+  // ⚠ setTimeout で遅らせると、iOS がボタン操作と別の「自動的な印刷」とみなして確認を出す。押した処理の中でそのまま呼ぶ
+  window.print();
 };
 
 document.getElementById('btnCSV').onclick=()=>{
