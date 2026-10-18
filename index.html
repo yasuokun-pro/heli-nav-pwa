@@ -464,7 +464,7 @@
   .apDrop div.hi{background:var(--line)}
   table.ifrMin{width:auto;font-size:12px}
   table.altMin{border-collapse:collapse;font-size:11px;margin:4px 0;width:100%}
-  table.altMin th,table.altMin td{border:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top}
+  table.altMin th,table.altMin td{border:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top;white-space:normal;overflow-wrap:anywhere}  /* ⚠ ifrBox の td の nowrap を継ぐとスマホ幅で表が飛び出して画面ごと横に動く */
   table.altMin th{color:var(--dim);font-weight:500}
   table.altMin tr.hit td{color:var(--grn);background:rgba(56,224,123,.08)}
   table.ifrMin td{padding:3px 6px;white-space:nowrap}
@@ -1171,8 +1171,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-241';
-const BUILD='2026-10-17';
+const VER_TAG='v6-242';
+const BUILD='2026-10-18';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -7811,12 +7811,12 @@ function ifrGraph(ac,cap){
       const ka=node(A),kb=node(B);
       const d=sg.dist!=null?sg.dist:distNM(A,B);
       let blk=segBlock(r,sg,A,B,ac,cap),via=null;
-      if(blk&&r.k==='RNAV'){ via=radialOnSeg(A,B); if(via)blk=segBlockRest(sg,A,B,ac,cap); }
+      if(blk&&r.k==='RNAV'){ via=radialOnSeg(A,B,ac); if(via)blk=segBlockRest(sg,A,B,ac,cap); }
       const e={d,r,sg,mea:meaFt(sg.mea),blk,via};
       add(ka,kb,Object.assign({fwd:1},e));add(kb,ka,Object.assign({fwd:0},e));
     });
   });
-  return {nodes,adj};
+  return {nodes,adj,ac};
 }
 /* RNAV の航空路の区間でも、両端が**同じ navaid の同じラジアル上**にあれば、そのラジアルで標定して飛べる。
    例: Y588 の OMIYA–KOGAR は JDT R-209 そのもの。KOGAR は ENR 4.3 に「209°/25.4NM JDT」と公示、
@@ -7825,9 +7825,10 @@ function ifrGraph(ac,cap){
      偏差は公示側の(真方位−公示の磁方位)から出すので、偏差表の誤差が入らない。
    ⚠ 許容は 角度差1° かつ 遠い側の横ずれ0.5NM。navaid から3NM以内の点は方位が暴れるので使わない。
    ⚠ navaid の使用不能区域(ENR 4.1 の Unusable)と、既存のラジアル接続と同じく navaid 種別と装備(TACAN/VOR)の照合はまだしていない */
-function radialOnSeg(A,B){
+function radialOnSeg(A,B,ac){
   const ra=fixRadials(A.n),rb=fixRadials(B.n);
   for(const id of [...new Set([...ra,...rb].map(x=>x.id))]){
+    if(!navRadOk(id,ac))continue;
     const X=navPt(id);if(!X)continue;
     const dA=distNM(X,A),dB=distNM(X,B);if(dA<3||dB<3)continue;
     const tA=trueBrg(X,A),tB=trueBrg(X,B);
@@ -7887,8 +7888,19 @@ function fixRadials(n){
 /* navaid をノードにして、**その navaid で評定できる FIX**(経路網にある点)と結ぶ。
    ⚠ FIX 同士を直線で結んではいけない。自分で航路を標定して飛ぶので、
      公示ルートか「navaid のラジアル」でしか繋げない(ユーザー指摘・v6-161) */
+/* ラジアルで標定できる局か(装備): TACAN だけの局は TACAN、VOR は VOR、VORTAC はどちらか(ユーザー判断 B・2026-10-18)。
+   ENR 4.3 の評定が「HUC TACAN」でも、HUC が VORTAC なら VOR で同じ線を飛べるとする。DME・LOC だけの局はラジアルが無い。種類不明は許す */
+function navRadOk(id,ac){
+  if(!ac)return true;
+  const t=[(ADNAV&&ADNAV.f&&ADNAV.f[id]||{}).t||'',...NAVAIDS.filter(x=>x.id===id).map(x=>x.t)].join(' ').toUpperCase();
+  if(!t.trim())return true;
+  const vor=/VOR/.test(t),tac=/TACAN|VORTAC/.test(t);
+  if(!vor&&!tac)return /NDB/.test(t)?!!ac.ndb:false;
+  return !!((vor&&ac.vor)||(tac&&ac.tacan));
+}
 function navNode(G,id){
   if(G.nodes[id])return id;
+  if(!navRadOk(id,G.ac))return null;                // 装備で使えない局のラジアルは経路にしない
   const a=navPt(id);if(!a)return null;
   G.nodes[id]={n:id,lat:a.lat,lng:a.lng,id,nav:1};
   const re=new RegExp('(\\d{3})°\\/([\\d.]+)NM\\s+'+id+'\\b');
