@@ -318,7 +318,7 @@
   #printArea table.prLog{width:100%;border-collapse:collapse;font-size:calc(2.82*var(--u))}
   /* ⚠ 罫線も --u で。1px のままだと紙に合わせて縮めたとき線だけ相対的に太り、面の下端の罫線がはみ出して消えた(v6-254)
      1つのポイント(番号の行+名前の行)をひとまとまりに見せる: ポイントの間・見出しの下・合計の上・外枠は太線、
-     番号の行と名前の行の間は細い灰色の線(ユーザー要望 2026-10-19) */
+     番号の行と名前の行の間は薄い灰色の線(ユーザー要望 2026-10-19) */
   #printArea table.prLog{border:calc(0.5*var(--u)) solid #000}
   #printArea table.prLog th,#printArea table.prLog td{border:calc(0.26*var(--u)) solid #000;padding:calc(0.4*var(--u)) calc(0.5*var(--u));text-align:center;min-width:0;
     color:#000;background:#fff!important;font-family:inherit}
@@ -330,7 +330,8 @@
   #printArea table.prLog td.cNav{text-align:left}
   #printArea table.prLog thead tr:last-child th,#printArea table.prLog thead th[rowspan]{border-bottom:calc(0.5*var(--u)) solid #000}
   #printArea table.prLog tr.fixA td{border-top:calc(0.5*var(--u)) solid #000;border-bottom:none}
-  #printArea table.prLog tr.fixB td{border-top:calc(0.15*var(--u)) solid #999}
+  /* ⚠ 0.15 単位(紙で 0.5pt 未満)だと iPhone の印刷で線そのものが描かれなかった(v6-255 の PDF)。太さは普通の罫線と同じにして色を薄く */
+  #printArea table.prLog tr.fixB td{border-top:calc(0.26*var(--u)) solid #b0b0b0}
   #printArea table.prLog tr.total td{border-top:calc(0.5*var(--u)) solid #000}
   @media print{
     @page{size:A4 landscape;margin:6mm}
@@ -1208,7 +1209,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-255';
+const VER_TAG='v6-256';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
