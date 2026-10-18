@@ -315,7 +315,21 @@
   #printArea .adNote{font-size:calc(2.4*var(--u));line-height:1.3;white-space:normal}
   #printArea .adNote b{font-size:calc(2.47*var(--u))}
   /* ⚠ 画面の表の最小幅(56px/52px)を継ぐと1面(A5)の幅を超え、右の列が隣の面の下に隠れていた */
-  #printArea table.prLog{width:100%;border-collapse:collapse;font-size:calc(2.82*var(--u))}
+  /* ⚠ 列幅は固定(table-layout:fixed)。中身で列が広がると、長い名前1つで表が面の幅を超えた(v6-256「New Chitose Information」)。
+     入りきらない文字はセルの中で折り返す。列幅が中身に左右されないので、面割りの計測も正確になる */
+  #printArea table.prLog{width:100%;border-collapse:collapse;font-size:calc(2.82*var(--u));table-layout:fixed}
+  #printArea table.prLog td{overflow-wrap:anywhere}
+  #printArea table.prLog td.cNav{white-space:normal}
+  #printArea table.prLog thead tr:first-child th:nth-child(1){width:17%}
+  #printArea table.prLog thead tr:first-child th:nth-child(2){width:14%}
+  #printArea table.prLog thead tr:first-child th:nth-child(3){width:9%}
+  #printArea table.prLog thead tr:first-child th:nth-child(4){width:7%}
+  #printArea table.prLog thead tr:first-child th:nth-child(5){width:9.5%}
+  #printArea table.prLog thead tr:first-child th:nth-child(6){width:8.5%}
+  #printArea table.prLog thead tr:first-child th:nth-child(7){width:9.5%}
+  #printArea table.prLog thead tr:first-child th:nth-child(8){width:8%}
+  #printArea table.prLog thead tr:first-child th:nth-child(9){width:8.5%}
+  #printArea table.prLog thead tr:first-child th:nth-child(10){width:9%}
   /* ⚠ 罫線も --u で。1px のままだと紙に合わせて縮めたとき線だけ相対的に太り、面の下端の罫線がはみ出して消えた(v6-254)
      1つのポイント(番号の行+名前の行)をひとまとまりに見せる: ポイントの間・見出しの下・合計の上・外枠は太線、
      番号の行と名前の行の間は薄い灰色の線(ユーザー要望 2026-10-19) */
@@ -1209,7 +1223,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-256';
+const VER_TAG='v6-257';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -5532,6 +5546,22 @@ function splitCall(rmk){
   if(!m)return {call:String(rmk||'').split('/')[0].trim(),freq:''};
   return {call:m[1].trim(),freq:m[2].replace(/\s/g,'')};
 }
+/* IDENT 欄の呼出名を短くする(ログの欄が狭く、長い名前で表が崩れた。2026-10-19 ユーザー要望)
+   ・業務の種類は航空の略語に: Tower→TWR, Information→INFO, Approach→APP …
+   ・局名(地名)が飛行場の英名と一致すれば ICAO 略号に: Iruma Tower→RJTJ TWR, New Chitose Information→RJCC INFO
+   ・一致しなければ地名はそのまま大文字(Tokyo Radar→TOKYO RDR)。正式名は NOTES と画面の title に残る */
+const CALL_AB=[['Information','INFO'],['Tower','TWR'],['Approach','APP'],['Departure','DEP'],['Ground','GND'],['Radio','RDO'],
+  ['Radar','RDR'],['Control','CTL'],['Delivery','DEL'],['Clearance','CLR'],['Arrival','ARR'],['Apron','APN']];
+function shortCall(call){
+  let s=String(call||'').trim();if(!s)return '';
+  CALL_AB.forEach(([w,ab])=>{s=s.replace(new RegExp('\\b'+w+'\\b','i'),ab)});
+  const m=s.match(/^(.*?)\s+(INFO|TWR|APP|DEP|GND|RDO|RDR|CTL|DEL|CLR|ARR|APN|ACC|ATIS|TCA)$/i);
+  if(m&&AD&&AD.f){
+    const nm=m[1].toUpperCase().trim(),a=AD.f.find(x=>(x.en||'').toUpperCase()===nm);
+    if(a)return a.icao+' '+m[2].toUpperCase();
+  }
+  return s.toUpperCase();
+}
 /* ポイントの IDENT/FREQ 欄を自動で埋める。
    飛行場そのものならその周波数、そうでなければ**その地点を含む空域**の連絡先 */
 function adFreqOf(w){
@@ -5547,8 +5577,8 @@ function adFreqOf(w){
   const hit=airspaceAt(w);
   const a=hit[0],b=hit[1];
   const s1=a?splitCall(a.rmk):null, s2=b?splitCall(b.rmk):null;
-  return {id1:s1?(s1.call||a.n):'', f1:s1?s1.freq:'',
-          id2:s2?(s2.call||b.n):'', f2:s2?s2.freq:'', asp:hit};
+  return {id1:s1?(shortCall(s1.call)||a.n):'', f1:s1?s1.freq:'',
+          id2:s2?(shortCall(s2.call)||b.n):'', f2:s2?s2.freq:'', asp:hit};
 }
 
 function redraw(){
