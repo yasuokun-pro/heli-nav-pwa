@@ -285,13 +285,18 @@
   tr.nextwp td:first-child{background:linear-gradient(rgba(61,213,243,.12),rgba(61,213,243,.12)) var(--panel)}
   tr.dctOnRow td:first-child{background:linear-gradient(rgba(61,213,243,.08),rgba(61,213,243,.08)) var(--panel)}
   /* 印刷: A4横に2面(切るとA5×2枚)。面の中身は #printArea の下だけに効かせる(印刷の前に画面外で高さを測って面割りするため)
-     ⚠ 寸法はすべて --u(1単位 ≒ 1mm)で書く。iPhone は mm/pt を約1.15倍に拡大して刷り(2026-10-19 実機 PDF)、余白(約19mm)の指定も効かない。
-       印刷では --u を「紙の印刷範囲の幅(100vw)÷ 面の幅」にして、どの拡大率でも紙の幅にぴったり合わせる。
+     ⚠ 寸法はすべて --u(1単位 ≒ 1mm)で書く。iPhone の印刷は
+       ・mm/pt を約1.15倍に拡大して刷る(v6-250)・余白(約19mm)の指定が効かない・vw が紙の幅にならない(v6-251 で 0.4 倍に縮んだ)。
+       確実なのは「% は紙の印刷範囲の幅」だけなので、.prPage を幅 % + 縦横比で紙に合わせ、その幅を
+       コンテナクエリの単位(cqw)で受けて --u =「ページの幅 ÷ 面の単位数」にする。
        画面外の計測では --u=1mm。全部 --u で比例するので、計測した面割りは印刷でもそのまま成り立つ */
-  #printArea{display:none;--u:1mm}
-  #printArea.measure{display:block;position:fixed;left:-10000px;top:0;visibility:hidden;width:calc(255*var(--u))}
+  #printArea{display:none}
+  #printArea .prRot{--u:1mm}
+  /* 画面の th/td の文字の大きさ(11px)・色・字間を継がない(以前は NOTES 等の見出しだけ縮まずに下が切れた) */
+  #printArea th,#printArea td{font-size:inherit;color:#000;letter-spacing:normal;border-bottom-color:#000}
+  #printArea.measure{display:block;position:fixed;left:-10000px;top:0;visibility:hidden;width:255mm}
   /* 1ページ = 255×168 単位。横向きは幅いっぱい(2面の境目が紙の中央)、縦向きは90°回す(下の @media) */
-  #printArea .prPage{position:relative;width:100%;height:calc(168*var(--u));overflow:hidden;break-after:page;page-break-after:always}
+  #printArea .prPage{position:relative;width:100%;height:168mm;overflow:hidden;break-after:page;page-break-after:always}
   #printArea .prPage:last-child{break-after:auto;page-break-after:auto}
   #printArea .prRot{display:flex;align-items:flex-start;width:100%;height:calc(168*var(--u));color:#000;background:#fff}
   #printArea .prCopy{width:50%;height:100%;padding:0 calc(3*var(--u));box-sizing:border-box;border-right:1px dashed #999;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
@@ -301,6 +306,7 @@
   #printArea .prLogo{text-align:right;margin:0 0 calc(0.3*var(--u))}
   #printArea .prLogo img{height:calc(4.2*var(--u));width:auto}
   #printArea .prHead{width:100%;border-collapse:collapse;font-size:calc(2.65*var(--u));margin-bottom:calc(0.8*var(--u))}
+  #printArea .prHead th{font-weight:500}
   #printArea .prHead th,#printArea .prHead td{border:1px solid #000;padding:calc(0.5*var(--u)) calc(0.8*var(--u));text-align:left;color:#000;white-space:normal;font-family:inherit}
   #printArea .prHead td.nt{height:calc(12*var(--u));vertical-align:top}
   #printArea .prHead td.fill{height:calc(7*var(--u))}
@@ -322,16 +328,17 @@
     @page{size:A4 landscape;margin:6mm}
     html,body{background:#fff!important}
     body>*{display:none!important}
-    #printArea{display:block!important;--u:calc(100vw / 256)}
+    #printArea{display:block!important}
+    #printArea .prPage{container-type:inline-size;width:100%;height:auto;aspect-ratio:256/168}
+    #printArea .prRot{--u:calc(100cqw / 256)}
     .noprint{display:none!important}
   }
   /* ⚠ iPhone の印刷画面は既定が「縦向き」で、@page の size(A4 横)は効かない。
      紙が縦のときは横向きの2面をページごと90°回して縦の A4 に載せる(切ると同じく A5×2枚)。横向きを選べばそのまま。
-     縦の印刷範囲は幅:高さ ≒ 172:259(iPhone)なので、面の高さ 168 単位を幅の 98% に */
+     縦の印刷範囲は幅:高さ ≒ 172:259(iPhone)なので、ページ(168×255 単位)を紙の幅の 98% にして縦に収める */
   @media print and (orientation:portrait){
-    #printArea{--u:calc(100vw / 171.5)}
-    #printArea .prPage{width:calc(168*var(--u));height:calc(255*var(--u))}
-    #printArea .prRot{position:absolute;left:0;top:0;width:calc(255*var(--u));transform-origin:0 0;transform:translateX(calc(168*var(--u))) rotate(90deg)}
+    #printArea .prPage{width:98%;aspect-ratio:168/255}
+    #printArea .prRot{--u:calc(100cqw / 168);position:absolute;left:0;top:0;width:calc(255*var(--u));transform-origin:0 0;transform:translateX(100cqw) rotate(90deg)}
   }
   /* 接近警告 */
   /* 左右のボタン列と重ならないよう、地図下部いっぱいに横長で出す */
@@ -1192,7 +1199,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-252';
+const VER_TAG='v6-253';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
