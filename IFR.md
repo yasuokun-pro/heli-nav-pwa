@@ -271,3 +271,17 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 横に動く件: `table.altMin` の td が全体の `td{white-space:nowrap}` を継いで 575px になり、シート全体が横に動いていた。
   altMin の td/th を折り返しに(375px 幅で 5 経路を測って横の飛び出しゼロ)。AIP のミニマの表は枠の中だけで横に動く(従来どおり)
 
+## v6-243 航空路(従来型)の装備チェックを区間ごとの navaid で
+- それまで: LOW は「VOR があれば可」、DCT は「VOR か TACAN があれば可」と経路の種類だけで見ていた。
+- `awyNavBlock(r,a,b,ac)`: 区間を飛ぶのに使う navaid = **航空路の上で区間の手前側・先側それぞれ一番近い navaid**
+  (GOT-GTC の MIKRA–GTC 15DME なら GOT(TACAN)と GTC(VORTAC))。どちらかが `navRadOk`(v6-242 の規則 B)で使えれば可。
+  航空路の上に navaid が無い区間(KOGAR-LEMUM など)は両端 FIX の ENR 4.3 評定の navaid のどれか。それも無い(洋上)ときは従来どおり。
+- 受けられない navaid の区間でも、使える navaid の同じラジアル上なら `radialOnSeg` で通す(RNAV 区間と同じ・0.5NM 不利)。
+- TACAN は DME を含むので、DME が要る区間・DME フィックスは TACAN でも可(`segBlockRest`)。
+- 結果(上限 10,000ft・GNSS/RNAV なし):
+  - 宇都宮→新潟: VOR だけ・TACAN だけとも MIKRA>GTC 15DME>NIIGATA 106.6NM。両方なしは「経路が見つからない」
+  - 立川→百里: 両方 136.6NM(TOHNE>LEMUM)/TACAN だけ 93.0NM(KOGAR、JDT R-209、TACAN A)/
+    **VOR だけ 188.2NM(SEKIYADO>OKUJI>HUC)**。LEMUM–TOHNE(直行経路 LEMUM-SHT)は SHT R-346 = TACAN だけの局なので VOR では飛べない
+- 宇都宮→新潟が「作れない」とのユーザー報告: プレビューでは上限 10,000ft で作れる(MIKRA–GTC 15DME の MEA 10,000ft)。
+  上限 9,000ft なら福島回り 198NM、8,000ft なら仙台・山形回り 316NM(上限超えの警告つき)。実機の状態は未確認
+

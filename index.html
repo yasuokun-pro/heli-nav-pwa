@@ -1171,7 +1171,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-242';
+const VER_TAG='v6-243';
 const BUILD='2026-10-18';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7780,20 +7780,39 @@ function awyBlock(r,ac){
     if(/RNAV5/.test(spec)&&ac.rnav)return null;
     return 'RNAV経路: GNSS'+( /RNAV5/.test(spec)?'かRNAV装置':'')+'が要る';
   }
-  if(r.k==='LOW'){ if(ac.vor||ac.gnss)return null; return '航空路: VORが要る' }
-  // 直行経路は TACAN の radial/DME で定義されているものが多い(DAIBU-KOSKA は YLT TACAN R-174)ので TACAN でも可
-  if(r.k==='DCT'){ if(ac.vor||ac.gnss||ac.tacan)return null; return '直行経路: VORかTACANが要る' }
-  return null;
+  // 従来型(LOW・DCT)は区間ごとに navaid を見る(awyNavBlock)。ここでは受信機が1つも無いときだけ塞ぐ
+  if(ac.gnss||ac.vor||ac.tacan||ac.ndb)return null;
+  return (r.k==='LOW'?'航空路':'直行経路')+': VORかTACANが要る';
+}
+/* 従来型の区間を飛ぶのに使う navaid が装備で使えるか(v6-243・ユーザー判断 B と同じ規則 navRadOk)。
+   使う navaid = 航空路の上で区間の手前側・先側それぞれ一番近い navaid(GOT-GTC の MIKRA–GTC 15DME なら GOT と GTC)。
+   どちらか一方が使えれば飛べるとする(片方の局から出て、もう片方へ向かう)。
+   航空路の上に navaid が無い区間(KOGAR-LEMUM など)は、両端の FIX の ENR 4.3 評定の navaid のどれかが使えれば可。
+   それも無い(洋上の A337 など)ときは従来どおり LOW は VOR、DCT は VOR か TACAN */
+function awyNavBlock(r,a,b,ac){
+  if(r.k==='RNAV'||ac.gnss)return null;
+  const P=r.pts,i=P.findIndex(p=>p.n===a.n),j=P.findIndex(p=>p.n===b.n);
+  let ids=[];
+  if(i>=0&&j>=0){
+    const lo=Math.min(i,j),hi=Math.max(i,j);
+    for(let k=lo;k>=0;k--)if(P[k].id){ids.push(P[k].id);break}
+    for(let k=hi;k<P.length;k++)if(P[k].id){ids.push(P[k].id);break}
+  }
+  if(!ids.length)ids=[...fixRadials(a.n),...fixRadials(b.n)].map(x=>x.id);
+  ids=[...new Set(ids)];
+  if(!ids.length)return r.k==='LOW'&&!ac.vor?'航空路: VORが要る':!ac.vor&&!ac.tacan?'直行経路: VORかTACANが要る':null;
+  if(ids.some(id=>navRadOk(id,ac)))return null;
+  return `区間の navaid(${ids.join('・')})を装備で受けられない`;
 }
 function segBlock(r,sg,a,b,ac,cap){
-  const w=awyBlock(r,ac);if(w)return w;
+  const w=awyBlock(r,ac)||awyNavBlock(r,a,b,ac);if(w)return w;
   return segBlockRest(sg,a,b,ac,cap);
 }
 /* 装備以外で区間を塞ぐ理由(MEA 上限・DME)。RNAV 区間をラジアルで通すときもこれは必ず見る */
 function segBlockRest(sg,a,b,ac,cap){
   // 与圧なしの上限より MEA が高い区間は使わない(まず上限内で探し、無ければ上限を外して警告)
   const m=meaFt(sg.mea);if(cap&&m!=null&&m>cap)return `MEA ${m}ft が上限 ${cap}ft を超える`;
-  if(!ac.gnss&&!ac.dme){
+  if(!ac.gnss&&!ac.dme&&!ac.tacan){                 // TACAN は距離(DME)も出る
     if(/DME/.test(sg.rmk||''))return 'DMEが要る区間';
     if(/\dDME/.test(a.n)||/\dDME/.test(b.n))return 'DMEフィックス';
   }
@@ -7811,7 +7830,8 @@ function ifrGraph(ac,cap){
       const ka=node(A),kb=node(B);
       const d=sg.dist!=null?sg.dist:distNM(A,B);
       let blk=segBlock(r,sg,A,B,ac,cap),via=null;
-      if(blk&&r.k==='RNAV'){ via=radialOnSeg(A,B,ac); if(via)blk=segBlockRest(sg,A,B,ac,cap); }
+      // RNAV 区間・装備で受けられない navaid の従来型区間でも、使える navaid の同じラジアル上なら通す(0.5NM 不利)
+      if(blk&&(r.k==='RNAV'||/^区間の navaid/.test(blk))){ via=radialOnSeg(A,B,ac); if(via)blk=segBlockRest(sg,A,B,ac,cap); }
       const e={d,r,sg,mea:meaFt(sg.mea),blk,via};
       add(ka,kb,Object.assign({fwd:1},e));add(kb,ka,Object.assign({fwd:0},e));
     });
@@ -7824,7 +7844,7 @@ function ifrGraph(ac,cap){
    ⚠ 片端は必ず**公示の評定**でその navaid を使っていること。もう片端は計算値として画面に「計算」と出す。
      偏差は公示側の(真方位−公示の磁方位)から出すので、偏差表の誤差が入らない。
    ⚠ 許容は 角度差1° かつ 遠い側の横ずれ0.5NM。navaid から3NM以内の点は方位が暴れるので使わない。
-   ⚠ navaid の使用不能区域(ENR 4.1 の Unusable)と、既存のラジアル接続と同じく navaid 種別と装備(TACAN/VOR)の照合はまだしていない */
+   ⚠ navaid の使用不能区域(ENR 4.1 の Unusable)はまだ見ていない。種別と装備の照合は navRadOk(v6-242) */
 function radialOnSeg(A,B,ac){
   const ra=fixRadials(A.n),rb=fixRadials(B.n);
   for(const id of [...new Set([...ra,...rb].map(x=>x.id))]){
