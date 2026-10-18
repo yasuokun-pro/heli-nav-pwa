@@ -2,7 +2,7 @@
    - アプリ本体(シェル)はインストール時にキャッシュ → オフラインでも起動
    - 地図タイル(地理院・OSM・RainViewer)は一度表示したものをキャッシュ
    ※ index.html 等を更新したら、下の VER を上げると全端末に更新が配信されます */
-const VER = 'hnav-v6-251';
+const VER = 'hnav-v6-252';
 const TILE_CACHE = 'hnav-tiles';
 const TILE_MAX = 4000; /* タイル保持枚数の上限(超えたら古いものから削除) */
 
@@ -30,7 +30,10 @@ const TILE_HOSTS = [
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(VER).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
+    /* ⚠ ブラウザの HTTP キャッシュを通さずに取る(cache:'reload')。GitHub Pages は max-age=600 なので、
+       10分以内に続けて版を上げると、新しい SW が**古い index.html** を自分のキャッシュに入れてしまい、
+       「更新」を押しても前の版のままになった(2026-10-19 v6-251 で発生) */
+    caches.open(VER).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())
   );
 });
 
