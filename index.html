@@ -287,11 +287,14 @@
   /* 印刷: A4横に2面(切るとA5×2枚)。面の中身は #printArea の下だけに効かせる(印刷の前に画面外で高さを測って面割りするため) */
   #printArea{display:none}
   #printArea.measure{display:block;position:fixed;left:-10000px;top:0;visibility:hidden}
-  /* 1ページ = 印刷範囲 277×190mm(@page の余白 6mm より内側に余裕。iPhone は余白の指定も効かないことがある) */
-  #printArea .prPage{position:relative;width:277mm;height:190mm;overflow:hidden;break-after:page;page-break-after:always}
+  /* 1ページ = 255×168mm。⚠ iPhone は @page の余白を無視して上下左右に約19mm(54pt)の余白で刷る(A4 の印刷範囲 ≒ 259×172mm)。
+     以前の 277×190mm では縦向きに回したとき題名と右の列が紙の外に出た(2026-10-18 実機の PDF で確認)。
+     横向きは幅いっぱい(100%)にして2面の境目を紙の中央に。高さ(=面割りの基準)は 168mm */
+  #printArea.measure{width:255mm}
+  #printArea .prPage{position:relative;width:100%;height:168mm;overflow:hidden;break-after:page;page-break-after:always}
   #printArea .prPage:last-child{break-after:auto;page-break-after:auto}
-  #printArea .prRot{display:flex;align-items:flex-start;width:277mm;height:190mm;color:#000;background:#fff}
-  #printArea .prCopy{width:50%;height:100%;padding:0 4mm;box-sizing:border-box;border-right:1px dashed #999;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
+  #printArea .prRot{display:flex;align-items:flex-start;width:100%;height:168mm;color:#000;background:#fff}
+  #printArea .prCopy{width:50%;height:100%;padding:0 3mm;box-sizing:border-box;border-right:1px dashed #999;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
   #printArea .prCopy:last-child{border-right:none}
   #printArea.measure .prCopy{height:auto}
   #printArea .prTitle{text-align:center;font-weight:700;font-size:11pt;border-bottom:2px solid #000;padding-bottom:2px;margin-bottom:3px}
@@ -323,8 +326,8 @@
   /* ⚠ iPhone の印刷画面は既定が「縦向き」で、@page の size(A4 横)は効かない。
      紙が縦のときは横向きの2面をページごと90°回して縦の A4 に載せる(切ると同じく A5×2枚)。横向きを選べばそのまま */
   @media print and (orientation:portrait){
-    #printArea .prPage{width:190mm;height:277mm}
-    #printArea .prRot{position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(190mm) rotate(90deg)}
+    #printArea .prPage{width:168mm;height:255mm}
+    #printArea .prRot{position:absolute;left:0;top:0;width:255mm;transform-origin:0 0;transform:translateX(168mm) rotate(90deg)}
   }
   /* 接近警告 */
   /* 左右のボタン列と重ならないよう、地図下部いっぱいに横長で出す */
@@ -1185,7 +1188,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-248';
+const VER_TAG='v6-249';
 const BUILD='2026-10-18';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7397,7 +7400,7 @@ document.getElementById('btnPrint').onclick=()=>{
   const t0=`FLIGHT LOG${dep?`　${dep}${dst?' → '+dst:''}`:''}`;
   // 画面外に同じ寸法で置いて面の高さを測る(印刷と同じ mm/pt 指定なので、印刷の高さと同じになる)
   area.className='measure';
-  const H=190*96/25.4-4;   // 1面の高さ 190mm(px)。罫線ぶん少し引く
+  const H=168*96/25.4-4;   // 1面の高さ 168mm(px)。罫線ぶん少し引く
   const fits=html=>{area.innerHTML=page([html]);return area.querySelector('.prCopy').offsetHeight<=H};
   const copies=[];
   for(let from=0;from<n;){
