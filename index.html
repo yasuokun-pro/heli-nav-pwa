@@ -1171,7 +1171,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-243';
+const VER_TAG='v6-244';
 const BUILD='2026-10-18';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7828,7 +7828,10 @@ function ifrGraph(ac,cap){
     r.segs.forEach(sg=>{
       const A=ix[sg.a],B=ix[sg.b];if(!A||!B)return;
       const ka=node(A),kb=node(B);
-      const d=sg.dist!=null?sg.dist:distNM(A,B);
+      // ⚠ awy.json の距離は ENR 3.1 の表の読み違いが残っている(V15 NIIGATA–KALON が 15NM・実際は約92NM。28区間)。
+      //   公示値が両端の座標からの距離と 3NM かつ1割以上ずれていたら座標の距離を使う(短く読み違えると経路が不当に有利になる)。
+      //   座標が重なっている区間(Y46 ALBAT–KISEI)は座標の方が誤りなので公示値のまま
+      const gc=distNM(A,B),d=sg.dist!=null&&(gc<0.5||Math.abs(sg.dist-gc)<=Math.max(3,0.1*gc))?sg.dist:gc;
       let blk=segBlock(r,sg,A,B,ac,cap),via=null;
       // RNAV 区間・装備で受けられない navaid の従来型区間でも、使える navaid の同じラジアル上なら通す(0.5NM 不利)
       if(blk&&(r.k==='RNAV'||/^区間の navaid/.test(blk))){ via=radialOnSeg(A,B,ac); if(via)blk=segBlockRest(sg,A,B,ac,cap); }
