@@ -312,6 +312,11 @@
     table.prLog tr.fixA td{border-bottom:none}
     .noprint{display:none!important}
   }
+  /* ⚠ iPhone/iPad の Safari などは @page の size(A4 横)を無視して**縦**で刷る。そのままだと2面が縦長に潰れて複数ページになる。
+     紙が縦のときは横向きの2面(A4 横の印刷範囲 ≒ 280×194mm)をまるごと90°回して縦の A4 に載せる。切ると同じく A5×2枚 */
+  @media print and (orientation:portrait){
+    #printArea{position:absolute;left:0;top:0;width:280mm;height:194mm;transform-origin:0 0;transform:translateX(194mm) rotate(90deg)}
+  }
   /* 接近警告 */
   /* 左右のボタン列と重ならないよう、地図下部いっぱいに横長で出す */
   #alertBar{position:absolute;z-index:975;left:8px;right:8px;
@@ -1171,7 +1176,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-246';
+const VER_TAG='v6-247';
 const BUILD='2026-10-18';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
