@@ -211,10 +211,18 @@ def parse_33(L):
             R = routes[cur]
             if not R['pts'] or R['pts'][-1]['n'] != nm: R['pts'].append(p)
             # この行の右側 = 次の点までの区間
-            rest = l[mc.end():]
+            # ⚠ 桁100から右は Critical DME・管制部・周波数の欄。「Freq:124.15(134.4)」を距離に取っていた(Y51 DISSH–LANAT 124.15NM・実際 113.0)
+            # ⚠ ページによっては区間の属性(距離・上限・MEA)が座標の行の**1行上**(ENR 3.3-112 の Y51 DISSH「113.0 UNL FL260」)や
+            #   **1行下**(Y512 ELDAK「271 30.9 UNL FL150」)に刷られている。座標の行に「距離 上限」が無ければ上、次に下の行を使う
+            ATTR = r'\d+\.\d\s+(?:UNL|FL\d{2,3}|\d{4,5})'
+            rest = l[mc.end():100]; off = mc.end()
+            if not re.search(ATTR, rest):
+                for j in (i-1, i+1):
+                    if 0 <= j < len(L) and not COORD.search(L[j]) and re.search(ATTR, L[j][30:100]):
+                        rest = L[j][30:100]; off = 30; break
             seg = {'a': nm}
             toks = list(re.finditer(r'(UNL|FL\d{2,3}|\d+(?:\.\d+)?|[↓↑])', rest))
-            nums = [(t.group(1), mc.end()+t.start()) for t in toks]
+            nums = [(t.group(1), off+t.start()) for t in toks]
             # 順番: [navaid方位/距離は後の行] 磁方位 距離 上限 MEA 矢印
             plain = [(v, c) for v, c in nums if v not in ('↓', '↑')]
             arrows = [(v, c) for v, c in nums if v in ('↓', '↑')]
@@ -457,6 +465,18 @@ def main():
     r31 = parse_31(L31); r33 = parse_33(L33); r35 = parse_35(L35)
     out = ([dict(v, k='LOW') for v in r31.values()] + [dict(v, k='RNAV') for v in r33.values()]
            + [dict(v, k='DCT') for v in r35.values()])
+    # ⚠ AIP の表そのものの誤記: Y46 の KISEI の座標が1行上の ALBAT と同じ(332152N 1352629E)に刷られている
+    #   (ENR 4.4・V37・Y43・AIXM は 332804N 1351944E)。ENR 4.4(fix.json)と 0.5NM 以上違う名前の点は fix.json の座標にする。
+    #   navaid(id 付き)は同名の FIX と別物があるので見ない(ZYT と FIX の CHITOSE)
+    _, fx = load_points()
+    for r in out:
+        for p in r['pts']:
+            f = fx.get(p['n'])
+            if p.get('id') or not f: continue
+            dnm = _geo((p['lat'], p['lng']), (f['lat'], f['lng']))[0]
+            if dnm > 0.5:
+                print(f"  ⚠ {r['n']} {p['n']}: 表の座標が ENR 4.4 と {dnm:.1f}NM 違う → ENR 4.4 の座標にする", file=sys.stderr)
+                p['lat'], p['lng'] = f['lat'], f['lng']
     eff = os.path.basename(os.path.dirname(pdf))
     dst = os.path.join(HERE, '..', 'awy.json')
     json.dump({'eff': eff, 'src': 'AIP Japan ENR 3.1 / 3.3 / 3.5.1', 'f': out},
