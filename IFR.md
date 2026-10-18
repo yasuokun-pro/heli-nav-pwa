@@ -257,4 +257,17 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - **ついでに見つかった既存の不具合**: 代替=出発地(立川→宇都宮→立川 など)で、SID の辺を逆向きに使って着陸していた
   (辺を両向きに張っているため)。`dijkstra` で「SID で飛行場に入らない・STAR/IAF で飛行場から出ない」を追加。
 - [ ] navaid の使用不能区域(ENR 4.1 Unusable。JDT は 150-160°/310-330°/350-360° の一部)を見ていない
-- [ ] ラジアル接続で navaid 種別(TACAN/VOR)と装備のチェックボックスを照合していない(既存の評定接続も同じ)
+- [x] ラジアル接続で navaid 種別(TACAN/VOR)と装備のチェックボックスを照合する → v6-242 `navRadOk()`
+
+## v6-242 ラジアル接続を装備で絞る / 代替の最低気象条件の表がスマホで飛び出す
+- **ユーザー判断 B(2026-10-18)**: 局の種類で見る。TACAN だけの局 = TACAN、VOR = VOR、**VORTAC はどちらでも可**
+  (ENR 4.3 の評定が「HUC TACAN」と書いてあっても HUC は VORTAC なので VOR で同じ線を飛べる)。DME・LOC だけの局はラジアルなし。
+  `navRadOk(id,ac)` を `navNode()`(評定の辺)と `radialOnSeg()`(RNAV 区間のラジアル)の両方で見る。`ifrGraph` が `G.ac` を持つ。
+- 立川→百里(GNSS/RNAV なし)の結果: VOR だけ・TACAN だけ・両方とも OMIYA>SEKIYADO>TOHNE>LEMUM>HUC>NAKAH。
+  TACAN だけだと ILS X は図の必要装備 VOR で外れて TACAN A(NAKAH から)になる。
+- **KOGAR を通らない理由(質問への答え)**: OMIYA>KOGAR>HUC は実距離で 0.4NM 短い(136.2 対 136.6)が、OMIYA–KOGAR は Y588(RNAV)で、
+  RNAV なしでは JDT R-209 のラジアル(`radialOnSeg`)扱い = **0.5NM の不利**を付けているので負ける。
+  さらに JDT は TACAN だけの局なので、VOR だけの機体ではそもそも使えない(v6-242 から)。
+- 横に動く件: `table.altMin` の td が全体の `td{white-space:nowrap}` を継いで 575px になり、シート全体が横に動いていた。
+  altMin の td/th を折り返しに(375px 幅で 5 経路を測って横の飛び出しゼロ)。AIP のミニマの表は枠の中だけで横に動く(従来どおり)
+
