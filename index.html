@@ -330,6 +330,18 @@
   #printArea table.prLog thead tr:first-child th:nth-child(8){width:8%}
   #printArea table.prLog thead tr:first-child th:nth-child(9){width:8.5%}
   #printArea table.prLog thead tr:first-child th:nth-child(10){width:9%}
+  /* IFR ログの列(FIX | IDENT/FREQ | ROUTE/MEA | MC | WIND/WCA | MH | GS | DIST | EET | ETA/ATA | FUEL) */
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(1){width:15%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(2){width:13%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(3){width:11%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(4){width:6.5%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(5){width:8.5%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(6){width:6.5%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(7){width:6%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(8){width:8%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(9){width:9%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(10){width:8%}
+  #printArea table.prLog.ifr thead tr:first-child th:nth-child(11){width:8.5%}
   /* ⚠ 罫線も --u で。1px のままだと紙に合わせて縮めたとき線だけ相対的に太り、面の下端の罫線がはみ出して消えた(v6-254)
      1つのポイント(番号の行+名前の行)をひとまとまりに見せる: ポイントの間・見出しの下・合計の上・外枠は太線、
      番号の行と名前の行の間は薄い灰色の線(ユーザー要望 2026-10-19) */
@@ -1223,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-257';
+const VER_TAG='v6-258';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7387,106 +7399,58 @@ function renderLogs(){
 }
 /* ───────── ログ印刷(A4横に同じログを2面付け→切るとA5×2枚) ───────── */
 new Image().src='wordmark-brown.png';   // 印刷はボタンの処理の中ですぐ呼ぶので、ロゴは先に読んでおく
+/* ───────── ログ印刷の共通部分: 面(A5)割り → A4 に2面ずつ → print ─────────
+   sections = [{title, head(題名の下の NOTES 等の HTML), table(DOM。tbody に tr.fixA/tr.fixB の2段・最後に tr.total)}]
+   各 section を面に入るだけ載せ、続きは次の面へ。全体で1面なら同じものを2面(切って2枚使える)。
+   VFR は1 section、IFR は「出発→目的」「目的→代替」の2 section(それぞれ1面に収まれば同じ紙の左右) */
 let prLast=0;
-document.getElementById('btnPrint').onclick=()=>{
-  if(!wps.length){alert('ポイントがありません');return}
+function prPrint(sections){
   // ⚠ 続けて押すと iOS が2回目の print() を「自動的な印刷」とみなして確認を出す。印刷画面が開くまでの2秒は受け付けない
   if(Date.now()-prLast<2000)return;
   prLast=Date.now();
-  const src=document.querySelector('table.fltlog');
-  const build=()=>{
-    const t=src.cloneNode(true);
-    t.className='prLog';
-    t.querySelectorAll('.noprint').forEach(e=>e.remove());
-    // 入力欄は印刷で消えるのでテキストに置換
-    t.querySelectorAll('input').forEach(inp=>{
-      const td=inp.parentElement;td.textContent=inp.value;
-    });
-    // 画面用の記号(≡ ▶)は印刷では不要
-    t.querySelectorAll('td.fixNo').forEach(td=>{
-      td.textContent=td.textContent.replace(/[≡▶▷]/g,'').trim();
-    });
-    return t; // DOM要素で返す(面ごとに行を間引くため)
-  };
-  const full=build();
-  const dep=wps[0]?wps[0].name:'';
-  const dst=wps.length>1?wps[wps.length-1].name:'';
-  const totD=document.getElementById('dDist').textContent.trim();
-  const totE=document.getElementById('dEte').textContent.trim();
-  const totF=document.getElementById('dReq').textContent.trim();
-  // NOTES欄: ルート上の飛行場の情報(周波数・標高・滑走路)をまとめて印字
-  const seen=new Set(),ads=[];
-  wps.forEach(w=>{
-    const icao=adIcaoOf(w);
-    if(!icao||seen.has(icao))return;
-    seen.add(icao);
-    const a=ASP.find(x=>x.icao===icao)||{};
-    const f=AD_FREQ[icao]||{};
-    const fr=['TWR','RDO','APP','DEP','TCA','GND','ATIS']
-      .filter(k=>f[k]).map(k=>`${k} ${f[k]}`).join(' / ');
-    const info=[fr,
-      a.elev!==undefined?`ELEV ${a.elev}ft`:'',
-      a.rwy?`RWY ${a.rwy}`:''].filter(Boolean).join(' ｜ ');
-    ads.push(`<div class="adNote"><b>${icao}${a.n?' '+a.n:''}</b> ${info||'—'}</div>`);
-  });
-  // 経路上で通過する空域と、そこで連絡すべき機関もNOTESに出す
-  const aseen=new Set();
-  wps.forEach(w=>airspaceAt(w).forEach(x=>{
-    const k=x.kind+x.n;
-    if(aseen.has(k))return;
-    aseen.add(k);
-    ads.push(`<div class="adNote"><b>${x.kind} ${x.n}</b> ${x.rmk||'—'}</div>`);
-  }));
-  const notes=ads.length?ads.join(''):'';
-  // 印刷はニーボードで使うので、どのアプリで出した紙か分かるように名前を入れる
-  const head=`<div class="prLogo"><img src="wordmark-brown.png" alt="yasuokun_pro"></div>
-  <table class="prHead">
-    <tr><th style="width:14%">NOTES</th><td colspan="4" class="nt">${notes}</td></tr>
-    <tr><th>AIRCRAFT<br>IDENT</th><th>DEPARTURE<br>TIME</th><th>TOTAL<br>DISTANCE</th><th>TOTAL<br>EET</th><th>TOTAL<br>AMT FUEL</th></tr>
-    <tr><td class="fill"></td><td></td><td class="v">${totD}</td><td class="v">${totE}</td><td class="v">${totF}</td></tr>
-  </table>`;
-  // 面(A5)に入るだけポイントを載せ、入りきらなければ次の面へ続ける(以前は1面16点の固定で、NOTES が長いと下が切れた)
-  const half=(from,to)=>{
-    const t=full.cloneNode(true);
-    const tb=t.querySelector('tbody');
-    const rows=[...tb.children];
-    const fixA=rows.filter(r=>r.classList.contains('fixA'));
-    fixA.forEach((ra,k)=>{
-      if(k>=from&&k<to)return;
-      const rb=ra.nextElementSibling;
-      ra.remove();if(rb&&rb.classList.contains('fixB'))rb.remove();
-    });
-    if(to<fixA.length)tb.querySelector('tr.total')?.remove(); // 続きがある面には合計を出さない
-    return t.outerHTML;
-  };
-  const n=full.querySelectorAll('tbody tr.fixA').length;
-  const pane=(title,inner,withHead)=>`<div class="prCopy">
-    <div class="prTitle">${title}</div>${withHead?head:''}${inner}</div>`;
-  const page=copies=>`<div class="prPage"><div class="prRot">${copies.join('')}</div></div>`;
   const area=document.getElementById('printArea');
-  const t0=`FLIGHT LOG${dep?`　${dep}${dst?' → '+dst:''}`:''}`;
-  // 画面外に同じ寸法で置いて面の高さを測る(印刷と同じ mm/pt 指定なので、印刷の高さと同じになる)
+  const pane=(title,inner,head)=>`<div class="prCopy">
+    <div class="prTitle">${title}</div>${head||''}${inner}</div>`;
+  const page=copies=>`<div class="prPage"><div class="prRot">${copies.join('')}</div></div>`;
+  // 画面外に同じ寸法で置いて面の高さを測る(印刷と同じ --u 指定なので、印刷の高さと同じ比率になる)
   // ⚠ 点を1つずつ足して測り直すと iPhone で数百 ms〜かかり、ボタンの反応が遅れて「自動的な印刷」の確認も出た。
   //   全部の行を入れた1面を1回だけ測り、行の高さを足し算して面に分ける
+  const H=(168-3)*96/25.4;   // 1面の高さ 168 単位(計測では 1 単位 = 1mm)。下端に 3 単位の余裕
   area.className='measure';
-  const H=(168-3)*96/25.4;   // 1面の高さ 168 単位(計測では 1 単位 = 1mm)。下端に 3 単位の余裕(表の列幅が面ごとに少し変わるぶん)
-  area.innerHTML=page([pane(t0,full.outerHTML,true)]);
-  const cp=area.querySelector('.prCopy'),c0=cp.getBoundingClientRect().top;
-  const fa=[...cp.querySelectorAll('tbody tr.fixA')];
-  const bot=fa.map(r=>{const b=r.nextElementSibling&&r.nextElementSibling.classList.contains('fixB')?r.nextElementSibling:r;return b.getBoundingClientRect().bottom-c0});
-  const top0=fa.length?fa[0].getBoundingClientRect().top-c0:0;              // 題名+NOTES+見出し行
-  const tot=cp.querySelector('tbody tr.total');const totH=tot?tot.getBoundingClientRect().height:0;
-  const hd=cp.querySelector('.prHead');const hdH=hd?hd.getBoundingClientRect().height+3+(cp.querySelector('.prLogo')?.getBoundingClientRect().height||0):0;
   const copies=[];
-  for(let from=0;from<n;){
-    const first=from===0,base=first?0:hdH;                                   // 続きの面は NOTES 等が無いぶん上に詰まる
-    const start=from?bot[from-1]:top0;                                     // この面の1行目の上端(1面目の座標)
-    let to=from+1;
-    while(to<n&&(bot[to]-start)+(top0-base)+(to+1===n?totH:0)<=H)to++;
-    copies.push(pane(first?t0:t0+`（続き ${from+1}-${to}）`,half(from,to),first));from=to;
-  }
+  sections.forEach(S=>{
+    const full=S.table;
+    // 面ごとに行を間引いた表(from..to のポイントだけ)
+    const half=(from,to)=>{
+      const t=full.cloneNode(true);
+      const tb=t.querySelector('tbody');
+      const fixA=[...tb.children].filter(r=>r.classList.contains('fixA'));
+      fixA.forEach((ra,k)=>{
+        if(k>=from&&k<to)return;
+        const rb=ra.nextElementSibling;
+        ra.remove();if(rb&&rb.classList.contains('fixB'))rb.remove();
+      });
+      if(to<fixA.length)tb.querySelector('tr.total')?.remove(); // 続きがある面には合計を出さない
+      return t.outerHTML;
+    };
+    const n=full.querySelectorAll('tbody tr.fixA').length;
+    area.innerHTML=page([pane(S.title,full.outerHTML,S.head)]);
+    const cp=area.querySelector('.prCopy'),c0=cp.getBoundingClientRect().top;
+    const fa=[...cp.querySelectorAll('tbody tr.fixA')];
+    const bot=fa.map(r=>{const b=r.nextElementSibling&&r.nextElementSibling.classList.contains('fixB')?r.nextElementSibling:r;return b.getBoundingClientRect().bottom-c0});
+    const top0=fa.length?fa[0].getBoundingClientRect().top-c0:0;              // 題名+NOTES+見出し行
+    const tot=cp.querySelector('tbody tr.total');const totH=tot?tot.getBoundingClientRect().height:0;
+    const hd=cp.querySelector('.prHead');const hdH=hd?hd.getBoundingClientRect().height+3+(cp.querySelector('.prLogo')?.getBoundingClientRect().height||0):0;
+    for(let from=0;from<n;){
+      const first=from===0,base=first?0:hdH;                                 // 続きの面は NOTES 等が無いぶん上に詰まる
+      const start=from?bot[from-1]:top0;                                   // この面の1行目の上端(1面目の座標)
+      let to=from+1;
+      while(to<n&&(bot[to]-start)+(top0-base)+(to+1===n?totH:0)<=H)to++;
+      copies.push(pane(first?S.title:S.title+`（続き ${from+1}-${to}）`,half(from,to),first?S.head:''));from=to;
+    }
+  });
   area.className='';
-  // 1面に収まれば同じものを2面(切って2枚使える)。収まらなければ前半・続きを順に並べ、A4 1枚に2面ずつ
+  // 全体で1面なら同じものを2面(切って2枚使える)。そうでなければ順に並べ、A4 1枚に2面ずつ
   const list=copies.length===1?[copies[0],copies[0]]:copies;
   let out='';for(let k=0;k<list.length;k+=2)out+=page(list.slice(k,k+2));
   area.innerHTML=out;
@@ -7494,7 +7458,125 @@ document.getElementById('btnPrint').onclick=()=>{
   //   以前は afterprint で中身を消していて、横向きにすると真っ黒(アプリの背景だけ)になった。中身は残す(画面では非表示・次の印刷で上書き)
   // ⚠ setTimeout で遅らせると、iOS がボタン操作と別の「自動的な印刷」とみなして確認を出す。押した処理の中でそのまま呼ぶ
   window.print();
+}
+/* 印刷の題名の下の部分(ロゴ・NOTES・合計の欄) */
+function prHeadHtml(notes,totD,totE,totF,etd){
+  // 印刷はニーボードで使うので、どのアプリで出した紙か分かるように名前を入れる
+  return `<div class="prLogo"><img src="wordmark-brown.png" alt="yasuokun_pro"></div>
+  <table class="prHead">
+    <tr><th style="width:14%">NOTES</th><td colspan="4" class="nt">${notes}</td></tr>
+    <tr><th>AIRCRAFT<br>IDENT</th><th>DEPARTURE<br>TIME</th><th>TOTAL<br>DISTANCE</th><th>TOTAL<br>EET</th><th>TOTAL<br>AMT FUEL</th></tr>
+    <tr><td class="fill"></td><td class="v">${etd||''}</td><td class="v">${totD}</td><td class="v">${totE}</td><td class="v">${totF}</td></tr>
+  </table>`;
+}
+/* 飛行場の NOTES 1行(周波数・標高・滑走路) */
+function prAdNote(icao){
+  const a=ASP.find(x=>x.icao===icao)||{};
+  const f=AD_FREQ[icao]||{};
+  const fr=['TWR','RDO','APP','DEP','TCA','GND','ATIS'].filter(k=>f[k]).map(k=>`${k} ${f[k]}`).join(' / ');
+  const info=[fr,a.elev!==undefined?`ELEV ${a.elev}ft`:'',a.rwy?`RWY ${a.rwy}`:''].filter(Boolean).join(' ｜ ');
+  return `<div class="adNote"><b>${icao}${a.n?' '+a.n:''}</b> ${info||'—'}</div>`;
+}
+document.getElementById('btnPrint').onclick=()=>{
+  if(!wps.length){alert('ポイントがありません');return}
+  const src=document.querySelector('table.fltlog');
+  const t=src.cloneNode(true);
+  t.className='prLog';
+  t.querySelectorAll('.noprint').forEach(e=>e.remove());
+  // 入力欄は印刷で消えるのでテキストに置換
+  t.querySelectorAll('input').forEach(inp=>{const td=inp.parentElement;td.textContent=inp.value});
+  // 画面用の記号(≡ ▶)は印刷では不要
+  t.querySelectorAll('td.fixNo').forEach(td=>{td.textContent=td.textContent.replace(/[≡▶▷]/g,'').trim()});
+  const dep=wps[0]?wps[0].name:'';
+  const dst=wps.length>1?wps[wps.length-1].name:'';
+  const totD=document.getElementById('dDist').textContent.trim();
+  const totE=document.getElementById('dEte').textContent.trim();
+  const totF=document.getElementById('dReq').textContent.trim();
+  // NOTES欄: ルート上の飛行場の情報(周波数・標高・滑走路)と、通過する空域の連絡先
+  const seen=new Set(),ads=[];
+  wps.forEach(w=>{const icao=adIcaoOf(w);if(!icao||seen.has(icao))return;seen.add(icao);ads.push(prAdNote(icao))});
+  const aseen=new Set();
+  wps.forEach(w=>airspaceAt(w).forEach(x=>{
+    const k=x.kind+x.n;if(aseen.has(k))return;aseen.add(k);
+    ads.push(`<div class="adNote"><b>${x.kind} ${x.n}</b> ${x.rmk||'—'}</div>`);
+  }));
+  prPrint([{title:`FLIGHT LOG${dep?`　${dep}${dst?' → '+dst:''}`:''}`,head:prHeadHtml(ads.join(''),totD,totE,totF),table:t}]);
 };
+/* ───────── IFR ログ印刷: IFR 計画の結果から「出発→目的」「目的→代替」の2つのログ ─────────
+   VFR のログ(地図の経路から作る)とは別。IFR 計画で出した経路・風・WCA・MH・MEA をそのまま載せる。
+   それぞれ A5 1面に収まれば同じ紙の左右(縦向きなら上下)。収まらなければ続きの面へ(prPrint)
+   列: FIX | IDENT/FREQ(評定に使う navaid とその周波数) | ROUTE/MEA | MC | WIND/WCA | MH | GS | DIST | EET | ETA/ATA | FUEL */
+function navFreqTxt(id){
+  const L=NAVAIDS.filter(x=>x.id===id);if(!L.length)return '';
+  const v=L.find(x=>/VOR/.test(x.t)),t=L.find(x=>x.ch);
+  const vf=v&&v.f?v.f.replace(/MHz.*$/,'').split('/')[0]:'';
+  return [vf,t&&t.ch?(vf?'':'CH')+t.ch:''].filter(Boolean).join(' / ');
+}
+/* そのポイントの評定に使う navaid(装備で受けられるものを優先)。navaid そのものならその局 */
+function ifrFixNav(b,ac){
+  if(b.nav||NAVAIDS.some(x=>x.id===b.n))return {id:b.id||b.n,txt:''};
+  const L=fixRadials(b.n);if(!L.length)return null;
+  const r=L.find(x=>navRadOk(x.id,ac))||L[0];
+  return {id:r.id,txt:`R${pad3(r.brg)} D${r.d}`};
+}
+function ifrPrintTable(rows,ac,startAp,ff,fob,etdMs){
+  const T=rows.length?rows[rows.length-1].t:0,D=rows.length?rows[rows.length-1].cum:0,F=rows.length?rows[rows.length-1].fuel:0;
+  const f1=x=>x==null?'':x.toFixed(1),fw=x=>x==null?'':(x>0?'+':'')+Math.round(x)+'°';
+  const adId=icao=>{const f=AD_FREQ[icao]||{};const k=['TWR','RDO','APP','TCA','GND','ATIS'].find(k=>f[k]);return k?{id:k,f:f[k]}:{id:'',f:''}};
+  const fuelTxt=x=>ff>0?Math.round(x):'';
+  let h=`<thead><tr><th rowspan="2">FIX</th><th>IDENT</th><th>ROUTE</th><th rowspan="2">MAG<br>CRS</th><th>WIND<br>°T/kt</th><th rowspan="2">MH</th><th rowspan="2">GS</th><th>DIST</th><th>EET</th><th>ETA</th><th>FUEL</th></tr>
+    <tr><th>FREQ</th><th>MEA</th><th>WCA</th><th>REMAIN</th><th>REMAIN</th><th>ATA</th><th>REMAIN</th></tr></thead><tbody>`;
+  const s0=adId(startAp.icao);
+  h+=`<tr class="fixA"><td class="fixNo">(1)</td><td class="cNav">${s0.id}</td><td class="cNav"></td><td rowspan="2" class="cCrs"></td><td class="cNum"></td><td rowspan="2" class="cNum"></td><td rowspan="2" class="cNum"></td><td class="cNum"></td><td class="cNum"></td><td class="cNum">${etdMs?jstHm(etdMs):''}</td><td class="cNum"></td></tr>
+    <tr class="fixB"><td class="fixName">${startAp.icao}</td><td class="cNav">${s0.f}</td><td class="cNav"></td><td class="cNum"></td><td class="cNum rem">${D.toFixed(0)}</td><td class="cNum rem">${fmtHM(T)}</td><td class="cNum rem"></td><td class="cNum rem">${fob>0?Math.round(fob):''}</td></tr>`;
+  rows.forEach((r,i)=>{
+    const e=r.l.e,b=r.b;
+    const rte=e.tr?(e.proc?(e.tag==='IAF'?(b.ap?e.proc.p.n:e.proc.p.n+' IAF'):e.proc.p.n+' '+e.tag):e.tag):e.via?`${e.via.id} R${pad3(e.via.rad)}`:e.r.n;
+    let id='',fq='';
+    if(b.ap){const x=adId(b.ap.icao);id=x.id;fq=x.f}
+    else{const nv=ifrFixNav(b,ac);if(nv){id=nv.id+(nv.txt?' '+nv.txt:'');fq=navFreqTxt(nv.id)}}
+    const eta=etdMs&&r.t!=null?jstHm(etdMs+r.t*3600e3):'';
+    h+=`<tr class="fixA"><td class="fixNo">(${i+2})</td><td class="cNav">${id}</td><td class="cNav">${rte}</td>
+      <td rowspan="2" class="cCrs">${fmt3(r.mc)}°</td><td class="cNum">${pad3(r.w.d)}/${r.w.s}</td>
+      <td rowspan="2" class="cNum">${r.mh==null?'不可':fmt3(r.mh)+'°'}</td><td rowspan="2" class="cNum">${r.gs?Math.round(r.gs):''}</td>
+      <td class="cNum">${f1(e.d)}</td><td class="cNum">${r.ete?fmtHM(r.ete):''}</td><td class="cNum">${eta}</td><td class="cNum">${r.ete?fuelTxt(r.ete*ff):''}</td></tr>
+      <tr class="fixB"><td class="fixName">${b.ap?b.ap.icao:b.n}</td><td class="cNav">${fq}</td><td class="cNav">${e.mea!=null?e.mea:''}</td>
+      <td class="cNum">${r.bad?'不可':fw(r.wca)}</td><td class="cNum rem">${Math.max(0,D-r.cum).toFixed(0)}</td><td class="cNum rem">${T-r.t>1/120?fmtHM(T-r.t):'0:00'}</td><td class="cNum rem"></td><td class="cNum rem">${fob>0?Math.round(fob-r.fuel):''}</td></tr>`;
+  });
+  h+=`<tr class="total"><td>TOTAL</td><td></td><td></td><td></td><td></td><td></td><td></td><td class="cNum">${D.toFixed(1)}</td><td class="cNum">${fmtHM(T)}</td><td></td><td class="cNum">${fuelTxt(F)}</td></tr></tbody>`;
+  const t=document.createElement('table');t.className='prLog ifr';t.innerHTML=h;return t;
+}
+function ifrPrintLog(){
+  const X=ifrPlanRes&&ifrPlanRes.prt;if(!X){alert('先に「計画を作る」で IFR 計画を出してください');return}
+  const {rows,rowsA,P,need,res}=X,{ac,dep,dst,alt,ff,fob,tas}=P,S=ifrPlanRes.sel,CA=P.CA;
+  const E=ntmEtd(),etd=E.set?E.t:0;
+  const crz=CA.alt>=18000?'FL'+CA.alt/100:CA.alt.toLocaleString()+'ft';
+  const pn=x=>x&&x.p?x.p.n:'—';
+  const sum=rs=>rs&&rs.length?rs[rs.length-1]:{cum:0,t:0,fuel:0};
+  const m=sum(rows),a=sum(rowsA);
+  // RCA・TOD(画面の表と同じ計算)
+  const asg=ifrPlanRes.asg||CA.alt,sidD=ifrPlanRes.sidD||0,Tk=ifrPlanRes.sidTrack&&!ifrPlanRes.sidTrack.off?ifrPlanRes.sidTrack:null;
+  const rca=rows.length?((Tk&&!sidD)?rcaOnTrack(Tk,ac,dep,asg,rows[0].w):ifrRca(rows,ac,dep,asg,sidD)):null;
+  const tk=ifrTodTarget(rows.map(r=>r.l),ifrPlanRes.G);
+  const tod=ifrTod(rows,ac,CA.alt,ifrPlanRes.todAlt||0,tk,tas);
+  const todFix=tod&&!tod.none&&!tod.before&&rows[tod.i]?(n=>n.ap?n.ap.icao:n.n)(rows[tod.i].a):'';
+  const nl=(k,v)=>`<div class="adNote"><b>${k}</b> ${v}</div>`;
+  const notesM=[prAdNote(dep.icao),prAdNote(dst.icao),
+    nl('SID',pn(S.sid))+nl('STAR',pn(S.star))+nl('IAC',pn(S.iac)),
+    nl('CRZ',`${crz} ｜ ASSIGNED ${asg.toLocaleString()}ft ｜ IAF ${ifrPlanRes.todAlt?ifrPlanRes.todAlt.toLocaleString()+'ft':'—'} ｜ TAS ${tas}kt ｜ FF ${ff}/h`),
+    rca?nl('RCA',`${asg.toLocaleString()}ft ${rca.dist.toFixed(1)}NM ${fmtHM(rca.time)}${rca.ok?'':' ⚠ SID 終点までに届かない'}`):'',
+    tod&&!tod.none?nl('TOD',tod.before?'⚠ 経路が短い':`${todFix} から ${tod.fromStart.toFixed(1)}NM(${tod.dist.toFixed(1)}NM・${fmtHM(tod.time)} の降下)`):'',
+    ff>0?nl('FUEL',`TRIP ${Math.round(m.fuel)} + ALTN ${Math.round(a.fuel)} + RES ${Math.round(res)} = ${Math.round(need)}${fob>0?` ｜ FOB ${Math.round(fob)}`:''}`):''].join('');
+  const sec=[{title:`IFR LOG　${dep.icao} → ${dst.icao}`,head:prHeadHtml(notesM,m.cum.toFixed(1)+' NM',fmtHM(m.t),ff>0?Math.round(m.fuel)+'':'',etd?jstHm(etd):''),
+    table:ifrPrintTable(rows,ac,dep,ff,fob,etd)}];
+  if(rowsA&&alt){
+    const notesA=[prAdNote(alt.icao),nl('IAC',pn(S.iacA)),nl('CRZ',`${crz} ｜ TAS ${tas}kt ｜ FF ${ff}/h`)].join('');
+    sec.push({title:`IFR LOG ALTN　${dst.icao} → ${alt.icao}`,head:prHeadHtml(notesA,a.cum.toFixed(1)+' NM',fmtHM(a.t),ff>0?Math.round(a.fuel)+'':''),
+      table:ifrPrintTable(rowsA,ac,dst,ff,fob>0?fob-m.fuel:0,0)});
+  }
+  prPrint(sec);
+}
+document.addEventListener('click',e=>{if(e.target&&e.target.id==='ifrPrint')ifrPrintLog()});   // 押した処理の中で print(iOS の確認を出さない)
 
 document.getElementById('btnCSV').onclick=()=>{
   if(!logs.length){alert('ログがありません');return}
@@ -8593,10 +8675,12 @@ function renderIfrOut(P){
   const bad=rows.some(r=>r.bad)||(rowsA||[]).some(r=>r.bad);
   const fuel=rows.length?rows[rows.length-1].fuel:0,fuelA=rowsA&&rowsA.length?rowsA[rowsA.length-1].fuel:0,res=ff*0.5;
   const need=fuel+fuelA+res;
+  ifrPlanRes.prt={rows,rowsA,P,need,res};      // IFR ログ印刷用(ifrPrintLog)
   // 気象: METAR を並べ、AIP にある離陸ミニマ(AD 2.22)は原文のまま。判断はパイロット(社内ミニマは各自)
   const tomin=TOMIN&&TOMIN.f&&TOMIN.f[dep.icao];
   document.getElementById('ifrOut').innerHTML=`
   <div class="ifrBox"><b class="k">経路 ${dep.icao} → ${dst.icao}  ${R.d.toFixed(1)}NM  ETE ${fmtHM(ete)}(TAS ${tas}kt・風込み)</b>
+    <button class="btn sh" id="ifrPrint" style="margin-left:8px;padding:2px 10px">🖨 IFR ログ印刷(A4 に A5×2面)</button>
     <div style="margin:4px 0 6px;font-size:12px">共通の風 <input type="number" id="ifrWd" class="n5" style="width:60px" value="${W.base.d}" min="0" max="360">°T / <input type="number" id="ifrWs" class="n5" style="width:54px" value="${W.base.s}" min="0">kt
       　Assigned ALT <input type="number" id="ifrAsg" class="n5" step="500" value="${ifrPlanRes.asg||CA.alt}" title="SID終点までに到達する高度(初期上昇の指示高度)。空なら巡航高度">ft
       　IAF高度 <input type="number" id="ifrTod" class="n5" step="500" value="${ifrPlanRes.todAlt||''}" placeholder="例 4000" title="経路の最後の点(${(n=>n?(n.ap?n.ap.icao:n.n):'')(R.legs.length&&ifrTodTarget(R.legs,G)>=0?G.nodes[R.legs[ifrTodTarget(R.legs,G)].to]:null)})に着く高度。巡航高度から TOD(降下開始点)を逆算する。目的地+進入方式ごとに覚える">ft

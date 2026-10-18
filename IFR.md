@@ -320,3 +320,14 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - [MOCA] を座標の行の下3行まで探す処理(先行ブランチで 20261029 用に入れたもの)を main にも入れた → 10/01 でも18区間の MOCA・真方位が埋まる。
 - 結果: 距離の無い区間 0、座標からの距離と 1.5NM かつ5% 以上ずれる区間 0(全 2281 区間)
 
+## v6-258 IFR ログ印刷(IFR 計画の画面から)
+- ユーザー要望(2026-10-19): VFR のログ(地図の経路から作る)とは別に、IFR 計画の結果から IFR 用のログを作る。
+  出発→目的と目的→代替を別のログにし、どちらも A5 1面に収まれば同じ紙(A4)の左右に。
+- IFR 計画の結果の「🖨 IFR ログ印刷」→ `ifrPrintLog()`。データは `renderIfrOut` が `ifrPlanRes.prt`(rows/rowsA/P/必要燃料)に残す。
+- 列: FIX | IDENT/FREQ | ROUTE/MEA | MAG CRS | WIND(°T/kt)/WCA | MH | GS | DIST/REMAIN | EET/REMAIN | ETA/ATA | FUEL/REMAIN
+  - IDENT = 評定に使う navaid(装備で受けられる局を優先 `navRadOk`)+ ラジアル/DME(HUC R272 D27.6)、FREQ = VOR の周波数 / TACAN の CH(`navFreqTxt`)。
+    navaid そのものの点はその局、飛行場は TWR 等の周波数
+  - ETA は NOTAM タブの「出発」(ETD)を入れていれば ETD + 累計。空なら手書き
+- NOTES: 出発・目的(代替)の飛行場の周波数/標高/滑走路、SID/STAR/IAC、巡航高度・Assigned・IAF 高度・TAS・FF、RCA・TOD、燃料(TRIP+ALTN+RES=必要 ｜ FOB)
+- 印刷の共通部分を `prPrint(sections)` に切り出した(VFR も同じ)。面割り・縦横・iPhone 対策(v6-249〜256)は共通
+
