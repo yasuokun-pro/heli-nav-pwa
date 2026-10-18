@@ -1192,8 +1192,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-251';
-const BUILD='2026-10-18';
+const VER_TAG='v6-252';
+const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -1239,7 +1239,19 @@ if('serviceWorker' in navigator){
   });
   window.addEventListener('DOMContentLoaded',()=>{
     const go=document.getElementById('updGo'),no=document.getElementById('updNo');
-    if(go)go.onclick=()=>{reloading=true;location.reload()};
+    // ⚠ 新しい SW の準備(ファイルの取得)が終わる前に再読込すると、古い SW のキャッシュから前の版が出る。
+    //   入れ替わり(activated)を待ってから再読込する。オフライン等で確認できなければそのまま再読込(最大8秒)
+    if(go)go.onclick=async()=>{
+      if(reloading)return;reloading=true;go.textContent='更新中…';
+      try{
+        if(swReg){
+          await swReg.update();
+          const w=swReg.installing||swReg.waiting;
+          if(w&&w.state!=='activated')await new Promise(r=>{w.addEventListener('statechange',()=>{if(w.state==='activated'||w.state==='redundant')r()});setTimeout(r,8000)});
+        }
+      }catch(_){}
+      location.reload();
+    };
     if(no)no.onclick=()=>document.getElementById('updBar').classList.remove('on');
   });
 }
