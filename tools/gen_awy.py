@@ -7,7 +7,8 @@
       と **ENR 3.5.1 Direct routes**(直行経路。navaid/FIX 間の公示された直行区間。k='DCT')
 
 使い方:
-  python3 tools/gen_awy.py            # awy.json を出力
+  python3 tools/gen_awy.py --airac 20261001                  # awy.json を出力
+  python3 tools/fix_awy_aixm.py --at 2026-10-01 --write      # 続けて AIXM で MEA・区間の並びを直す
 
 ⚠ 表の癖(2026-09 に確認)
   - どちらも「点(名前+座標)」と「点と点の間の区間属性」が縦に並ぶ。**区間属性の置き場が
@@ -35,14 +36,15 @@ import os, re, sys, json, glob, subprocess
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-COORD = re.compile(r'(\d{6}(?:\.\d+)?)N\s*/?\s*(1\d{6}(?:\.\d+)?)E')
+COORD = re.compile(r'(\d{6}(?:\.\d+)?) ?N\s*/?\s*(1\d{6}(?:\.\d+)?) ?E')   # ⚠ 「1335006.20 E」と E の前に空白の点がある(V28 KIBI)
 DESIG = re.compile(r'^\s{0,6}([A-Z]{1,3}\d{1,3})\s*(\(Cont\'d\))?\s*(?:\S.*)?$')
 NAVID = re.compile(r'(VORTAC|VOR/DME|VOR|TACAN|DME|NDB)\s*\(([A-Z]{2,3})\)')
 
 
 def find_pdf():
-    for pat in (AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf',
-                AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'):
+    # ⚠ 指定が無いと**一番新しい発行**の PDF を取る。main は今の AIRAC、先行ブランチは次の AIRAC を --airac で指定する
+    iss = sys.argv[sys.argv.index('--airac') + 1] if '--airac' in sys.argv else '*'
+    for pat in (AIP_ROOT + f'/1_AIP (PDF)/{iss}/ENR_*.pdf',):
         f = sorted(glob.glob(os.path.expanduser(pat)))
         if f: return f[-1]
     return None
@@ -96,22 +98,32 @@ def point_name(L, ci):
     return None, nid
 
 
+PAGE = '\x0c'   # parse_31 の区間の行に挟むページ替わりの印
+
+
 def parse_31(L):
     """ENR 3.1: 区間属性は2点の間の行に散る"""
-    routes = {}; cur = None; pts = []; between = []
-    def flush_between(seg, lines):
-        # 磁方位: '----' の行の上と下で、桁30〜46に3桁の数字が単独で乗っている最寄りの行
+    routes = {}; cur = None; pts = []; between = []; span = []
+    def flush_between(seg, lines, span):
+        # 磁方位: '----' の行の上と下で、桁28〜46に3桁の数字が単独で乗っている最寄りの行
         # ⚠ 備考欄の "247°37'T" が同じ行にいることがあるので桁で絞る
+        # ⚠ 方位は**点の名前の行・座標の行**にも乗る("314150.00N/1303458.59E   240" / "△ KALON   ----")。
+        #   以前は区間の行(名前・座標の行を除く)だけを見ていて、ページをまたいだ A1 KAGOSHIMA–KAZAN が
+        #   前のページの 060 を往路に取っていた。span = 始点の座標の行〜終点の座標の行(左28桁は見ない)。ページ替わりは越えない
         def trk(l):
-            m = re.search(r'^\s{28,46}(\d{3})(?=\s|$)', l)
-            return int(m.group(1)) if m else None
-        for k, l in enumerate(lines):
-            if '----' not in l: continue
+            m = re.match(r'\s*(\d{3})(?=\s|$)', l[28:47]) if l != PAGE else None
+            return int(m.group(1)) if m and re.match(r'\s*$', l[28:28+m.start(1)]) else None
+        for k, l in enumerate(span):
+            if l == PAGE or '----' not in l[28:47]: continue
             for j in range(k-1, max(-1, k-4), -1):
-                if trk(lines[j]) is not None: seg['mag'] = trk(lines[j]); break
-            for j in range(k+1, min(len(lines), k+4)):
-                if trk(lines[j]) is not None: seg['rmag'] = trk(lines[j]); break
+                if span[j] == PAGE: break
+                if trk(span[j]) is not None: seg['mag'] = trk(span[j]); break
+            for j in range(k+1, min(len(span), k+4)):
+                if span[j] == PAGE: break
+                if trk(span[j]) is not None: seg['rmag'] = trk(span[j]); break
+        pb = False
         for l in lines:
+            if l == PAGE: pb = True; continue
             for tok in re.finditer(r'\bFL(\d{2,3})\b|(?<![\d.])(\d{1,5}(?:\.\d)?)(?![\d.°\'])', l):
                 col = tok.start()
                 if tok.group(1):
@@ -119,7 +131,15 @@ def parse_31(L):
                 else:
                     v = float(tok.group(2))
                     if v >= 1000 and 52 <= col <= 68 and 'mea' not in seg: seg['mea'] = int(v)
-                    elif v < 400 and 40 <= col <= 52 and 'dist' not in seg: seg['dist'] = v
+                    # ⚠ 距離の列は桁 40〜45。桁 48〜50 は CHANGE-OVER POINT(COP)の距離("113 ---- 80")で、
+                    #   以前は 40〜52 で拾って COP を区間距離にしていた(V31 AZUMI–OWARI)
+                    elif v < 400 and 38 <= col <= 46:
+                        # ⚠ 区間がページをまたぐと同じ距離が両方のページに載る(A1 KAGOSHIMA–KAZAN 31 / 31)。足さない
+                        if not (pb and seg.get('_dc') and seg['_dc'][-1] == v): seg.setdefault('_dc', []).append(v)
+                        pb = False
+        # ⚠ 座標の無い点 "(GTC 15 DME)" が途中に挟まると、その前後の距離が2つ並ぶ(V15 NIIGATA 15 (GTC 15 DME) 77 KALON)。
+        #   点としては拾わない(座標が無い)ので、区間距離は**足す**。以前は最初の1つだけ取って 15NM にしていた(実際 92NM)
+        if seg.get('_dc'): seg['dist'] = round(sum(seg['_dc']), 1)
         return seg
     i = 0
     while i < len(L):
@@ -129,7 +149,10 @@ def parse_31(L):
             cur = md.group(1); routes.setdefault(cur, {'n': cur, 'pts': [], 'segs': []})
             if not md.group(2): pass
             i += 1; continue
-        if cur is None or is_header(l): i += 1; continue
+        if cur is None or is_header(l):
+            if cur is not None and between and between[-1] != PAGE: between.append(PAGE)
+            if cur is not None and span and span[-1] != PAGE: span.append(PAGE)
+            i += 1; continue
         mc = COORD.search(l)
         # ⚠ 備考欄(桁60〜)にも空域の頂点座標が書かれる(出雲 XZE の「355724N / 1305105E」)。点は左端の座標だけ
         if mc and mc.start() < 30:
@@ -138,17 +161,18 @@ def parse_31(L):
             if nid: p['id'] = nid
             R = routes[cur]
             if R['pts'] and between:
-                seg = flush_between({'a': R['pts'][-1]['n'], 'b': nm}, between)
+                seg = flush_between({'a': R['pts'][-1]['n'], 'b': nm}, between, span + [l])
                 R['segs'].append(seg)
             if not R['pts'] or R['pts'][-1]['n'] != nm: R['pts'].append(p)
-            between = []
+            between = []; span = [l]
         else:
+            if l.strip(): span.append(l)
             if l.strip() and not re.match(r'^\s*[▲△]', l): between.append(l)
-            elif re.match(r'^\s*[▲△]', l): pass
         i += 1
     for R in routes.values():
         last = {}
         for s in R['segs']:
+            s.pop('_dc', None)
             for key in ('mea', 'mag', 'rmag'):
                 if key in s: last[key] = s[key]
                 elif key in last: s[key] = last[key]; s.setdefault('inh', []).append(key)
