@@ -302,12 +302,13 @@
   #printArea .prCopy{width:50%;height:100%;padding:0 calc(3*var(--u));box-sizing:border-box;border-right:1px dashed #999;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
   #printArea .prCopy:last-child{border-right:none}
   #printArea.measure .prCopy{height:auto}
-  #printArea .prTitle{text-align:center;font-weight:700;font-size:calc(3.88*var(--u));border-bottom:2px solid #000;padding-bottom:calc(0.5*var(--u));margin-bottom:calc(0.8*var(--u))}
+  #printArea .prTitle{text-align:center;font-weight:700;font-size:calc(3.88*var(--u));border-bottom:calc(0.53*var(--u)) solid #000;padding-bottom:calc(0.5*var(--u));margin-bottom:calc(0.8*var(--u))}
   #printArea .prLogo{text-align:right;margin:0 0 calc(0.3*var(--u))}
   #printArea .prLogo img{height:calc(4.2*var(--u));width:auto}
   #printArea .prHead{width:100%;border-collapse:collapse;font-size:calc(2.65*var(--u));margin-bottom:calc(0.8*var(--u))}
   #printArea .prHead th{font-weight:500}
-  #printArea .prHead th,#printArea .prHead td{border:1px solid #000;padding:calc(0.5*var(--u)) calc(0.8*var(--u));text-align:left;color:#000;white-space:normal;font-family:inherit}
+  #printArea .prHead{border:calc(0.5*var(--u)) solid #000}
+  #printArea .prHead th,#printArea .prHead td{border:calc(0.26*var(--u)) solid #000;padding:calc(0.5*var(--u)) calc(0.8*var(--u));text-align:left;color:#000;white-space:normal;font-family:inherit}
   #printArea .prHead td.nt{height:calc(12*var(--u));vertical-align:top}
   #printArea .prHead td.fill{height:calc(7*var(--u))}
   #printArea .prHead .v{font-size:calc(3.88*var(--u));font-style:italic;text-align:center}
@@ -315,7 +316,11 @@
   #printArea .adNote b{font-size:calc(2.47*var(--u))}
   /* ⚠ 画面の表の最小幅(56px/52px)を継ぐと1面(A5)の幅を超え、右の列が隣の面の下に隠れていた */
   #printArea table.prLog{width:100%;border-collapse:collapse;font-size:calc(2.82*var(--u))}
-  #printArea table.prLog th,#printArea table.prLog td{border:1px solid #000;padding:calc(0.4*var(--u)) calc(0.5*var(--u));text-align:center;min-width:0;
+  /* ⚠ 罫線も --u で。1px のままだと紙に合わせて縮めたとき線だけ相対的に太り、面の下端の罫線がはみ出して消えた(v6-254)
+     1つのポイント(番号の行+名前の行)をひとまとまりに見せる: ポイントの間・見出しの下・合計の上・外枠は太線、
+     番号の行と名前の行の間は細い灰色の線(ユーザー要望 2026-10-19) */
+  #printArea table.prLog{border:calc(0.5*var(--u)) solid #000}
+  #printArea table.prLog th,#printArea table.prLog td{border:calc(0.26*var(--u)) solid #000;padding:calc(0.4*var(--u)) calc(0.5*var(--u));text-align:center;min-width:0;
     color:#000;background:#fff!important;font-family:inherit}
   #printArea table.prLog th{font-size:calc(2.12*var(--u));line-height:1.1;font-weight:400}
   #printArea table.prLog td.fixNo{text-align:left;font-style:italic;white-space:normal}
@@ -323,7 +328,10 @@
   #printArea table.prLog td.cNum{text-align:left}
   #printArea table.prLog td.cNum.rem{text-align:right}
   #printArea table.prLog td.cNav{text-align:left}
-  #printArea table.prLog tr.fixA td{border-bottom:none}
+  #printArea table.prLog thead tr:last-child th,#printArea table.prLog thead th[rowspan]{border-bottom:calc(0.5*var(--u)) solid #000}
+  #printArea table.prLog tr.fixA td{border-top:calc(0.5*var(--u)) solid #000;border-bottom:none}
+  #printArea table.prLog tr.fixB td{border-top:calc(0.15*var(--u)) solid #999}
+  #printArea table.prLog tr.total td{border-top:calc(0.5*var(--u)) solid #000}
   @media print{
     @page{size:A4 landscape;margin:6mm}
     html,body{background:#fff!important}
@@ -1200,7 +1208,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-254';
+const VER_TAG='v6-255';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7430,7 +7438,7 @@ document.getElementById('btnPrint').onclick=()=>{
   // ⚠ 点を1つずつ足して測り直すと iPhone で数百 ms〜かかり、ボタンの反応が遅れて「自動的な印刷」の確認も出た。
   //   全部の行を入れた1面を1回だけ測り、行の高さを足し算して面に分ける
   area.className='measure';
-  const H=168*96/25.4-4;   // 1面の高さ 168mm(px)。罫線ぶん少し引く
+  const H=(168-3)*96/25.4;   // 1面の高さ 168 単位(計測では 1 単位 = 1mm)。下端に 3 単位の余裕(表の列幅が面ごとに少し変わるぶん)
   area.innerHTML=page([pane(t0,full.outerHTML,true)]);
   const cp=area.querySelector('.prCopy'),c0=cp.getBoundingClientRect().top;
   const fa=[...cp.querySelectorAll('tbody tr.fixA')];
