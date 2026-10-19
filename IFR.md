@@ -331,3 +331,24 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - NOTES: 出発・目的(代替)の飛行場の周波数/標高/滑走路、SID/STAR/IAC、巡航高度・Assigned・IAF 高度・TAS・FF、RCA・TOD、燃料(TRIP+ALTN+RES=必要 ｜ FOB)
 - 印刷の共通部分を `prPrint(sections)` に切り出した(VFR も同じ)。面割り・縦横・iPhone 対策(v6-249〜256)は共通
 
+## v6-261 関東の SID の形がある飛行場の進入方式の形(立川・入間・厚木・下総・木更津・館山・宇都宮・横田)
+- ユーザー要望(2026-10-19): SID の形を作った飛行場の進入も。AIP AD2.24-IAC の図 21 枚から写した(百里と同じ書き方)。
+  | 飛行場 | 方式(入口→…) |
+  |---|---|
+  | 立川 RJTC | TACAN RWY01(ANOBU→VALMO→MAPt)・TACAN A(OROGU→TAVAX→TNT) ※どちらも IF(待機あり)から |
+  | 入間 RJTJ | TACAN 17(OGAWA)・35(KANAI)・HI-TACAN 17(JOSHU)・35(TOMEI→R172 20DME)→8DME→MAPt |
+  | 厚木 RJTA | ILS Y(SYONA→D11 アーク→RUMED→PUKUK→THR01)・TACAN 01(SYONA→アーク→ADKET→ESDUS→MAPt D0.9) |
+  | 下総 RJTL | ILS Y/Z(TOHNE→D17 アーク / ASEKI→BANDO→JOBAN→THR19)・TACAN 19(TOHNE→アーク→ASEKI→USIKU→SHT) |
+  | 木更津 RJTK | TACAN 02(AMAHA→EGAWA→MAPt) |
+  | 館山 RJTE | TACAN A(SAPIM→D11 アーク→OLSAS→UKAKU→TET→R340 D1.0) |
+  | 宇都宮 RJTU | TACAN 01(IPNAX→D8.7 アーク→OBMAP→RINTU→MAPt) |
+  | 横田 RJTY | HI-ILS Y 18/36(IMOTU→15DME アーク)・ILS Z 18(ULENI)/36(OKURA)・RNAV 18(BODAI)/36(WHILY・MESTR) |
+- 仕組みの追加: ①入口が複数の方式は `{IAF:配列}`(下総 ILS)・`iacTrackOf(icao,name,iaf)`
+  ②図に IAF が無く IF に待機がある方式(立川・木更津)は最初の点を入口に(`iacIafs`)。IF に待機の無い方式(厚木 ILS Z・百里 ILS Z)は
+  レーダー誘導前提なので書かない ③ENR 4.4 に無い点(入間・横田)は `fix:{名前:[ラジアル,DME]}` → 読み込み時に FIX に足す(`iacFixInject`)
+  ④横田の進入復行の待機点は `mah` に書く(FLIP の図から取れない)。⚠ 横田の RNAV の点は図に座標が無く、図の距離からの近似
+- 直したもの: 代替の起点(進入復行の待機点)が「SYONA 00 VDP」のように崩れて取れず、さらに進入方式の形がある飛行場は IAF の辺しか無く
+  飛行場から出られずに「代替までの経路が見つからない」(厚木→下総)。待機点は mahT の先頭の語も見る・待機点が無ければ飛行場の navaid へ
+  出る辺(`出発(navaid)`・入る向きには使わない)を足す
+- [ ] 横田は YOK から出る公示の経路が少なく、代替(TIMAP→YOK→HATAR→宇都宮回り)が大回りになる。navaid 間の直行(ラジアル)をどう扱うか
+
