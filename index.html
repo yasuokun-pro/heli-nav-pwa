@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-259';
+const VER_TAG='v6-260';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -4087,16 +4087,22 @@ async function dipsCallback(){
   catch(e){toast('DIPS のログインに失敗しました: '+dipsErrText(e))}
 }
 /* 検証環境(stg)だけ: 表示確認用の試験データを通報する(2026-10-19 DIPS 担当の回答。検証環境にサンプルは無いので通報受付 API で自分で入れる)。
-   地図の中心のまわりに3件: 今から1時間(円)・2時間後から2時間(多角形)・明日 10:00 から1時間(円)。
+   地図の中心のまわりに3件(円・多角形・円)。時刻は昼間に: 今が 7〜15時なら今から1時間・その後2時間・翌日 10:00、
+   それ以外は翌日 9:00・10:00・13:00(夕方以降に入れると DIPS が「夜間飛行禁止の可能性」を付ける。2026-10-19 実機)。
+   ⚠ 人口集中地区(DID)の上空は「許可なしのカテゴリーIII・許可・承認情報が必須」で登録できない → 地図の中心を DID の外に
    本文は中継が組み立てる(通報者等は架空の試験用の値・名称は「HELINAV試験n」)。⚠ 検証環境の DB は他事業者と共用 */
 async function dipsTestPlans(){
   if(dipsEnv!=='stg'){dipsMsg('検証環境のときだけ使えます');return}
-  if(!confirm('DIPS の検証環境に、表示確認用の試験の飛行計画を3件通報します(地図の中心のまわり)。\n検証環境のデータベースは他の事業者と共用です。続けますか?'))return;
+  if(!confirm('DIPS の検証環境に、表示確認用の試験の飛行計画を3件通報します(地図の中心のまわり約4km)。\n'+
+    '人口集中地区(DID)の上空は許可が要るため登録できません。地図の中心を DID の外(河川敷・田畑・山林・海上など)に合わせてください。\n'+
+    '検証環境のデータベースは他の事業者と共用です。続けますか?'))return;
   const c=map.getCenter(),now=Date.now(),t5=t=>new Date(Math.ceil(t/300e3)*300e3);
-  const tmr=dipsJst(new Date(now+86400e3)).slice(0,8)+' 1000';
-  const L3=[{lat:c.lat,lon:c.lng,start:dipsJst(t5(now)),min:60,shape:'c'},
-    {lat:c.lat+0.03,lon:c.lng+0.04,start:dipsJst(t5(now+2*3600e3)),min:120,shape:'p'},
-    {lat:c.lat-0.03,lon:c.lng-0.04,start:tmr,min:60,shape:'c'}];
+  const hJ=new Date(now+9*3600e3).getUTCHours(),day=k=>dipsJst(new Date(now+k*86400e3)).slice(0,8);
+  const T3=hJ>=7&&hJ<15?[[dipsJst(t5(now)),60],[dipsJst(t5(now+70*60e3)),120],[day(1)+' 1000',60]]
+    :[[day(1)+' 0900',60],[day(1)+' 1000',120],[day(1)+' 1300',60]];
+  const L3=[{lat:c.lat,lon:c.lng,start:T3[0][0],min:T3[0][1],shape:'c'},
+    {lat:c.lat+0.02,lon:c.lng+0.025,start:T3[1][0],min:T3[1][1],shape:'p'},
+    {lat:c.lat-0.02,lon:c.lng-0.025,start:T3[2][0],min:T3[2][1],shape:'c'}];
   const out=[];
   for(let i=0;i<L3.length;i++){
     const x=L3[i];dipsMsg(`試験データを通報中… ${i+1}/3`);
@@ -4105,7 +4111,7 @@ async function dipsTestPlans(){
     catch(e){out.push(`${i+1}: 失敗 ${dipsErrText(e)}`)}
   }
   dipsMsg('試験データ: '+out.join(' / '));
-  document.getElementById('dpWhere').value='map';document.getElementById('dpWhen').value='3';
+  document.getElementById('dpWhere').value='map';document.getElementById('dpWhen').value=hJ>=7&&hJ<15?'3':'tmr';
   const keep=document.getElementById('dpMsg').textContent;await dipsFetch();
   const m2=document.getElementById('dpMsg').textContent;dipsMsg(keep+(m2?' ／ '+m2:''));
 }
