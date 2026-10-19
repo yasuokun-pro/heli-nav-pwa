@@ -24,6 +24,11 @@
      op=refresh rt                       → 同上
      op=plans   at lat lon r(NM) [from to: 'yyyyMMdd HHmm' JST]   → { n, plans:[...] }
      op=areas   at lat lon r(NM) [from to]                          → { n, areas:[...] }
+     op=testplan at lat lon start('yyyyMMdd HHmm' JST) min(分) shape('c'|'p') n(番号)
+                                         → { id, result, at, dup }   ⚠ **検証環境(stg)だけ**。表示確認用の試験データを1件通報する
+       (2026-10-19 DIPS 担当の回答: 検証環境にサンプルは無いので、通報受付 API で自分で入れる。変更申請で通報受付 API を〇にした)
+       本文は中継が組み立てる(アプリから任意の通報はさせない)。通報者・操縦者・機体は**架空の試験用の値**で、実在の個人情報は入れない。
+       検証環境のデータベースは他事業者と共用なので、名称・特記事項に「HELI NAV 試験」と書く
 */
 import { fetch, ProxyAgent } from 'undici';   // ⚠ Node 内蔵の fetch に外の undici の dispatcher を渡すと版違いで落ちる
 import { check, preflight, json, makeLimiter } from '../lib/guard.js';
@@ -149,8 +154,35 @@ async function apiCall(E, path, at, body) {
     body: JSON.stringify(body),
   });
   if (r.status === 401) { const e = new Error('expired'); e.expired = true; throw e; }
-  if (!r.ok) throw new Error(`DIPS ${r.status}`);
+  // 400 等は DIPS が理由を返す(項目の不足など)。先頭だけ添える(氏名等は返ってこない種類の応答)
+  if (!r.ok) throw new Error(`DIPS ${r.status} ${(await r.text().catch(() => '')).slice(0, 300)}`);
   return r.json();
+}
+
+/* ───── 検証環境の試験データ(飛行計画通報受付 API・ガイドライン 2.3.8) ───── */
+function testPlanBody(p) {
+  const lat = +p.get('lat'), lon = +p.get('lon'), start = p.get('start') || '', n = Math.max(1, Math.min(9, +p.get('n') || 1));
+  if (!(lat > 20 && lat < 46 && lon > 122 && lon < 154 && T.test(start))) return null;
+  const min = Math.max(5, Math.min(1440, Math.round((+p.get('min') || 60) / 5) * 5));
+  const d = 0.004;   // 多角形の大きさ(約 400m)
+  const g = p.get('shape') === 'p'
+    ? { type: 'Polygon', coordinates: [[[lon - d, lat - d], [lon + d, lat - d], [lon + d, lat + d], [lon - d, lat + d]]] }
+    : { type: 'Circle', center: [lon, lat] };
+  const flyRoute = JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature',
+    properties: g.type === 'Circle' ? { radius: 300.0 } : {}, geometry: g }] });
+  const who = { name: 'HELI NAV 試験', country: '001', prefectures: '13', municipality: '試験データ(架空)',
+    telephoneCountry: '001', telephone: '0300000000', email: 'test@example.com' };
+  return { flightPlanInfo: {
+    flightPlanId: '', name: `HELINAV試験${n}`, flightPurpose: [15], flightAirspace: [], flightType: [], assistantsNumber: 0,
+    departurePoint: 'HELI NAV 試験地点', destinationPoint: 'HELI NAV 試験地点', startTime: start,
+    plannedMaxTime: Math.max(min, 30), plannedFlightTime: min, flightSpeed: 30, flightAltitude: 100, flyRoute,
+    riskMitigationOnsiteControl: '0', riskMitigationOnsiteControlL3: '0', riskMitigationOnsiteControlL35: '0',
+    riskMitigationOnsiteControl2: '0', exceptionalConditionsMooring: '0',
+    reporter: { contactReporterFlag: '1', contactReporter: who },
+    otherInformation: 'HELI NAV(有人ヘリの飛行計画アプリ)の表示確認用の試験データ。検証環境のみ',
+    pilotInfo: [{ contactPilotFlag: '0', contactPilot: who, firstClass: '0', secondClass: '0', privateLicense: '0', maker: 'TEST', model: 'TEST' }],
+    aircraftInfo: [{ type: '3', symbol: 'JUTEST00000' + n, model: 'TEST', maker: 'TEST', certification1: '0', certification2: '0', maxWeight: 1.5 }],
+  } };
 }
 
 export const OPTIONS = preflight;
@@ -189,6 +221,15 @@ export async function POST(request) {
           ...(finishTime ? { finishTime } : {}) } });
       const rows = [].concat(o.flightProhibitedAreaInfo || []).map(areaRow).filter(Boolean);
       return json({ n: o.totalCount ?? rows.length, areas: rows.slice(0, MAX_ROWS) }, 200, H);
+    }
+    if (op === 'testplan') {
+      if (E.e !== 'stg') return json({ error: 'stg only' }, 403, H);          // 本番では絶対に通報しない
+      const at = p.get('at'), b = testPlanBody(p);
+      if (!at || !b) return json({ error: 'args' }, 400, H);
+      const o = await apiCall(E, '/flight-plan/register', at, b);
+      const r = ([].concat(o)[0] || {}).flightPlanInfoRegistrationResult || {};
+      return json({ id: r.flightPlanId || '', result: r.flightPlanRegistrationResult || '', at: r.flightPlanRegistrationDatetime || '',
+        dup: r.existOtherFlightRoutesCount ?? null }, 200, H);
     }
     return json({ error: 'op' }, 400, H);
   } catch (e) {
