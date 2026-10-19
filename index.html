@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-260';
+const VER_TAG='v6-261';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -2569,6 +2569,7 @@ async function loadFix(){
   if(FIX)return FIX;
   try{const r=await fetch('fix.json?v='+VER_TAG);FIX=await r.json()}catch(e){FIX={f:[]}}
   FIX._ix={};FIX.f.forEach(p=>{if(!(p.n in FIX._ix))FIX._ix[p.n]=p});
+  try{iacFixInject()}catch(e){}                       // 進入図にだけある点(入間・横田)を足す
   return FIX;
 }
 function fixPop(p,mk){
@@ -8194,7 +8195,7 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   // ⚠ 進入方式の形(IAC_DEF)がある飛行場では、STAR の終点→飛行場の直線の近道を作らない。STAR のあとも進入方式を飛ぶのに、
   //   直線だと進入の長さが入らず STAR が必ず短く見える(百里: DAIGO の UGSIX→飛行場 26.4NM が ILS X の 57.2NM に勝った)。
   //   STAR の終点は経路網の点として残るので、そこから IAF へは公示ルート・ラジアルで繋がる
-  const noStar=tag==='STAR'&&IAC_DEF[ap.icao]&&(iacs||[]).some(x=>x.ok===1&&x.p.iaf&&iacTrackOf(ap.icao,x.p.n));
+  const noStar=tag==='STAR'&&IAC_DEF[ap.icao]&&(iacs||[]).some(x=>x.ok===1&&iacIafs(ap.icao,x.p)&&iacTrackOf(ap.icao,x.p.n));
   (noStar?[]:(procs||[])).filter(x=>x.ok===1).forEach(x=>procEnd(G,ap,x).forEach(t=>{
     if(!join(t,tag+'→航空路(仮)'))return;
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
@@ -8204,11 +8205,11 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   }));
   // 進入方式の IAF(進入図の "TOHNE(IAF)" から拾ったもの)。STAR が無い飛行場でも IAF へ向かう経路になる
   // 同じ IAF から入る方式が複数あれば、種類の優先順(ILS>RNP>LOC>VOR>TACAN>NDB)で上の方式をその IAF の辺にする
-  (iacs||[]).filter(x=>x.ok===1&&x.p.iaf).slice().sort((a,b)=>IAC_PRI(a.p.typ||'')-IAC_PRI(b.p.typ||'')).forEach(x=>x.p.iaf.forEach(t=>{
+  (iacs||[]).filter(x=>x.ok===1&&iacIafs(ap.icao,x.p)).slice().sort((a,b)=>IAC_PRI(a.p.typ||'')-IAC_PRI(b.p.typ||'')).forEach(x=>iacIafs(ap.icao,x.p).forEach(t=>{
     if(!join(t,'IAF→航空路(仮)'))return;
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
     // 進入方式の形(IAC_DEF)があれば IAF→滑走路の経路の長さ。無ければ直線(⚠ 飛行場の真上の IAF が短く見える)
-    const tk=ap.icao&&iacTrackOf(ap.icao,x.p.n),tl=tk&&tk.iaf===t?tk.len:0;
+    const tk=ap.icao&&iacTrackOf(ap.icao,x.p.n,t),tl=tk&&tk.iaf===t?tk.len:0;
     add(k,t,{d:tl||distNM(ap,G.nodes[t]),tr:1,tag:'IAF',proc:x,iacLen:tl});linked++;
   }));
   // 方式が無い/名前が繋がらない飛行場は、**その飛行場の navaid**へ(そこから先はラジアルと公示ルート)
@@ -8232,7 +8233,7 @@ function dijkstra(G,src,dst){
       if(e.to.startsWith('AP:')&&e.to!==dst)return;      // 他の飛行場は経由しない
       // ⚠ 方式の向きを守る。SID で飛行場に**入らない**、STAR・IAF で飛行場から**出ない**。
       //   辺は両向きに張ってあるので、代替=出発地(立川→宇都宮→立川)だと SID を逆走して着陸していた(v6-177)
-      if(e.to.startsWith('AP:')&&e.tag==='SID')return;
+      if(e.to.startsWith('AP:')&&(e.tag==='SID'||e.tag==='出発(navaid)'))return;
       if(u.startsWith('AP:')&&(e.tag==='STAR'||e.tag==='IAF'))return;
       // ⚠ RNAV 区間をラジアルで通す辺(e.via)は0.5NMぶん不利にする。同じ線に**公示の直行経路**があれば
       //   そちらを選ばせるため(OMIYA–EDARR は ENR 3.5.1 の直行経路と Y588 が同じ XAC R014 上)
@@ -8544,19 +8545,25 @@ async function ifrRunPlan(keepForce){
   let selIac=lastP(R.legs[R.legs.length-1])||bestIac(iac);
   if(fi&&fi.length){
     if(lastP(R.legs[R.legs.length-1])&&lastP(R.legs[R.legs.length-1]).p===fi[0].p)
-      forceMsg+=`<div class="hint" style="color:var(--cyn)">進入方式「${fi[0].p.n}」の IAF(${(fi[0].p.iaf||[]).join('・')})へ向かう経路に組み直した。飛行ログを直すには「地図に反映」をもう一度(自動の選択に戻すには「計画を作る」)</div>`;
-    else forceMsg+=`<div class="ifrWarn">⚠ 進入方式「${fi[0].p.n}」は${fi[0].p.iaf?'IAF('+fi[0].p.iaf.join('・')+')まで繋がらない':'図から IAF が取れていない'}ので、経路は飛行場への仮の接続のまま。ミニマなどの表示だけこの方式にした</div>`;
+      forceMsg+=`<div class="hint" style="color:var(--cyn)">進入方式「${fi[0].p.n}」の IAF(${(iacIafs(dst.icao,fi[0].p)||[]).join('・')})へ向かう経路に組み直した。飛行ログを直すには「地図に反映」をもう一度(自動の選択に戻すには「計画を作る」)</div>`;
+    else forceMsg+=`<div class="ifrWarn">⚠ 進入方式「${fi[0].p.n}」は${iacIafs(dst.icao,fi[0].p)?'IAF('+iacIafs(dst.icao,fi[0].p).join('・')+')まで繋がらない':'図から IAF が取れていない'}ので、経路は飛行場への仮の接続のまま。ミニマなどの表示だけこの方式にした</div>`;
     selIac=fi[0];
   }else if(ifrForceIac&&ifrForceIac.dst===dst.icao){forceMsg+=`<div class="ifrWarn">⚠ 選んだ進入方式「${ifrForceIac.n}」は今の装備では使えないので、自動の選択に戻した</div>`;ifrForceIac=null}
   let RA=null;
   if(alt){
     // ⚠ 代替へ向かうのは**進入復行(ミスドアプローチ)の待機点から**。目的地の選んだ進入方式の
     //   "…to XXXX and hold" を起点にする(取れなければ飛行場から)。R を出した後に辺を足す(往路に使わせない)
-    const mh=selIac&&selIac.p.mah, mn=mh&&(G.nodes[mh]||(FIX&&FIX._ix[mh]));
+    // ⚠ mah が取れず mahT が「SYONA 00 VDP」のように崩れていることがある(厚木 ILS Y)。先頭の語が FIX ならそれを使う
+    const mOv=selIac&&IAC_DEF[dst.icao]&&IAC_DEF[dst.icao].mah&&IAC_DEF[dst.icao].mah[selIac.p.n];   // IAC_DEF に書いた待機点(横田)
+    const mh=selIac&&(mOv||selIac.p.mah||String(selIac.p.mahT||'').split(/\s+/)[0])||'', mn=mh&&(G.nodes[mh]||(FIX&&FIX._ix[mh]));
     // ⚠ 待機点は進入専用の点で航空路に乗っていない。**評定できる navaid 経由**でしか出られない
     //   (立川の ANOBU は TNT R178 上。ANOBU→TNT→(TNT R152)→EDARR→公示の直行経路)
     if(mn&&!G.nodes[mh])linkFixVia(G,mh);
     const ka=ifrLinkAp(G,alt,'STAR',starA,ac,iacA);
+    // 待機点が無いときは飛行場から出る。⚠ 進入方式の形がある飛行場は IAF の辺しか持たず(飛行場から出られない)、SID も無いと
+    //   出口が無くて「代替までの経路が見つからない」になった(厚木→下総)。飛行場の navaid へ出る辺を足す(入る向きには使わせない)
+    if(!mn)(ADNAV&&ADNAV.f?Object.values(ADNAV.f):[]).concat(NAVAIDS).filter(a=>a.id&&(a.icao===dst.icao||distNM(dst,a)<6)).forEach(a=>{
+      if(navNode(G,a.id)&&!(G.adj[kt]||[]).some(e=>e.to===a.id))gAdd(G,kt,a.id,{d:distNM(dst,G.nodes[a.id]),tr:1,tag:'出発(navaid)'})});
     // ⚠ 待機点があるときは**そこを必ず通す**。飛行場に他の仮リンク(最寄りFIX)があると
     //   そちらが短くて待機点を素通りしてしまうので、待機点から探索して先頭に1レグ足す
     if(mn){
@@ -9072,9 +9079,83 @@ const IAC_DEF={
       'RNP RWY03L':[{at:'NAKAH'},{to:'H3L50'},{to:'TOMOE'},{to:'MEGAT'},{to:'SUMIG'},{to:'WAKZI'},{to:'H3L51'},{thr:'03L'}],
       'RNP RWY21R':[{at:'NAKAH'},{to:'MAGRY'},{to:'OMITT'},{to:'H1R52'},{thr:'21R'}]}};
   })(),
+  /* ── 関東の SID の形がある飛行場(2026-10-19 追加・AIP AD2.24-IAC の図から写した目安) ──
+     書き方は百里と同じ。追加の約束:
+     ・iac の値は 配列(入口は1つ) か {入口の点:配列}(IAF が複数。下総の ILS は TOHNE と ASEKI)
+     ・図に IAF が無い方式で、IF に待機経路がある(自分で行ける)もの(立川 ANOBU/OROGU・木更津 AMAHA)は、最初の点を入口として
+       経路網に繋ぐ(iacIafs)。IF に待機の無い方式(厚木 ILS Z・百里 ILS Z)はレーダー誘導前提なので書かない
+     ・fix: ENR 4.4 に無い点(図にだけある入間・横田の点)を navaid の [ラジアル(磁), DME] で置く。読み込み時に FIX に足し(iacFixInject)、
+       評定(ラジアル/DME)で経路網に繋がる。⚠ 横田の RNAV の点(BODAI 等)は図に座標が無く、図の距離から置いた近似 */
+  RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
+    // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
+    'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
+    'TACAN A':[{at:'OROGU'},{to:'TAVAX'},{mapt:{rd:[92,0]}}]}},
+  RJTJ:{nav:{YLT:{lat:35.839661,lng:139.415161,var:8}},navId:'YLT',thr:{},pts:{},
+    fix:{OGAWA:[340,15],KANAI:[172,15],JOSHU:[340,30],TOMEI:[180,30]},iac:{
+    // 入間(IAC-1〜4 2025-05-15)。HI は高高度から(FL150 / 10000)
+    'TACAN RWY 17':[{at:'OGAWA'},{to:{rd:[340,8]}},{mapt:{rd:[340,1.8]}}],
+    'TACAN RWY 35':[{at:'KANAI'},{to:{rd:[172,8]}},{mapt:{rd:[172,1.3]}}],
+    'HI-TACAN RWY 17':[{at:'JOSHU'},{to:{rd:[340,8]}},{mapt:{rd:[340,1.8]}}],
+    'HI-TACAN RWY 35':[{at:'TOMEI'},{to:{rd:[172,20]}},{to:{rd:[172,8]}},{mapt:{rd:[172,1.3]}}]}},
+  RJTA:{nav:{NJA:{lat:35.44556,lng:139.45389,var:8}},navId:'NJA',thr:{'01':[35.443644,139.450303]},pts:{},iac:{
+    // 厚木(IAC-1〜3 2024)。D11 アークは SYONA(R219)から反時計回り。
+    // ILS Z は IF(RUMED)からで、RUMED に待機が無い = レーダー誘導前提なので書かない(百里の ILS Z と同じ。自分の装備だけで計画する)
+    'ILS Y or LOC Y RWY 01':[{at:'SYONA'},{arc:11,to:188,dir:'L'},{to:'PUKUK'},{thr:'01'}],
+    'TACAN RWY 01':[{at:'SYONA'},{arc:11,to:198,dir:'L'},{to:'ESDUS'},{mapt:{rd:[198,0.9]}}]}},
+  RJTL:(()=>{
+    // 下総(IAC-1〜3)。ILS Y/Z は同じ経路(進入復行だけ違う)。TOHNE からは D17 アークで LOC へ、ASEKI からは 210° で BANDO へ。
+    // 19 の進入端は AD 2.12 が Nil なので SID の形の 01 の出発端(= 19 の進入端)
+    const ils={TOHNE:[{at:'TOHNE'},{arc:17,to:6,dir:'R'},{to:'BANDO'},{to:'JOBAN'},{thr:'19'}],
+      ASEKI:[{at:'ASEKI'},{to:'BANDO'},{to:'JOBAN'},{thr:'19'}]};
+    return {nav:{SHT:{lat:35.801944,lng:140.009722,var:7}},navId:'SHT',thr:{'19':[35.809061,140.011953]},pts:{},iac:{
+      'ILS Z or LOC Z RWY19':ils,'ILS Y or LOC Y RWY19':ils,
+      'TACAN RWY19':[{at:'TOHNE'},{arc:17,to:9,dir:'R'},{to:'USIKU'},{mapt:{rd:[9,0]}}]}};
+  })(),
+  RJTK:{nav:{KZT:{lat:35.397056,lng:139.904497,var:7}},navId:'KZT',thr:{},pts:{},iac:{
+    // 木更津(IAC-1 2023-09-07)。IF の AMAHA(待機)から
+    'TACAN RWY02':[{at:'AMAHA'},{to:'EGAWA'},{mapt:{rd:[188,1.0]}}]}},
+  RJTE:{nav:{TET:{lat:34.97083,lng:139.83806,var:8}},navId:'TET',thr:{},pts:{},iac:{
+    // 館山(IAC-1 2023-09-07)。SAPIM(R190)から D11 アークで OLSAS(R160)、TET の上を通って MAPt(R340 D1.0)
+    'TACAN A':[{at:'SAPIM'},{arc:11,to:160,dir:'L'},{to:'UKAKU'},{mapt:{rd:[340,1.0]}}]}},
+  RJTU:{nav:{JDT:{lat:36.51684,lng:139.87553,var:8}},navId:'JDT',thr:{},pts:{},iac:{
+    // 宇都宮(IAC-1 2023-08-10)。IPNAX(R174)から D8.7 アークで OBMAP(R201)
+    'TACAN RWY01':[{at:'IPNAX'},{arc:8.7,to:201,dir:'R'},{to:'RINTU'},{mapt:{rd:[201,0.6]}}]}},
+  RJTY:{nav:{YOK:{lat:35.748986,lng:139.350261,var:8}},navId:'YOK',
+    thr:{'18':[35.763206,139.3454],'36':[35.733797,139.351567]},pts:{},
+    // 横田(IAC-1〜6・米軍 FLIP の転載)。点は YOK の [ラジアル, DME]。RNAV の点は図の距離からの近似
+    fix:{IMOTU:[280,15],ULENI:[357,15],SETEE:[357,10],STRAZ:[357,5.9],OKURA:[177,15],JENEL:[177,7.8],
+      BODAI:[357,14.8],RISSA:[357,5.9],HANIV:[357,2.3],MESTR:[177,14.3],KARMN:[177,6.8],FONUD:[177,3.9],WHILY:[147,17.2],
+      BREEE:[178,18],TIMAP:[3,18]},
+    // 進入復行の待機点(FLIP の図は proc.json の mah が取れない)。代替へはここから
+    mah:{'HI-ILS Y or LOC Y RWY18':'BREEE','ILS Z or LOC Z RWY18':'BREEE','HI-ILS Y or LOC Y RWY36':'TIMAP','ILS Z or LOC Z RWY36':'TIMAP',
+      'RNAV(GPS) RWY18':'MESTR','RNAV(GPS) RWY36':'BODAI'},iac:{
+    'HI-ILS Y or LOC Y RWY18':[{at:'IMOTU'},{arc:15,to:357,dir:'R'},{to:'SETEE'},{to:'STRAZ'},{thr:'18'}],
+    'ILS Z or LOC Z RWY18':[{at:'ULENI'},{to:'SETEE'},{to:'STRAZ'},{thr:'18'}],
+    'HI-ILS Y or LOC Y RWY36':[{at:'IMOTU'},{arc:15,to:177,dir:'L'},{to:'JENEL'},{thr:'36'}],
+    'ILS Z or LOC Z RWY36':[{at:'OKURA'},{to:'JENEL'},{thr:'36'}],
+    'RNAV(GPS) RWY18':[{at:'BODAI'},{to:'RISSA'},{to:'HANIV'},{thr:'18'}],
+    'RNAV(GPS) RWY36':{WHILY:[{at:'WHILY'},{to:'MESTR'},{to:'KARMN'},{to:'FONUD'},{thr:'36'}],
+      MESTR:[{at:'MESTR'},{to:'KARMN'},{to:'FONUD'},{thr:'36'}]}}},
 };
-function iacTrackOf(icao,name){
-  const D_=IAC_DEF[icao],st=D_&&D_.iac[name];if(!st)return null;
+/* 図にだけある点(IAC_DEF の fix)を FIX に足す。評定の文字列(ENR 4.3 と同じ形)も付けるので、経路網・地図・ログの IDENT にそのまま乗る */
+function iacFixInject(){
+  if(!FIX||!FIX._ix)return;
+  Object.values(IAC_DEF).forEach(D=>{if(!D.fix)return;const N=D.nav[D.navId];
+    Object.entries(D.fix).forEach(([n,[r,d]])=>{if(FIX._ix[n])return;
+      const q=destLL(N.lat,N.lng,(r-N.var+360)%360,d);
+      const f={n,lat:+q.lat.toFixed(6),lng:+q.lng.toFixed(6),c:0,brg:`${pad3(r)}°/${d.toFixed(1)}NM ${D.navId}`,iac:1};
+      FIX.f.push(f);FIX._ix[n]=f});
+  });
+}
+/* その進入方式の入口(IAF)。図から拾った IAF が無ければ、IAC_DEF の形の最初の点(IF・待機の点)を入口にする */
+function iacIafs(icao,p){
+  if(p.iaf&&p.iaf.length)return p.iaf;
+  const v=IAC_DEF[icao]&&IAC_DEF[icao].iac[p.n];if(!v)return null;
+  return Array.isArray(v)?[v[0].at]:Object.keys(v);
+}
+function iacTrackOf(icao,name,iafName){
+  const D_=IAC_DEF[icao];let st=D_&&D_.iac[name];if(!st)return null;
+  if(!Array.isArray(st))st=(iafName&&st[iafName])||st[Object.keys(st)[0]];   // 入口が複数の方式は、その IAF からの形
   const N=D_.nav[D_.navId];
   const rdPt=(r,d)=>d===0?{lat:N.lat,lng:N.lng}:destLL(N.lat,N.lng,(r-N.var+360)%360,d);
   const named=n=>{if(D_.pts[n])return {lat:D_.pts[n][0],lng:D_.pts[n][1]};if(D_.nav[n])return D_.nav[n];
@@ -9227,7 +9308,7 @@ document.getElementById('ifrToMap').onclick=()=>{
     if(i===0&&(T||P.sidD))wp[wp.length-1].push(+(T?T.len:P.sidD).toFixed(1));   // SID終点までの距離を経路長で上書き
   });
   // 進入方式の形があれば、最後の区間(IAF→飛行場)の距離をその経路の長さにして、線を描く
-  const LL=P.legs[P.legs.length-1],AT=LL&&LL.e.tag==='IAF'&&LL.e.proc?iacTrackOf(P.dst.icao,LL.e.proc.p.n):null;
+  const LL=P.legs[P.legs.length-1],AT=LL&&LL.e.tag==='IAF'&&LL.e.proc?iacTrackOf(P.dst.icao,LL.e.proc.p.n,G.nodes[LL.from].n):null;
   if(AT&&AT.iaf===G.nodes[LL.from].n)wp[wp.length-1].push(+AT.len.toFixed(1));
   if(document.getElementById('ifrWithAlt').checked&&P.legsA)P.legsA.forEach(push);
   // 飛行ログ側の風を IFR の共通の風に揃える(時間を合わせるため。レグ別の風は飛行ログには持てない)
