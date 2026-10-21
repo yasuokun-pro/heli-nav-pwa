@@ -560,3 +560,14 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   ILS Y / LOC Y・VOR RWY27(MZE の待機から)・ILS Z(OYODO)。RNP(AR) は書かない
 - 孤立した局の接続(v6-271)の半径を 40 → 50NM に(新田原 NHT の NIPPO は 45NM。NIPPO は航空路に乗っていない)。以前は新田原が目的地・代替だと経路が無かった
 - 既知: 新田原→宮崎(12NM)は公示の SID が NIPPO(45NM 北)・TENSO 行きしか無く、大きく回る経路になる(公示の方式どおり)
+
+## v6-282 熊本・札幌(丘珠)・帯広の SID・進入の形、SID の通過高度を巡航高度に入れる
+- 熊本 RJFT: KUMAMOTO REVERSAL SEVEN・RINDO FIVE(MIYAZAKI / KAGOSHIMA / MUSASHI TRANSITION。アークへの乗り方は近似)・HINAG FOUR・IRUKA TWO。
+  MIFNE(RNAV)は "RADAR service required"(radar:1)。ILS or LOC(CAT II & III の図・CAT I ミニマあり)・VOR RWY07・RNP RWY07(MISMI(IF・待機)から)・VOR A(TAKAS)
+- 札幌(丘珠)RJCO: KURIS THREE・SAPPORO THREE(RUMOI / BEEBA / MOIWA TRANSITION)・SAPPORO REVERSAL FOUR・KURIS REVERSAL FOUR・
+  BANKE TWO / ADBEB ONE・TOBET EAST / NORTH・PEXOV ONE(RNAV)。索引名が "KURIS, SAPPORO REVERSAL, SAPPORO" と "KURIS REVERSAL" なので m を RegExp で分けた。
+  VOR RWY14 / RWY32(SPE の待機から)・RNP RWY14(PEXOV / SOBEE / NIKAN → OLSUT)・RNP RWY32(CLAKY / JODAI → ADPIN)
+- 帯広 RJCB: KUSHIRO SIX・NODUK TWO・OBIHIRO REVERSAL EIGHT・RACKO THREE・RUGMO TWO・OTTER TWO(RNAV)。
+  ILS Y・VOR RWY17/35(OBE の待機から)・ILS Z(TAIKI → KOFUK。GNSS)
+- **SID の通過高度("Cross ◯◯ at or above"・`SID_DEF` の `alt`)をその SID の辺の最低高度(`e.mea`)にした**。巡航高度がそれ以上になる。
+  以前は熊本→宮崎(RINDO の MIYAZAKI TRANSITION・8000)で巡航高度 3,000ft と出ていた → 9,000ft
