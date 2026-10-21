@@ -512,3 +512,8 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   LOC Z / RNP RWY25(NAKAU)・RNP RWY07(OKUNI / SUSAR)。滑走路の真方位は "To be issued" なので THR 座標から(059.33°T)
 - ⚠ **評定できる局が無い点へ、GNSS も RNAV 装置も無い機体で「(仮)」の直線を引かない**(`ifrLinkAp` の `join`)。出雲 NAKAU は ILS の LOC/DME(IXZ)でしか決まらず、
   美保→出雲で YGE → NAKAU の直線で LOC Z を選んでいた。今は LOC Y(XZE の待機から)。関東・中部・東北・関西の既存の経路 19 本で変化なしを確認
+- 広島 RJOA(v6-276 に追加): HONGO REVERSAL FOUR・MARCO / KIJYY(TOZAN)/ BOLIG(MIDER)/ SINFO(STAGE)(RNAV)。ILS Z(MISEN)・ILS Y(PUNUP → … → OA054 → RF。GNSS)・
+  VOR RWY10/28(HGE の待機から)・RNP RWY28(MONTA / ISOLA → VISTA)。ILS の図は "(CAT III)" だが CAT I のミニマあり
+- 大湊 RJSO(v6-276 に追加): OMINATO REVERSAL THREE(OHMAR / HIBAR)・MUTSU TWO(MISAWA)(TACAN のみ)。TACAN A(BATTL → D11 アーク → R230)。
+  ⚠ 滑走路は "To be issued" / Nil なので ARP から 040°T で近似
+- 形のある飛行場: SID_DEF 52・IAC_DEF 52(全部の SID・進入の形で異常なしを確認)
