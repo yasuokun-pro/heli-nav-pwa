@@ -1426,7 +1426,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
     - 「地図に反映」で SID線(水色破線 `sidLayer`)を描き、SID終点の区間距離を経路長で上書き(`w.dOv`・ログでは `15.6*`)。
       ⚠ SID線は `loadRouteObj`(→`clearAllWp` が sidLayer も消す)の**後**に描く
   - **区間距離の上書き `w.dOv`**: routeObj の wp 配列の4つ目、undo のスナップショットにも入れる。マーカーを動かしたら消す
-  - **ILS カテゴリ**(装備 `ilsCat` 1/2/3): 索引名に (CAT II & III) が付く図は CAT II/III 専用で、CAT I の機体では✗。CAT I の図は別にある
+  - **ILS カテゴリ**(装備 `ilsCat` 1/2/3): 索引名に (CAT II & III) が付く図も **CAT I のミニマが同じ表に載っている**(v6-275 で全図を確認)。CAT I の機体は CAT I のミニマで使う。⚠ 以前は CAT II/III 専用として ✗ にしていた(別の CAT I 図は無い)
   - **代替飛行場としての最低気象条件**は `altMinRule()`(v6-157)。出典は **AIP AD 1.1.6.10.1.6**
     (ENR 1.5 等ではなく AD 1 にある)。目的地代替は CAT II/III=CAT I の視程/雲高なし、
     CAT I=非精密のMDH(100ft切上げ)と非精密の視程、非精密のみ=MDH+200ft と 視程+1000m、周回=周回のMDH/視程。

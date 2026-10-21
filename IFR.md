@@ -489,3 +489,16 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   自分の装備と公示の方式だけで計画するため。高松の RNAV SID 4つ(OLIVE/SAYOH/TAROH/WASYU)、既存の 小牧 TRANSITION-RNAV・新潟 SUKOB・百里 HITAKA にも付けた。
   ⚠ 小牧 IBUKI の図にある RNAV TRANSITION(MIDER・KOMAZ)も RADAR required(書いていない)
   全 AD2 の SID で該当: 成田7・羽田9・中部5・福岡5・大分4 など(後回しの飛行場に多い)
+
+## v6-275 美保・八戸・青森・高知の SID・進入の形、CAT II/III 図の CAT I 利用
+- 美保(米子)RJOH: MIHO REVERSAL FIVE(JET R071)・YONAGO REVERSAL SEVEN・INABA FIVE(TOZAN / MIYAZU)・SOUTH EIGHT(MIYOS)・DOZEN SIX。
+  KITARO / STAGE / USAGI(RNAV)は "RADAR service required" → 形なし・`radar:1`。
+  ILS Y・VOR RWY25/07(YGE の待機から)・ILS Z(DAIEI/ATMIK → D21.8 アーク → GAINA)・ILS X(SEKYY → D15.9 アーク)・TACAN A(MINAT → JET D17 アーク)・RNP Z RWY07(KYURI)
+  `iacTrackOf` のアークに `nav`(飛行場の局以外の局)を足した(TACAN A は JET のアーク)
+- 八戸 RJSH: HACHINOHE FOUR(HVT へ・TACAN のみ)。ILS Y / LOC Y・TACAN RWY25(ENBRY → D11 アーク)。ILS Z / LOC Z は IF(OLSOX)に待機が無いので書かない
+- 青森 RJSA: IWAKI SEVEN(YUWA / NYUDO)・AOMORI REVERSAL THREE・OHMAR / SHIRAKAMI(RNAV)。ILS Y(MRE → D12)・ILS Z / RNP X RWY24(BYOBU・MRE → LADUN → RINGO)・
+  VOR RWY24(BYOBU → D14 アーク → ALDET)・VOR RWY06・RNP X RWY06(YACHI / BYOBU)
+- 高知 RJOK: KOCHI REVERSAL SEVEN・KAIFU / MUROT(KUSHIMOTO)/ OMOGO / RUSEV / SHIMIZU(RNAV)。ILS Y・VOR RWY32(NAE の待機から)・ILS Z / RNP RWY32(ANPAN)
+- ⚠⚠ **CAT II/III の図も CAT I の機体で使える**(`procOk`)。索引名に "(CAT II & III)" が付く図は CAT II/III 専用で CAT I の図は別にある、としていたが、
+  全国の該当図(成田・関西・中部・釧路・広島・青森・羽田・新千歳・徳島…)を見たところ **CAT I のミニマが同じ表に載っていて、別の CAT I 図は無い**。
+  以前は青森・釧路・広島などで CAT I の機体に ILS が使えなかった。CAT I の機体は CAT I のミニマ(代替の最低気象条件も CAT I の行)
