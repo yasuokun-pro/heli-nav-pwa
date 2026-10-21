@@ -236,9 +236,14 @@ def title_by_page(txt, kind):
                 t = re.search(r'R[JO][A-Z]{2}\s*/\s*[A-Z][A-Z .()-]*?\s{3,}(\S.*?)\s*$', ln)
                 if t and TYP.match(t.group(1).strip()): res[n] = re.sub(r'\s+', ' ', t.group(1).strip()); break
         else:
-            t = TITLE_SID.search(pg)
             # 図が「RNAV SID / RNP1 / GNSS required」なら RNAV 方式(名前に RNAV が入らない。調布 KOSKA TWO)
-            if t: res[n] = re.sub(r'\s+', ' ', t.group(1).strip()) + ('|R' if re.search(r'RNAV\s+(SID|STAR)|GNSS\s+required|\bRNP\s?1\b', pg) else '')
+            # ⚠ 1枚に複数の SID が載る図がある(静浜 SID-1 は OSHIMA FIVE と SHIZUHAMA REVERSAL FOUR)。全部を順に持つ
+            rv = '|R' if re.search(r'RNAV\s+(SID|STAR)|GNSS\s+required|\bRNP\s?1\b', pg) else ''
+            ts = []
+            for t in TITLE_SID.finditer(pg):
+                nm = re.sub(r'\s+', ' ', t.group(1).strip()) + rv
+                if nm not in ts: ts.append(nm)
+            if ts: res[n] = ts
     return res
 
 
@@ -313,11 +318,28 @@ def parse_one(pdf):
             if not r['n'].startswith('#'): continue
             if tt is None: tt = title_by_page(txt, kind)
             no = int(r['n'][1:]) if r['n'][1:].isdigit() else i + 1
-            nm = tt.get(no)
-            if not nm: continue
-            rn = nm.endswith('|R'); nm = nm[:-2] if rn else nm
-            r['n'] = nm; r.pop('nn', None)
-            if rn or 'RNAV' in nm or 'RNP' in nm: r['rnav'] = 1
+            names = tt.get(no)
+            if not names: continue
+            if isinstance(names, str): names = [names]
+            # 索引に名前の無い1行('#')しか無い飛行場は、図の全ページの題名を全部その飛行場の方式にする(静浜は 3 SID が 2 ページ)
+            if r['n'] == '#' and kind != 'IAC' and len(ks) == 1:
+                names = [x for p_ in sorted(tt) for x in (tt[p_] if isinstance(tt[p_], list) else [tt[p_]])]
+                names = list(dict.fromkeys(names))
+            elif not r['n'][1:].isdigit(): names = names[:1]      # 名前のある方式と混ざる '#' は1つだけ(熊本・中部)
+            # 同じ飛行場の他の方式と同じ名前・その名前で始まる題名(中部 MORIZ と MORIZ TWO)は足さない
+            have = [x['n'] for x in ks if x is not r and not x['n'].startswith('#')]
+            names = [x for x in names if not any(x.rstrip('|R') == h or x.startswith(h + ' ') for h in have)]
+            if not names: continue
+            extra = []
+            for j, nm in enumerate(names):
+                rn = nm.endswith('|R'); nm = nm[:-2] if rn else nm
+                if j and any(x['n'] == nm for x in ks + extra): continue
+                rr = r if j == 0 else {kk: vv for kk, vv in r.items() if kk not in ('to',)}
+                rr['n'] = nm; rr.pop('nn', None)
+                if rn or 'RNAV' in nm or 'RNP' in nm: rr['rnav'] = 1
+                if j: extra.append(rr)
+            if extra: out[out.index(r) + 1:out.index(r) + 1] = extra
+            nm = r['n']
             if kind == 'IAC':
                 mt = TYP.match(nm)
                 if mt: r['typ'] = mt.group(1)
