@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-261';
+const VER_TAG='v6-262';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8842,6 +8842,18 @@ function ifrSaveSid(){const m=store.get('hnav.sidDist')||{};m[ifrSidKey()]={asg:
    ⚠ AIP の索引は**複数の SID を1枚の図にまとめる**(入間 "SUPAX, HATAR")。名前の頭だけで選ぶと常に先頭の SID になるので、
      ルートの最初の FIX(= SID の終点)で選ぶ(sidTrackOf の endFix) */
 const SID_DEF={
+  /* 調布(RJTF AD2.24-SID-1/2・EFF 2 OCT 2025)。RNAV SID(RNP1・GNSS required)。滑走路は AD 2.12(163.20°/343.20°T)。
+     RWY17: HDG171° で 700FT → TF511 へ直行 → KOSKA / RWY35: HDG351° で 900FT → 右旋回で TF510 → TF511 → KOSKA。
+     TF510・TF511 は図の Waypoint Coordinates(ENR 4.4 に無い)。勾配 RWY17 4.0%(700FT まで)・RWY35 5.0%(1100FT まで) */
+  RJTF:{
+    rwy:{'17':{end:[35.668092,139.529203],brgT:163.2,elev:137},'35':{end:[35.674994,139.52665],brgT:343.2,elev:140}},
+    nav:{TF510:{lat:35.658417,lng:139.601139,var:8},TF511:{lat:35.507306,lng:139.603639,var:8}},
+    sids:{
+      KOSKA:{fix:'KOSKA',nav:'TF511',name:'KOSKA TWO',grad:{'17':{pct:4.0,to:700},'35':{pct:5.0,to:1100}},
+        '17':[{climbTo:700},{to:'TF511'},{to:'KOSKA'}],
+        '35':[{climbTo:900},{to:'TF510',turn:'R'},{to:'TF511'},{to:'KOSKA'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -9086,6 +9098,9 @@ const IAC_DEF={
        経路網に繋ぐ(iacIafs)。IF に待機の無い方式(厚木 ILS Z・百里 ILS Z)はレーダー誘導前提なので書かない
      ・fix: ENR 4.4 に無い点(図にだけある入間・横田の点)を navaid の [ラジアル(磁), DME] で置く。読み込み時に FIX に足し(iacFixInject)、
        評定(ラジアル/DME)で経路網に繋がる。⚠ 横田の RNAV の点(BODAI 等)は図に座標が無く、図の距離から置いた近似 */
+  RJTF:{nav:{},navId:null,thr:{},pts:{TF550:[35.656011,139.533678]},iac:{
+    // 調布(IAC-1 2025-10-02)。RNP(GNSS)。TF550 は図の座標(MAPt)。進入復行は ARENA → KOSKA で待機
+    'RNP RWY35':[{at:'KOSKA'},{to:'ARENA'},{to:'DROMP'},{mapt:'TF550'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],

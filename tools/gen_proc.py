@@ -218,6 +218,30 @@ def narr_by_page(txt, kind):
     return res
 
 
+TITLE_SID = re.compile(r'\b([A-Z][A-Z0-9]*(?:[ -][A-Z0-9]+)*?\s+(?:ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE)(?:\s+[A-Z]+)?)\s+(DEPARTURE|ARRIVAL)\b')
+
+
+def title_by_page(txt, kind):
+    """索引に方式名が無い飛行場('#')のために、図そのものの題名を読む → {図の番号: 名前}
+    ⚠ 調布(RJTF)は索引が "Standard Departure Chart - Instrument" / "Instrument Approach Chart" だけで名前が無く、
+      proc.json の n が '#' → 計画で使えなかった(2026-10-21)。図には「KOSKA TWO DEPARTURE」「RJTF / CHOFU ... RNP RWY35」とある
+    SID/STAR は「〜 ONE/TWO … DEPARTURE/ARRIVAL」、IAC は「ICAO / 飛行場名」の行の右端の語句"""
+    res = {}
+    for pg in txt.split('\f'):
+        m = re.search(r'AD\s?2\.24-' + kind + r'-(\d+)', pg)
+        if not m: continue
+        n = int(m.group(1))
+        if kind == 'IAC':
+            for ln in pg.split('\n'):
+                t = re.search(r'R[JO][A-Z]{2}\s*/\s*[A-Z][A-Z .()-]*?\s{3,}(\S.*?)\s*$', ln)
+                if t and TYP.match(t.group(1).strip()): res[n] = re.sub(r'\s+', ' ', t.group(1).strip()); break
+        else:
+            t = TITLE_SID.search(pg)
+            # 図が「RNAV SID / RNP1 / GNSS required」なら RNAV 方式(名前に RNAV が入らない。調布 KOSKA TWO)
+            if t: res[n] = re.sub(r'\s+', ' ', t.group(1).strip()) + ('|R' if re.search(r'RNAV\s+(SID|STAR)|GNSS\s+required|\bRNP\s?1\b', pg) else '')
+    return res
+
+
 def mah_by_page(txt):
     """進入図の "SHT R346 to TOHNE and hold." = ミスドアプローチの待機点"""
     global KNOWN
@@ -282,6 +306,23 @@ def parse_one(pdf):
                     if 'CAT II' in name or 'CAT III' in name: rec['cat'] = 'II/III'
                     if 'HELI' in name.upper() or 'COPTER' in name.upper(): rec['heli'] = 1
                 out.append(rec)
+    # 索引に名前が無い方式('#')は図の題名から(n 番目の方式 = 図の n 枚目。'#2' は索引の "Instrument-2")
+    for kind in ('SID', 'STAR', 'IAC'):
+        ks = [r for r in out if r['k'] == kind]; tt = None
+        for i, r in enumerate(ks):
+            if not r['n'].startswith('#'): continue
+            if tt is None: tt = title_by_page(txt, kind)
+            no = int(r['n'][1:]) if r['n'][1:].isdigit() else i + 1
+            nm = tt.get(no)
+            if not nm: continue
+            rn = nm.endswith('|R'); nm = nm[:-2] if rn else nm
+            r['n'] = nm; r.pop('nn', None)
+            if rn or 'RNAV' in nm or 'RNP' in nm: r['rnav'] = 1
+            if kind == 'IAC':
+                mt = TYP.match(nm)
+                if mt: r['typ'] = mt.group(1)
+                mr = re.search(r'RWY\s*(\d{2}[LRC]?)', nm)
+                if mr: r['rwy'] = mr.group(1)
     # 進入図の IAF を、索引の IAC の n 番目に対応づける(AD2.24-IAC-n)
     for n, eq in eq_by_page(txt).items():
         iacs_ = [r for r in out if r['k'] == 'IAC']
