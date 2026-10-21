@@ -540,3 +540,12 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 小月 RJOZ: OZUKI REVERSAL FIVE(RWY17 のみ・FUKUOKA / KUGA TRANSITION)。TACAN RWY35(UGILA → D10 アーク → BODOB)。⚠ 滑走路は ARP から 158°T の近似
 - ⚠ 未対応: **小月(OCT)へ入る公示の経路が無い**(OCT の評定は UGILA・BODOB・IDVON だけで、航空路・直行経路にも OCT が無い)。
   自分の装備と公示の方式だけでは計画できない(レーダー誘導前提)ので「経路が見つからない」のままにしてある
+
+## v6-280 北九州・築城・大分の SID・進入の形
+- 北九州 RJFR: ASARI THREE(SWE R084・MATSUYAMA / MUSASHI TRANSITION)・ONGHA TWO(SWE → R259)。KOHEI ONE(RNAV)は "RADAR service required"(radar:1)。
+  ILS Z / LOC Z・LOC Y・VOR RWY18(ASARI → SWE → 北へ外向き → 反転)・ILS Y(ASARI → BERBO → FR853 → RF。GNSS)・VOR A / B(ASARI → SWE)。RNP(AR) は書かない
+- 築城 RJFZ(TACAN のみ): MISHIMA FIVE(R150 → D15 アーク → MINNE → MIT・FL150)・HIMESHIMA FOUR(MUSASHI)・KUGA SIX・HIMESHIMA REVERSAL THREE・
+  NAKATSU REVERSAL TWO(KANMO / MINNE / OGORI)。索引名は SID ごとに分かれていて "HIMESHIMA" が2つあるので鍵を名前全体にした。
+  TACAN Z / Y / X RWY25(SANKO D12 アーク / USSAH / SARBA D20 アーク → R086)・TACAN RWY07(SANKO → D13 アーク → R247)。滑走路の真方位は THR 座標から(069.79°T)
+- 大分 RJFO: MUSASHI REVERSAL TWO(TFE R132 → TFE)。EBOSHI / FUSHA / TOYO / RNAV TRANSITION は "RADAR service required"(radar:1)。
+  ILS Y / LOC・VOR RWY01(TFE の待機から)・ILS X(TANSO → FO153 → RF。GNSS)・VOR A(JEWEL)・RNP Z RWY19(KAGEX → KAREI)。ILS Z は IF(NOLEL)に待機が無いので書かない
