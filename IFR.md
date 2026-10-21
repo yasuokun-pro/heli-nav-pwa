@@ -571,3 +571,10 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   ILS Y・VOR RWY17/35(OBE の待機から)・ILS Z(TAIKI → KOFUK。GNSS)
 - **SID の通過高度("Cross ◯◯ at or above"・`SID_DEF` の `alt`)をその SID の辺の最低高度(`e.mea`)にした**。巡航高度がそれ以上になる。
   以前は熊本→宮崎(RINDO の MIYAZAKI TRANSITION・8000)で巡航高度 3,000ft と出ていた → 9,000ft
+
+## v6-283 目達原・十勝・佐賀の SID・進入の形
+- 目達原 RJDM(CAT H・TACAN): SAGA ONE(MBT R141 → REPOG → 5.5DME アーク → SGE)。TACAN A(SGE → MBT R217 → 5.5DME アーク → REPOG)。⚠ 滑走路は ARP から 040°T の近似
+- 十勝 RJCT(TACAN): OTOFUKE REVERSAL ONE(NODUK TRANSITION)・HONBETSU TWO(RUGMO)。TACAN RWY 13(IBOSA → D10 アーク → R299)。⚠ 滑走路は ARP から 110°T の近似
+- 佐賀 RJFS: SAGA REVERSAL TWO・ARIAKE REVERSAL TWO・KIKYU FIVE(MUSASHI TRANSITION FL170)・BALLOON TWO / SOIGI TWO(RNAV・途中の点を省いた近似)。
+  ILS or LOC / VOR RWY29・VOR RWY11(SGE の待機から)・VOR A / B(MILEP)・VOR C(SGE → R194)
+- 既知: 目達原を出発地とする代替(目達原→佐賀)は、進入復行の待機点 REPOG から佐賀へ繋がる公示の経路が無く「代替までの経路が見つからない」になる

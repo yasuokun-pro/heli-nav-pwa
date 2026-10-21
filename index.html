@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-282';
+const VER_TAG='v6-283';
 const BUILD='2026-10-22';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -10137,6 +10137,53 @@ const SID_DEF={
         OTTER:{fix:'RACKO',nav:'OBE',name:'OTTER TWO',alt:10000,grad:g,'17':[{climbTo:1000},{to:'RACKO'}],'35':[{climbTo:900},{to:'RACKO',turn:'R'}]},
       }};
   })(),
+  /* 目達原(RJDM AD2.24-SID-1・CAT H)。MBT は TACAN・SGE(佐賀)は VOR/DME・VAR 8°W。⚠ 滑走路は "To be issued" なので ARP から 04/22 ≒ 040°T で近似
+     SAGA ONE: 04 は 500FT → 右・22 は 400FT → 左に旋回して MBT R141 → REPOG(D5.5)→ 5.5DME を時計回りに R217 → SGE(D7.1 で 3100)。TACAN 装備機のみ */
+  RJDM:{
+    rwy:{'04':{end:[33.32528,130.41361],brgT:40,elev:56},'22':{end:[33.32528,130.41361],brgT:220,elev:56}},
+    nav:{MBT:{lat:33.328889,lng:130.413056,var:8},SGE:{lat:33.148611,lng:130.292778,var:8}},
+    sids:{SAGA:{fix:'SGE',nav:'MBT',name:'SAGA ONE',tac:1,
+      '04':[{climbTo:500},{to:'REPOG',turn:'R'},{arc:'R',dme:5.5,to:{rad:217,dme:5.5}},{to:'SGE'}],
+      '22':[{climbTo:400},{to:'REPOG',turn:'L'},{arc:'R',dme:5.5,to:{rad:217,dme:5.5}},{to:'SGE'}]}}
+  },
+  /* 十勝(RJCT AD2.24-SID-1)。TKT は TACAN・VAR 9°W。⚠ 滑走路は "To be issued" なので ARP から 13/31 ≒ 110°T で近似。TACAN 装備機のみ
+     OTOFUKE REVERSAL ONE: 500FT → 13 は左・31 は右に旋回して R040 → 2000FT → 左旋回(10DME 以内)→ TKT(4000)。NODUK TRANSITION は R339 → NODUK(6000)
+     HONBETSU TWO: R062 → RUGMO(5000) */
+  RJCT:(()=>{
+    const r=(x,y)=>({'13':[{climbTo:500},{to:{rad:x,dme:3},turn:'L'}].concat(y),'31':[{climbTo:500},{to:{rad:x,dme:3},turn:'R'}].concat(y)});
+    const ot=Object.assign({fix:'TKT',nav:'TKT',name:'OTOFUKE REVERSAL ONE',tac:1,alt:4000,grad:{'13':{pct:5.3,to:500}}},r(40,[{climbTo:2000},{to:'TKT',turn:'L'}]));
+    return {
+      rwy:{'13':{end:[42.89028,143.15833],brgT:110,elev:281},'31':{end:[42.89028,143.15833],brgT:290,elev:281}},
+      nav:{TKT:{lat:42.893333,lng:143.165833,var:9}},
+      sids:{
+        OTOFUKE:ot,
+        'OTOFUKE NODUK':Object.assign({},ot,{m:'OTOFUKE',fix:'NODUK',name:'OTOFUKE REVERSAL ONE・NODUK TRANSITION',alt:6000,'13':ot['13'].concat([{to:'NODUK'}]),'31':ot['31'].concat([{to:'NODUK'}])}),
+        HONBETSU:Object.assign({fix:'RUGMO',nav:'TKT',name:'HONBETSU TWO',tac:1,alt:5000,grad:{'13':{pct:5.3,to:500}}},r(62,[{to:'RUGMO'}])),
+      }};
+  })(),
+  /* 佐賀(RJFS AD2.24-SID-1〜7)。滑走路は AD 2.12(099.25°/279.25°T)。SGE は VOR/DME・VAR 8°W。29 は 3.5%(500FT まで)
+     SAGA REVERSAL TWO: 11 は 500FT → 右旋回 / 29 は 500FT → 左 HDG090° で R135 → 9DME → 左旋回で SGE(6000)
+     ARIAKE REVERSAL TWO: 11 は右 HDG288° / 29 は左 HDG198° で R243 → 7DME → 右旋回で SGE(6000)
+     KIKYU FIVE: 11 は右旋回 / 29 は左 HDG075° で R120 → 9DME → 左 HDG048° で R093 → KIKYU(13000)。MUSASHI TRANSITION は TFE R253 → TFE(FL170)
+     BALLOON TWO(RNAV・FS900 / FS100 → KIKYU 13000)・SOIGI TWO(RNAV・FS110 → FS111 → FS112 → KUE)は途中の点を省いた近似(KIKYU / KUE へ直行) */
+  RJFS:(()=>{
+    const g={'29':{pct:3.5,to:500}};
+    const kk={fix:'KIKYU',nav:'SGE',name:'KIKYU FIVE',alt:13000,grad:g,
+      '11':[{climbTo:500},{to:{rad:120,dme:4},turn:'R'},{to:{rad:120,dme:9}},{turn:'L',hdg:48},{intercept:93}],
+      '29':[{climbTo:500},{turn:'L',hdg:75},{intercept:120},{to:{rad:120,dme:9}},{turn:'L',hdg:48},{intercept:93}]};
+    return {
+      rwy:{'11':{end:[33.148269, 130.3128],brgT:99.25,elev:6},'29':{end:[33.151167, 130.291642],brgT:279.25,elev:6}},
+      nav:{SGE:{lat:33.148619,lng:130.292897,var:8},TFE:{lat:33.48971,lng:131.72876,var:8},KUE:{lat:32.8348,lng:130.84151,var:8}},
+      sids:{
+        SAGA:{fix:'SGE',nav:'SGE',name:'SAGA REVERSAL TWO',alt:6000,grad:g,
+          '11':[{climbTo:500},{to:{rad:135,dme:4},turn:'R'},{to:{rad:135,dme:9}},{to:'SGE',turn:'L'}],'29':[{climbTo:500},{turn:'L',hdg:90},{intercept:135},{to:{rad:135,dme:9}},{to:'SGE',turn:'L'}]},
+        ARIAKE:{fix:'SGE',nav:'SGE',name:'ARIAKE REVERSAL TWO',alt:6000,grad:g,
+          '11':[{climbTo:500},{turn:'R',hdg:288},{intercept:243},{to:{rad:243,dme:7}},{to:'SGE',turn:'R'}],'29':[{climbTo:500},{turn:'L',hdg:198},{intercept:243},{to:{rad:243,dme:7}},{to:'SGE',turn:'R'}]},
+        KIKYU:kk,'KIKYU TFE':Object.assign({},kk,{m:'KIKYU',fix:'TFE',name:'KIKYU FIVE・MUSASHI TRANSITION',alt:17000,'11':kk['11'].concat([{to:'TFE'}]),'29':kk['29'].concat([{to:'TFE'}])}),
+        BALLOON:{fix:'KIKYU',nav:'SGE',name:'BALLOON TWO',alt:13000,grad:g,'11':[{climbTo:500},{to:'KIKYU',turn:'R'}],'29':[{climbTo:500},{to:'KIKYU',turn:'L'}]},
+        SOIGI:{fix:'KUE',nav:'SGE',name:'SOIGI TWO',grad:g,'11':[{climbTo:500},{to:'KUE',turn:'R'}],'29':[{climbTo:500},{to:'KUE',turn:'L'}]},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -10897,6 +10944,22 @@ const IAC_DEF={
     'ILS Z or LOC Z RWY35':[{at:'TAIKI'},{to:'KOFUK'},{to:'AIKOK'},{thr:'35'}],
     'VOR RWY17':[{at:'OBE'},{to:{rd:[327,11]}},{to:'SAIRO'},{mapt:'OBE'}],
     'VOR RWY35':[{at:'OBE'},{to:{rd:[190,11]}},{to:'BANBA'},{mapt:'OBE'}]}},
+  // 目達原(IAC-1・CAT H)。TACAN A: SGE(IAF・MBT R217 D12.4)→ R217 → D7.1 → 5.5DME アーク(反時計回り)→ REPOG(IF)→ TUTMI → MAPt(D1.0)
+  RJDM:{nav:{MBT:{lat:33.328889,lng:130.413056,var:8}},navId:'MBT',thr:{},pts:{},mah:{'TACAN A':'REPOG'},iac:{
+    'TACAN A':[{at:'SGE'},{to:{rd:[217,7.1]}},{to:{rd:[217,5.5]}},{arc:5.5,to:141,dir:'L'},{to:'REPOG'},{to:'TUTMI'},{mapt:{rd:[141,1]}}]}},
+  // 十勝(IAC-1・TACAN)。TACAN RWY 13: IBOSA(IAF・待機・R040 D13.5)→ D10 アーク(反時計回り)→ R299 → FAF(D4.0)→ MAPt(D0.6)
+  RJCT:{nav:{TKT:{lat:42.893333,lng:143.165833,var:9}},navId:'TKT',thr:{},pts:{},mah:{'TACAN RWY 13':'IBOSA'},iac:{
+    'TACAN RWY 13':[{at:'IBOSA'},{to:{rd:[40,10]}},{arc:10,to:299,dir:'L'},{to:{rd:[299,4]}},{mapt:{rd:[299,0.6]}}]}},
+  // 佐賀(IAC-1〜3・8〜10 2025-07-01)。ILS or LOC・VOR RWY29 は SGE の待機から R122 / R118 → D10.0 で旋回 → SASSY / MOSSA、VOR RWY11 は R274 → D11.0 で旋回 → MITCH → SGE、
+  //   VOR A は MILEP(IAF・待機)→ UGAMU → MAPt(D1.2)、VOR B は MILEP → UGAMU → R210 → 9.3DME アーク → GATAL(IF)→ NEKKY → MAPt、VOR C は SGE → R194 → 反転 → R014 → MAPt。RNP(AR) は対象外
+  RJFS:{nav:{SGE:{lat:33.148619,lng:130.292897,var:8}},navId:'SGE',thr:{'29':[33.148269, 130.3128],'11':[33.151167, 130.291642]},pts:{},
+    mah:{'ILS or LOC RWY29':'SGE','VOR RWY29':'SGE','VOR RWY11':'SGE','VOR A':'SGE','VOR B':'SGE','VOR C':'SGE'},iac:{
+    'ILS or LOC RWY29':[{at:'SGE'},{to:{rd:[122,10]}},{to:'SASSY'},{thr:'29'}],
+    'VOR RWY29':[{at:'SGE'},{to:{rd:[118,10]}},{to:'MOSSA'},{mapt:{rd:[102,1]}}],
+    'VOR RWY11':[{at:'SGE'},{to:{rd:[274,11]}},{to:'MITCH'},{mapt:'SGE'}],
+    'VOR A':[{at:'MILEP'},{to:'UGAMU'},{mapt:{rd:[194,1.2]}}],
+    'VOR B':[{at:'MILEP'},{to:'UGAMU'},{to:'OHKOK'},{arc:9.3,to:250,dir:'R'},{to:'GATAL'},{to:'NEKKY'},{mapt:{rd:[250,1.3]}}],
+    'VOR C':[{at:'SGE'},{to:{rd:[214,6]}},{to:{rd:[194,8]}},{mapt:{rd:[194,1.2]}}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
