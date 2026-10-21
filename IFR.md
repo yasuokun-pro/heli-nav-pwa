@@ -423,3 +423,19 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   **両端とも出発・目的・代替から 25NM 以内の区間は除く**(IAF・待機点へのつなぎ。図の MSA の範囲。立川→館山の TET→SAPIM など)
 - 巡航高度の欄に「⚠ MEA の無い区間がある」と区間の一覧(代替も)、経路の表の MEA 欄は「なし⚠」、印刷のログは「なし※」と見出しの注記(MEA 行)
 - 巡航高度そのものは変えていない(地形のデータを使って最低高度を出すのは別の話。MOCA/GRID MORA・区分航空図で確かめてもらう)
+
+## v6-270 小松・能登・明野・福井・八丈島の SID・進入の形
+- 小松 RJNK: NOTO THREE(R016 → NTE R244)・KOMATSU REVERSAL FOUR・KAGA FIVE(R261 → SONBU FL170・MIYAZU → YME FL200)・
+  OHNNO ONE / GINJO THREE(KINZAN → GOLDO)/ SONBU THREE(TANGO → YME)(RNAV)。ILS Y / VOR RWY06(KMC → D11 で旋回)・
+  TACAN Z(GUGOS → D15 アーク)・TACAN Y(SUSLU → D15 アーク)・TACAN A(UGARA → R020)・RNP RWY24(NOKAB/KINKA → GOSIK)。
+  ILS Z は IF(DAIJO)に待機が無いので書かない。⚠ 索引の iaf が図と食い違う方式(TACAN Y/Z/A・RNP)は IAF を鍵にした
+- 能登 RJNW: HISUI FOUR(R077)・URUSI TWO(R172・8000)・HOUSU ONE / KAIOH ONE(RNAV)。ILS Y / VOR RWY25 / VOR RWY07(NTE の待機から)・
+  ILS Z / RNP RWY25(NOPPY)・RNP X RWY07(KILCO)。RNP Y/Z RWY07(AR) は書かない。
+  ⚠ HOUSU/KAIOH は図に "GNSS required" だが索引に RNAV の印が無い → `SID_DEF` の鍵に `gnss:1`(`procEnd` で GNSS 無しなら使わない)
+- 明野 RJOE(CAT H): AKENO REVERSAL FIVE(TRIKE TRANSITION)・HISAI TWO・KOWA SEVEN(XMT・形だけ)。TACAN RWY13(HISAI)・RWY31(ASAMA)・A(AKT → R105)。
+  ⚠ 滑走路は AD 2.12 が "To be issued"・THR も Nil なので OSM の 13/31 の両端(121.2°T)
+- 福井 RJNF: AWARA ONE(RNAV)・RNP RWY18(GOZEN / AWARA → KAGAR)。navaid が無いので nav は偏差のための AWARA
+- 八丈島 RJTH: HACHIJO REVERSAL SIX(R057/R241 9DME → HCE)・TOPIT ONE(RNAV)。LOC Y(HCE の待機 → R057 D11)・LOC Z(SHELL)・
+  VOR A/B(D14 で反転 → MAPt D5.0。図は MAPt から FLY VISUAL で、MAPt は飛行場から約5NM)。RNP(AR) 4つは書かない
+- `procEnd`: `SID_DEF` の終点は**近いものも捨てない**(以前は 8NM より遠い終点があれば近いものを捨てていた)。
+  小松は索引の1行 "NOTO, KOMATSU, KAGA" に REVERSAL(KMC)が同居していて、小松→福井が SONBU(41NM 西)まで行って戻っていた
