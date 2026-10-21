@@ -532,3 +532,11 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 石見 RJOW: SAMBA THREE(R037・IZUMO → XZE)・SEKISYU ONE(RNAV)。VIBEL TRANSITION は "RADAR service required"(radar:1)。
   ILS or LOC / VOR RWY11(BLUES → D13 アーク → KADAD / ENRAB)・VOR A(BLUES → TELOB)
 - 奥尻 RJEO: ESASI TWO(ORE R115)・AONAE ONE / UKIBI ONE(RNAV)。VOR RWY31/13(ORE の待機から 10DME 以内で旋回)・VOR A(MAIKA → ORE)・RNP RWY13/31(IKORU)
+
+## v6-279 山口宇部・防府・小月の SID・進入の形
+- 山口宇部 RJDC: UBE REVERSAL TWO / HIMEH EIGHT(R133・MATSUYAMA / MARCO / MUSASHI TRANSITION)・HIMESHIMA TWO(RNAV・ABARTO TRANSITION FL160)。
+  ILS Z / LOC・VOR RWY07(UBE の待機から D11 で旋回)・ILS Y(KATTA → … → DC754 → RF。GNSS)・RNP Y RWY07(UBE → LERBI → DC760)。RNP(AR) は書かない
+- 防府 RJOF: HOFU REVERSAL FOUR・KUGA FIVE(R093 → IWT)(TACAN のみ)。TACAN A(NANYO → D10 アーク → ISGIB)。⚠ 滑走路は "To be issued" で ARP から 112°T の近似
+- 小月 RJOZ: OZUKI REVERSAL FIVE(RWY17 のみ・FUKUOKA / KUGA TRANSITION)。TACAN RWY35(UGILA → D10 アーク → BODOB)。⚠ 滑走路は ARP から 158°T の近似
+- ⚠ 未対応: **小月(OCT)へ入る公示の経路が無い**(OCT の評定は UGILA・BODOB・IDVON だけで、航空路・直行経路にも OCT が無い)。
+  自分の装備と公示の方式だけでは計画できない(レーダー誘導前提)ので「経路が見つからない」のままにしてある

@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-278';
+const VER_TAG='v6-279';
 const BUILD='2026-10-22';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -9893,6 +9893,55 @@ const SID_DEF={
       UKIBI:{fix:'UKIBI',nav:'ORE',name:'UKIBI ONE',alt:7000,grad:{'31':{pct:4.5,to:600}},'13':[{climbTo:800},{to:'UKIBI',turn:'L'}],'31':[{climbTo:600},{to:'EO101',turn:'L'},{to:'UKIBI'}]},
     }
   },
+  /* 山口宇部(RJDC AD2.24-SID-1〜5)。滑走路は AD 2.12(062.27°/242.27°T)。UBE は VOR/DME・VAR 8°W。
+     UBE REVERSAL TWO / HIMEH EIGHT: 07 は 500FT → 右 HDG178° / 25 は 500FT → 左 HDG088° で R133 → REVERSAL は 4000FT → 右旋回で UBE(5000)、HIMEH は HIMEH(D20.3)へ。
+       TRANSITION: MATSUYAMA(R133 → MYE R257 → MYE)・MARCO(TFE R038 → MARCO)・MUSASHI(TFE R346 → TFE)
+     HIMESHIMA TWO(RNAV): 500FT → 07 は右・25 は左 → KOHEI → HIMEH。ABARTO TRANSITION(ALFET FL160 → MILAN → FIATO) */
+  RJDC:(()=>{
+    const r133={nav:'UBE','07':[{climbTo:500},{turn:'R',hdg:178},{intercept:133}],'25':[{climbTo:500},{turn:'L',hdg:88},{intercept:133}]};
+    const ex=(b,x,o)=>Object.assign({},b,{'07':b['07'].concat(x),'25':b['25'].concat(x)},o);
+    const hm=Object.assign({},r133,{fix:'HIMEH',name:'HIMEH EIGHT'});
+    const hs={fix:'HIMEH',nav:'UBE',name:'HIMESHIMA TWO','07':[{climbTo:500},{to:'KOHEI',turn:'R'},{to:'HIMEH'}],'25':[{climbTo:500},{to:'KOHEI',turn:'L'},{to:'HIMEH'}]};
+    return {
+      rwy:{'07':{end:[33.935156, 131.290733],brgT:62.27,elev:22},'25':{end:[33.924669, 131.266797],brgT:242.27,elev:23}},
+      nav:{UBE:{lat:33.93563,lng:131.28353,var:8},MYE:{lat:33.8301,lng:132.69222,var:8},TFE:{lat:33.48971,lng:131.72876,var:8}},
+      sids:{
+        UBE:ex(r133,[{climbTo:4000},{to:'UBE',turn:'R'}],{fix:'UBE',name:'UBE REVERSAL TWO',alt:5000}),
+        HIMEH:hm,
+        'HIMEH MYE':ex(hm,[{to:'HIMEH'},{to:{rad:133,dme:37.1}},{to:'MYE'}],{m:'HIMEH',fix:'MYE',name:'HIMEH EIGHT・MATSUYAMA TRANSITION'}),
+        'HIMEH MARCO':ex(hm,[{to:'HIMEH'},{to:{rad:133,dme:32.9}},{to:'MARCO'}],{m:'HIMEH',fix:'MARCO',name:'HIMEH EIGHT・MARCO TRANSITION'}),
+        'HIMEH TFE':ex(hm,[{to:'HIMEH'},{to:'TFE'}],{m:'HIMEH',fix:'TFE',name:'HIMEH EIGHT・MUSASHI TRANSITION'}),
+        HIMESHIMA:hs,'HIMESHIMA FIATO':ex(hs,[{to:'ALFET'},{to:'MILAN'},{to:'FIATO'}],{m:'HIMESHIMA',fix:'FIATO',name:'HIMESHIMA TWO・ABARTO TRANSITION',alt:16000}),
+      }};
+  })(),
+  /* 防府(RJOF AD2.24-SID-1〜2)。FMT は TACAN(AD 2.19)・VAR 8°W。⚠ 滑走路は "To be issued"・THR も Nil なので ARP から 12/30 ≒ 112°T で近似。TACAN 装備機のみ
+     HOFU REVERSAL FOUR: 12 は 1500FT → 右旋回 / 30 は 1500FT → 左旋回 で FMT(5000 以上)
+     KUGA FIVE: 12 は 1200FT → 左旋回(会合針路は仮定)/ 30 は 1500FT → 左 HDG063° で R093 → IWT */
+  RJOF:{
+    rwy:{'12':{end:[34.03444,131.54639],brgT:112,elev:7},'30':{end:[34.03444,131.54639],brgT:292,elev:7}},
+    nav:{FMT:{lat:34.03842,lng:131.54574,var:8},IWT:{lat:34.0799,lng:132.14731,var:8}},
+    sids:{
+      HOFU:{fix:'FMT',nav:'FMT',name:'HOFU REVERSAL FOUR',tac:1,alt:5000,grad:{'12':{pct:6.7,to:1500},'30':{pct:5.7,to:1500}},
+        '12':[{climbTo:1500},{to:'FMT',turn:'R'}],'30':[{climbTo:1500},{to:'FMT',turn:'L'}]},
+      KUGA:{fix:'IWT',nav:'FMT',name:'KUGA FIVE',tac:1,grad:{'12':{pct:6.7,to:1200},'30':{pct:5.7,to:1500}},
+        '12':[{climbTo:1200},{turn:'L',hdg:63,assumed:1},{intercept:93},{to:'IWT'}],'30':[{climbTo:1500},{turn:'L',hdg:63},{intercept:93},{to:'IWT'}]},
+    }
+  },
+  /* 小月(RJOZ AD2.24-SID-1〜2)。OCT は TACAN・VAR 8°W。⚠ 滑走路は "To be issued" なので ARP から 17/35 ≒ 158°T で近似。TACAN 装備機のみ
+     OZUKI REVERSAL FIVE(RWY17 のみ): R166 → 3.0DME → 右旋回で R223 → OCT → R043 → 4.0DME → 右旋回で OCT(5000 以上)。
+     TRANSITION: FUKUOKA(R173 → DGC R082 → DGC・MRA 11000)・KUGA(R173 → IWT R263 → IWT) */
+  RJOZ:(()=>{
+    const rv={fix:'OCT',nav:'OCT',name:'OZUKI REVERSAL FIVE',tac:1,alt:5000,
+      '17':[{intercept:166},{to:{rad:166,dme:3}},{to:'OCT',turn:'R'},{to:{rad:43,dme:4}},{to:'OCT',turn:'R'}]};
+    return {
+      rwy:{'17':{end:[34.04694,131.0525],brgT:158,elev:13},'35':{end:[34.04694,131.0525],brgT:338,elev:13}},
+      nav:{OCT:{lat:34.04417,lng:131.04972,var:8},DGC:{lat:33.67621,lng:130.38963,var:8},IWT:{lat:34.0799,lng:132.14731,var:8}},
+      sids:{
+        OZUKI:rv,
+        'OZUKI DGC':Object.assign({},rv,{m:'OZUKI',fix:'DGC',name:'OZUKI REVERSAL FIVE・FUKUOKA TRANSITION',alt:11000,'17':rv['17'].concat([{to:{rad:173,dme:12}},{to:'DGC'}])}),
+        'OZUKI IWT':Object.assign({},rv,{m:'OZUKI',fix:'IWT',name:'OZUKI REVERSAL FIVE・KUGA TRANSITION','17':rv['17'].concat([{to:{rad:173,dme:8}},{to:'IWT'}])}),
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -10569,6 +10618,20 @@ const IAC_DEF={
     'VOR A':[{at:'MAIKA'},{mapt:'ORE'}],
     'RNP RWY13':[{at:'IKORU'},{to:'EO350'},{to:'EO351'},{to:'EO352'},{to:'EO353'},{to:'LEDOP'},{to:'SABOX'},{thr:'13'}],
     'RNP RWY31':[{at:'IKORU'},{to:'WOONY'},{to:'MARUU'},{mapt:'EO150'}]}},
+  // 山口宇部(IAC-1〜4・7 2026-03-19)。ILS Z / LOC・VOR RWY07 は UBE の待機から R265/R260 → D11.0 で旋回 → ASPEL / GILUS。
+  //   ILS Y は KATTA(IAF)→ EPGAN → ELREP → LERBI → DC754(IF)→ RF → DC755(RNP1・RF required → GNSS)、RNP Y RWY07 は UBE → LERBI → DC760 → DC761(IF)。RNP(AR) は対象外
+  RJDC:{nav:{UBE:{lat:33.93563,lng:131.28353,var:8}},navId:'UBE',thr:{'07':[33.924669, 131.266797]},pts:{DC754:[33.811328,131.224278],DC755:[33.885861,131.178358],DC760:[33.781544,131.160108],DC761:[33.856897,131.112494],DC762:[33.885047,131.176506],RW07:[33.924669,131.266797]},
+    mah:{'ILS Z or LOC RWY07':'UBE','ILS Y RWY07':'LERBI','VOR RWY07':'UBE','RNP Y RWY07':'LERBI'},req:{'ILS Y RWY07':'GNSS'},iac:{
+    'ILS Z or LOC RWY07':[{at:'UBE'},{to:{rd:[265,11]}},{to:'ASPEL'},{thr:'07'}],
+    'ILS Y RWY07':[{at:'KATTA'},{to:'EPGAN'},{to:'ELREP'},{to:'LERBI'},{to:'DC754'},{to:'DC755'},{to:'UBGAR'},{thr:'07'}],
+    'VOR RWY07':[{at:'UBE'},{to:{rd:[260,11]}},{to:'GILUS'},{mapt:{rd:[243,1.1]}}],
+    'RNP Y RWY07':[{at:'UBE'},{to:'LERBI'},{to:'DC760'},{to:'DC761'},{to:'DC762'},{thr:'07'}]}},
+  // 防府(IAC-1 2026-01-22)。TACAN A: NANYO(IAF・待機・R096 D10)→ D10 アーク(時計回り)→ ISGIB(IF)→ VETOS → FMT(MAPt)
+  RJOF:{nav:{FMT:{lat:34.03842,lng:131.54574,var:8}},navId:'FMT',thr:{},pts:{},mah:{'TACAN':'NANYO'},iac:{
+    'TACAN':[{at:'NANYO'},{arc:10,to:112,dir:'R'},{to:'ISGIB'},{to:'VETOS'},{mapt:'FMT'}]}},
+  // 小月(IAC-1 2026-04-16・CAT A/B)。TACAN RWY35: UGILA(IAF・待機・R082 D10)→ D10 アーク(時計回り)→ BODOB(IF・R159)→ IDVON → MAPt(D0.9)
+  RJOZ:{nav:{OCT:{lat:34.04417,lng:131.04972,var:8}},navId:'OCT',thr:{},pts:{},mah:{'TACAN RWY35':'UGILA'},iac:{
+    'TACAN RWY35':[{at:'UGILA'},{arc:10,to:159,dir:'R'},{to:'BODOB'},{to:'IDVON'},{mapt:{rd:[159,0.9]}}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
