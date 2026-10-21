@@ -397,3 +397,23 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 福島 RJSF: FUKUSHIMA REVERSAL TWO・NASNO THREE・SOUTH ONE / WEST ONE(RNAV・SF の点は図の座標)。
   ILS Y(SOUMA)・ILS Z / VOR A / VOR RWY19(FKE の待機から)・RNP RWY19(WAKAH)
 
+
+## v6-268 富山・小牧・岐阜・新潟の SID・進入の形(中部 RJGG は飛ばした)
+- 富山 RJNT: IKUJI FIVE(R010 7DME → HDG085° → R040 → IKUJI)・URUSI REVERSAL FOUR(R352 → NANAO → R010 D14.5 → KMC R061 → URUSI)・UOZU TWO(RNAV・NT001)。
+  LOC Z / RNP Z(MEDIC から)・LOC Y / VOR A(TOE の待機から外向き → D11 で旋回)。RNP Y(AR)・RNP RWY02(AR) は書かない
+- 名古屋(小牧)RJNA: IBUKI FOUR・TALMI FOUR(R319)・HOUBA FOUR(R034)・MORIZ FIVE(R137)・NAGOYA EAST REVERSAL(KCC へ)。
+  ILS Z(EXPOH)・ILS Y / VOR RWY34(KCC → D11 で旋回)・VOR A / TACAN A(R302 → D12 アーク → YADAR → RAIKO → KCC)・RNP RWY16(IAF 3つ → MONET)
+- 岐阜 RJNG: HOUBA ONE / IBUKI ONE(GFT 7.0/6.0DME で旋回)・NAGOYA TWO(KCC へ)・TACAN RWY28(MEIHO → 13DME アーク → KANII)。
+  ⚠ 滑走路は AD 2.12 が "To be issued"・THR 座標も Nil なので OSM の中心線(092.3°T)に 2700m で置いた
+- 新潟 RJSN: OKESA SEVEN(R290)・NIIGATA REVERSAL SEVEN・MOKBA TWO / SASAGA THREE / SUKOB(RNAV・RWY10/28 のみ)。
+  ILS Y / VOR RWY28(GTC → D9 で旋回)・VOR RWY10(R298 → D10)・RNP Z RWY10(IAF 3つ → KODOH)。
+  ⚠ ILS Z は図の注記で初期進入に RNAV とレーダー業務が要る → `IAC_DEF.req` に `'RADAR'` を足し、`procOk` で使わない
+- **TRANSITION を SID の鍵として分けた**: `SID_DEF` の鍵に `m`(図の方式名)を持たせると、1つの索引名(IBUKI)から
+  複数の終点(IBUKI・ADGUN・OHNNO)に繋がる(`procEnd` は終点を全部返す)。`tac:1` = TACAN 装備機のみの TRANSITION、
+  `alt` = 図の「Cross ◯◯ at or above」の高度で、**与圧なしで上限(maxAlt)を超えるものは経路に使わない**
+  (小牧 IBUKI 11000・NIIGATA TRANSITION FL200 など)。名前は合うが全部使えないときは `[]`(図の文の自動抽出 `to` に戻さない)。
+  ⚠ 以前は索引の自動抽出で 小牧 TALMI → GTC、IBUKI → OHNNO のように TRANSITION の終点(しかも FL150〜200)に繋がっていた
+- **navaid の節点と航空路の同じ局を長さ0で結ぶ**(`navNode`・`same`): SID の終点 GTC から航空路の "NIIGATA" に乗れず、
+  BASIN まで行って戻る遠回り(新潟→宇都宮)になっていた。経路の表からは `dijkstra` が外す
+- ⚠ 未対応(既存): navaid のラジアルで張った辺(ENR 4.3 の評定・`tr`)には MEA が無い。KCC R034 → KROBE(86NM・北アルプス越え)のような長い辺を
+  選ぶと巡航高度が 3,000ft のように低く出る(小牧→新潟・与圧なしで確認)
