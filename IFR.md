@@ -439,3 +439,19 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   VOR A/B(D14 で反転 → MAPt D5.0。図は MAPt から FLY VISUAL で、MAPt は飛行場から約5NM)。RNP(AR) 4つは書かない
 - `procEnd`: `SID_DEF` の終点は**近いものも捨てない**(以前は 8NM より遠い終点があれば近いものを捨てていた)。
   小松は索引の1行 "NOTO, KOMATSU, KAGA" に REVERSAL(KMC)が同居していて、小松→福井が SONBU(41NM 西)まで行って戻っていた
+
+## v6-271 仙台・山形・松島・庄内の SID・進入の形(大きい空港は後回し: 羽田・成田・中部・関西・伊丹・新千歳・福岡・那覇)
+- 仙台 RJSS: IWAKI EIGHT(R120 → IXE R024・FL150)・SENDAI REVERSAL SIX・BUNKO ONE(RIKYU)・CUBIC FIVE(TOHOKU・FL150)・SUTBA ONE(YTE/GTC/RIKYU/SASAP・9000)。
+  ILS Y・VOR RWY27/30(SDE の待機から D8.0 で旋回)・ILS Z(SNOOK → PULOM → OVRID。初期進入は GNSS required → `req`)・RNP Y/Z RWY09(ALDOG)・RNP Y RWY27(SNOOK)
+- 山形 RJSC: YAMAGATA FOUR・HANKA / NIIGATA / RUBIS(RNAV・13000〜FL200)。ILS/LOC Y(YTE → R209 D17)・ILS/LOC Z(YOZAN/IBELU → LAFRA。GNSS required)・
+  VOR A(R232 D11 → ATERA → YTE)・RNP RWY19(TUYAH/MEDET → GINZA)
+- 松島 RJST: MATSUSHIMA REVERSAL THREE・SOUTH FIVE(HYAKURI(TACAN)/DAIGO)・NORTH FOUR(MIYAKO/MISAWA)・RIASU THREE・WEST FOUR(SENDAI)。
+  TACAN Y(MOLLI → D15 アーク)・TACAN Z(MIHAR)。⚠ 滑走路は "To be issued" で OSM の 07/25(058.1°T)
+- 庄内 RJSY: SHONAI REVERSAL FOUR・ZUNDA TWO(RNAV・FL200)。ILS/LOC Y・VOR RWY09(YSE → D11)・LOC RWY27(R072 D12 → AMARU)・RNP Z RWY27(MOKKE)。
+  ILS Z は IF(YURAH)に待機が無いので書かない
+- **航空路に乗っていない局の孤立を解消**(`navNode`): 繋がる点が1つも無い局(松島 MXT)は、その局と**別の局の両方で評定できる** 40NM 以内の点
+  (DAIWA = MXT R264 / SDE R357)を経路網に入れて繋ぐ。以前は MXT が孤立して、松島を目的地・代替にすると経路が無かった
+- **出発地=代替のとき IAF の辺が張られなかった**(`ifrLinkAp`): 重複の判定を「同じ種類の辺」に限った。仙台→松島→仙台で、SDE に SID の辺が
+  先にあって ILS Y の IAF の辺が張られず、最寄りの点への「(仮)」の直線で着陸していた
+- 進入復行の待機点の取り違え(gen_proc の mah)を `IAC_DEF.mah` で直した: 福井 RNP RWY18(KAGAR → AWARA)・新潟 RNP Z RWY10(FOIRU → INAHO)。
+  KAGAR は RNAV 専用の IF で経路網に無く、小松→福井で代替(小松)への経路が無かった
