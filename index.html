@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-275';
+const VER_TAG='v6-276';
 const BUILD='2026-10-21';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8206,7 +8206,12 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   const join=(t,lab)=>{
     if(G.nodes[t])return true;
     const f=FIX&&FIX._ix[t];if(!f||!usable(t))return false;
-    if(!linkFixVia(G,t))near(G.nodes[t],5).forEach(({n,d})=>add(t,n.n,{d:d*1.15,tr:1,tag:lab}));
+    if(!linkFixVia(G,t)){
+      // ⚠ 評定できる局が無い点(ILS の LOC/DME でしか決まらない出雲 NAKAU など)へ、GNSS も RNAV 装置も無い機体で直線を引かない
+      //   (FIX 同士を直線で結ばない約束。以前は「(仮)」の直線で IF に入り、LOC Z を選んでいた・v6-276)
+      if(!canRnav)return false;
+      near(G.nodes[t],5).forEach(({n,d})=>add(t,n.n,{d:d*1.15,tr:1,tag:lab}));
+    }
     return true;
   };
   let linked=0;
@@ -9723,6 +9728,40 @@ const SID_DEF={
         SHIMIZU:rn('SUC','SHIMIZU ONE',['SUC'],['OK32A','OK32B','SUC']),
       }};
   })(),
+  /* 三沢(RJSM AD2.24-SID-1・米軍 FLIP の転載)。滑走路は AD 2.12 の座標(095.1°T)。MIS は VORTAC・VAR 9°W。
+     ENKAI THREE: RWY10 のみ。MIS R105 → ENKAI(D3・3500 以上)。ENKAI は ENR 4.3 に無いので IAC_DEF.fix で足す */
+  RJSM:{
+    rwy:{'10':{end:[40.701998,141.386347],brgT:95.1,elev:109}},
+    nav:{MIS:{lat:40.70382,lng:141.38111,var:9}},
+    sids:{ENKAI:{fix:'ENKAI',nav:'MIS',name:'ENKAI THREE','10':[{intercept:105},{to:'ENKAI'}]}}
+  },
+  /* 出雲(RJOC AD2.24-SID-1〜9)。滑走路は AD 2.12 の座標から(59.33°T・真方位は "To be issued")。XZE は VOR/DME・VAR 9°W。
+     DOZEN SIX: 07 は 500FT → 左旋回(会合針路は仮定)/ 25 は 1700FT → 右 HDG078° で R033 → D20 → OIE R213 → DOZEN
+     IZUMO REVERSAL FIVE: 07 は 500FT → 左旋回で R033 → 3000FT → 左旋回で XZE / 25 は 1700FT → 右旋回で R261 → 10.5DME → 右旋回で XZE(7000 以上)
+     MATSUE THREE(TSUNO)・TAKHI TWO・SAIGO TWO・KYOKA TWO(CARPS)(RNAV): 07 は HDG068° 500FT・25 は HDG248° 1700FT。OC の点は図の座標 */
+  RJOC:(()=>{
+    const g={'07':{pct:4.6,to:1300},'25':{pct:4.7,to:2200}};
+    const rn=(fx,nm,a,c,o)=>Object.assign({fix:fx,nav:'XZE',name:nm,grad:g,
+      '07':[{climbTo:500},{to:a[0],turn:'L'}].concat(a.slice(1).map(t=>({to:t}))),'25':[{climbTo:1700},{to:c[0],turn:'R'}].concat(c.slice(1).map(t=>({to:t})))},o);
+    const ma=rn('MIHOU','MATSUE THREE',['MIHOU'],['OC511','MIHOU']),ky=rn('KYOKA','KYOKA TWO',['OC715','OC716','KYOKA'],['KYOKA'],{alt:5000});
+    ky['25'][1].turn='L';
+    const ex=(b,x,o)=>Object.assign({},b,{'07':b['07'].concat(x),'25':b['25'].concat(x)},o);
+    return {
+      rwy:{'07':{end:[35.418283,132.899464],brgT:59.33,elev:15},'25':{end:[35.409119,132.8805],brgT:239.33,elev:6}},
+      nav:{XZE:{lat:35.41724,lng:132.89237,var:9},OIE:{lat:36.17674,lng:133.32282,var:9},OC511:{lat:35.465472,lng:132.980667,var:9},OC711:{lat:35.812444,lng:133.040278,var:9},OC712:{lat:35.504611,lng:133.009444,var:9},OC713:{lat:35.742167,lng:133.204944,var:9},OC715:{lat:35.457611,lng:132.787028,var:9},OC716:{lat:35.423611,lng:132.716833,var:9}},
+      sids:{
+        DOZEN:{fix:'DOZEN',nav:'XZE',name:'DOZEN SIX',grad:g,
+          '07':[{climbTo:500},{turn:'L',hdg:10,assumed:1},{intercept:33},{to:{rad:33,dme:20}},{to:'DOZEN'}],
+          '25':[{climbTo:1700},{turn:'R',hdg:78},{intercept:33},{to:{rad:33,dme:20}},{to:'DOZEN'}]},
+        IZUMO:{fix:'XZE',nav:'XZE',name:'IZUMO REVERSAL FIVE',grad:g,alt:7000,
+          '07':[{climbTo:500},{turn:'L',hdg:10,assumed:1},{intercept:33},{climbTo:3000},{to:'XZE',turn:'L'}],
+          '25':[{climbTo:1700},{turn:'R',hdg:290,assumed:1},{intercept:261},{to:{rad:261,dme:10.5}},{to:'XZE',turn:'R'}]},
+        MATSUE:ma,'MATSUE TSUNO':ex(ma,[{to:'KAIKE'},{to:'TSUNO'}],{m:'MATSUE',fix:'TSUNO',name:'MATSUE THREE・TSUNO TRANSITION',alt:10000}),
+        TAKHI:rn('TAKHI','TAKHI TWO',['OC711','TAKHI'],['OC711','TAKHI']),
+        SAIGO:rn('SAIGO','SAIGO TWO',['OC712','OC713','SAIGO'],['OC713','SAIGO']),
+        KYOKA:ky,'KYOKA CARPS':ex(ky,[{to:'CARPS'}],{m:'KYOKA',fix:'CARPS',name:'KYOKA TWO・CARPS TRANSITION',alt:7000}),
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -10312,6 +10351,37 @@ const IAC_DEF={
     'ILS Z or LOC Z RWY32':[{at:'ANPAN'},{to:'NALKO'},{thr:'32'}],
     'VOR RWY32':[{at:'NAE'},{to:{rd:[152,11]}},{to:'ELALI'},{mapt:{rd:[135,1.3]}}],
     'RNP RWY32':[{at:'ANPAN'},{to:'LAMAM'},{thr:'32'}]}},
+  // 三沢(IAC-1〜9・米軍 FLIP の転載)。点は ENR 4.3 に無いので MIS の [ラジアル, DME] から(iacFixInject)。RNAV(GPS) の点は図の距離からの近似。
+  //   RWY28: ILS Z(GABII → DEVLS で反転 → GABII)・VOR Z / TACAN Z(KUJII → TAZWA)・HI-ILS Y / HI-VOR Y(SHOJU → CHELL → D15 アーク)・RNAV(GPS)(DEVLS → GABII)。
+  //     ⚠ 進入復行は "requires use of RNAV or ATC RADAR monitoring" → GNSS(req)。待機は SHOJU
+  //   RWY10: HI-ILS Y(WEASL → NADDY → HOSHI)・HI-ILS Z / HI-VOR Y(SHOJU → CHELL → D15 アーク → UBESE / KENII)・RNAV(GPS)(BAXIL / ELKID → DUKER)。待機は STICK
+  RJSM:(()=>{const arc28=[{at:'SHOJU'},{to:'CHELL'},{arc:15,to:112,dir:'L'}],arc10=[{at:'SHOJU'},{to:'CHELL'},{arc:15,to:283,dir:'R'}],G='GNSS';
+    return {nav:{MIS:{lat:40.70382,lng:141.38111,var:9}},navId:'MIS',thr:{'28':[40.701998,141.386347],'10':[40.704442,141.350378]},
+    pts:{MESAL: [40.708942, 141.264896], 'DUKER': [40.715838, 141.133372], 'BAXIL': [40.881986, 141.148739], 'ELKID': [40.549688, 141.118082]},
+    fix:{ENKAI:[105,3],GABII:[103,7.2],DEVLS:[103,15],KUJII:[110,15],TAZWA:[110,6],SHOJU:[200,20],CHELL:[200,15],KISSA:[280,8],STICK:[106,14],
+      WEASL:[283,13.5],NADDY:[283,9.1],HOSHI:[283,5.6],UBESE:[283,15],LIFTY:[283,13],KASHH:[283,11],KENII:[281,15],HAMAV:[281,9],HABIX:[281,7]},
+    mah:{'ILS Z or LOC Z RWY28':'SHOJU','VOR Z or TACAN Z RWY28':'SHOJU','HI-ILS Y or LOC Y RWY28':'SHOJU','HI-VOR Y or TACAN Y RWY28':'SHOJU','RNAV(GPS) RWY28':'SHOJU',
+      'HI-ILS Y or LOC Y RWY10':'STICK','HI-ILS Z or LOC Z RWY10':'STICK','HI-VOR Y or TACAN Y RWY10':'STICK','RNAV(GPS) RWY10':'STICK'},
+    req:{'ILS Z or LOC Z RWY28':G,'VOR Z or TACAN Z RWY28':G,'HI-ILS Y or LOC Y RWY28':G,'HI-VOR Y or TACAN Y RWY28':G},iac:{
+    'ILS Z or LOC Z RWY28':[{at:'GABII'},{to:'DEVLS'},{to:'GABII'},{thr:'28'}],
+    'VOR Z or TACAN Z RWY28':[{at:'KUJII'},{to:'TAZWA'},{mapt:{rd:[110,0.9]}}],
+    'HI-ILS Y or LOC Y RWY28':arc28.concat([{to:'GABII'},{thr:'28'}]),
+    'HI-VOR Y or TACAN Y RWY28':arc28.concat([{arc:15,to:110,dir:'L'},{to:'TAZWA'},{mapt:{rd:[110,0.9]}}]),
+    'RNAV(GPS) RWY28':[{at:'DEVLS'},{to:'GABII'},{thr:'28'}],
+    'HI-ILS Y or LOC Y RWY10':[{at:'WEASL'},{to:'NADDY'},{to:'HOSHI'},{thr:'10'}],
+    'HI-ILS Z or LOC Z RWY10':arc10.concat([{to:'LIFTY'},{to:'KASHH'},{thr:'10'}]),
+    'HI-VOR Y or TACAN Y RWY10':[{at:'SHOJU'},{to:'CHELL'},{arc:15,to:281,dir:'R'},{to:'HAMAV'},{to:'HABIX'},{mapt:{rd:[281,1.8]}}],
+    'RNAV(GPS) RWY10':{BAXIL:[{at:'BAXIL'},{to:'DUKER'},{to:'MESAL'},{thr:'10'}],ELKID:[{at:'ELKID'},{to:'DUKER'},{to:'MESAL'},{thr:'10'}]}}};})(),
+  // 出雲(IAC-1〜4・6)。LOC Y・VOR RWY25 は XZE の待機から R053/R055 → D11.0 で旋回 → LAFCA / SIJMI、LOC Z・RNP RWY25 は NAKAU(IF・待機)から、
+  //   RNP RWY07 は OKUNI / SUSAR(IAF)→ SUBIE(IF)/ ENMUH
+  RJOC:(()=>{const r07=[{to:'SUBIE'},{to:'ENYAH'},{to:'OC751'},{thr:'07'}];
+    return {nav:{XZE:{lat:35.41724,lng:132.89237,var:9}},navId:'XZE',thr:{'25':[35.418283,132.899464],'07':[35.409119,132.8805]},pts:{OC750:[35.274303,132.722353],OC751:[35.38195,132.824339],OC551:[35.50535,133.080156]},
+    mah:{'LOC Z RWY25':'XZE','LOC Y RWY25':'XZE','VOR RWY25':'XZE','RNP RWY07':'XZE','RNP RWY25':'XZE'},iac:{
+    'LOC Y RWY25':[{at:'XZE'},{to:{rd:[53,11]}},{to:'LAFCA'},{thr:'25'}],
+    'LOC Z RWY25':[{at:'NAKAU'},{to:'LAFCA'},{thr:'25'}],
+    'VOR RWY25':[{at:'XZE'},{to:{rd:[55,11]}},{to:'SIJMI'},{mapt:'XZE'}],
+    'RNP RWY25':[{at:'NAKAU'},{to:'OC551'},{to:'FUMAI'},{thr:'25'}],
+    'RNP RWY07':{OKUNI:[{at:'OKUNI'}].concat(r07),SUSAR:[{at:'SUSAR'},{to:'ENMUH'},{to:'OC750'}].concat(r07)}}};})(),
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
