@@ -549,3 +549,14 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   TACAN Z / Y / X RWY25(SANKO D12 アーク / USSAH / SARBA D20 アーク → R086)・TACAN RWY07(SANKO → D13 アーク → R247)。滑走路の真方位は THR 座標から(069.79°T)
 - 大分 RJFO: MUSASHI REVERSAL TWO(TFE R132 → TFE)。EBOSHI / FUSHA / TOYO / RNAV TRANSITION は "RADAR service required"(radar:1)。
   ILS Y / LOC・VOR RWY01(TFE の待機から)・ILS X(TANSO → FO153 → RF。GNSS)・VOR A(JEWEL)・RNP Z RWY19(KAGEX → KAREI)。ILS Z は IF(NOLEL)に待機が無いので書かない
+
+## v6-281 芦屋・新田原・宮崎の SID・進入の形
+- 芦屋 RJFA(TACAN のみ): ASHIYA REVERSAL TWO・ASHIYA EAST FIVE(IWT・FL170)・MISHIMA THREE(MIT・FL170)。TACAN RWY12(HEIWA → D12 アーク → R294)。
+  ⚠ 滑走路は "To be issued" で ARP から 106°T の近似
+- 新田原 RJFN(TACAN のみ): NIPPO SEVEN・SAITO ONE(RWY28 のみ)・TENSO FOUR(D35 アーク・13000)・TRANSITION(ASHIZURI / MUSASHI / NOBEOKA)。
+  ILS Z / TACAN Z(ZARON → D21 アーク)・ILS Y(HYUGA = R091 D30 を `IAC_DEF.fix` で足した)・TACAN Y(UBSOL → D21 アーク)。ILS X は IAF が無い(レーダー誘導前提)ので書かない。
+  ⚠ 滑走路は "To be issued"・THR も Nil で ARP から 102°T・2700m の近似
+- 宮崎 RJFM: SIIBA ONE(R015)・LALAG ONE(R305)・MIYAZAKI REVERSAL ONE・JACKY ONE(R138)。KIZAK / KIRISHIMA(RNAV)は "RADAR service required"(radar:1)。
+  ILS Y / LOC Y・VOR RWY27(MZE の待機から)・ILS Z(OYODO)。RNP(AR) は書かない
+- 孤立した局の接続(v6-271)の半径を 40 → 50NM に(新田原 NHT の NIPPO は 45NM。NIPPO は航空路に乗っていない)。以前は新田原が目的地・代替だと経路が無かった
+- 既知: 新田原→宮崎(12NM)は公示の SID が NIPPO(45NM 北)・TENSO 行きしか無く、大きく回る経路になる(公示の方式どおり)

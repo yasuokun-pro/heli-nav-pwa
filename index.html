@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-280';
+const VER_TAG='v6-281';
 const BUILD='2026-10-22';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8166,7 +8166,7 @@ function navNode(G,id){
   // 繋がる点が1つも無い局(航空路に乗っていない飛行場の TACAN。松島 MXT)は、その局で評定でき、かつ**別の局でも評定できる**
   //   40NM 以内の点を経路網に入れて繋ぐ(DAIWA = MXT R264 / SDE R357)。以前は MXT が孤立して、松島を代替にすると経路が無かった(v6-271)
   if(!(G.adj[id]||[]).length)(FIX.f||[]).forEach(f=>{
-    if(G.nodes[f.n])return;const m=re.exec(f.brg||'');if(!m||+m[2]>40)return;
+    if(G.nodes[f.n])return;const m=re.exec(f.brg||'');if(!m||+m[2]>50)return;   // 50NM: 新田原 NHT → NIPPO(45NM)
     if(fixRadials(f.n).some(r=>r.id!==id))linkFixVia(G,f.n);
   });
   return id;
@@ -10003,6 +10003,64 @@ const SID_DEF={
       TOYO:{fix:'OOITA',nav:'TFE',name:'TOYO (RNAV)',radar:1},TRANSITION:{fix:'DONAR',nav:'TFE',name:'RNAV TRANSITION',radar:1},
     }
   },
+  /* 芦屋(RJFA AD2.24-SID-1)。AHT は TACAN・VAR 8°W。⚠ 滑走路は "To be issued" なので ARP から 12/30 ≒ 106°T で近似。TACAN 装備機のみ。
+     12 は左・30 は右に旋回して AHT R030(会合は 3DME で近似):
+     ASHIYA REVERSAL TWO: R030 → 35DME 以内で左に反転 → AHT / ASHIYA EAST FIVE: R030 → 23DME(8000)→ 右旋回で IWT R287 → IWT(D56 で FL170)
+     MISHIMA THREE: R030 → 35DME(FL170)→ 右旋回で MIT R216 → MIT */
+  RJFA:(()=>{
+    const r=x=>({'12':[{to:{rad:30,dme:3},turn:'L'}].concat(x),'30':[{to:{rad:30,dme:3},turn:'R'}].concat(x)});
+    return {
+      rwy:{'12':{end:[33.88139,130.65167],brgT:106,elev:98},'30':{end:[33.88139,130.65167],brgT:286,elev:98}},
+      nav:{AHT:{lat:33.88743,lng:130.64987,var:8},IWT:{lat:34.0799,lng:132.14731,var:8},MIT:{lat:34.77167,lng:131.13806,var:8}},
+      sids:{
+        'ASHIYA REVERSAL':Object.assign({fix:'AHT',nav:'AHT',name:'ASHIYA REVERSAL TWO',tac:1},r([{to:{rad:30,dme:20}},{to:'AHT',turn:'L'}])),
+        'ASHIYA EAST':Object.assign({fix:'IWT',nav:'AHT',name:'ASHIYA EAST FIVE',tac:1,alt:17000},r([{to:{rad:30,dme:23}},{to:'IWT',turn:'R'}])),
+        MISHIMA:Object.assign({fix:'MIT',nav:'AHT',name:'MISHIMA THREE',tac:1,alt:17000},r([{to:{rad:30,dme:35}},{to:'MIT',turn:'R'}])),
+      }};
+  })(),
+  /* 新田原(RJFN AD2.24-SID-1〜4)。NHT は TACAN・VAR 7°W。⚠ 滑走路は "To be issued"・THR も Nil なので ARP から 10/28 ≒ 102°T・2700m で近似。TACAN 装備機のみ。
+     NIPPO SEVEN: 10 は 700FT → 左 HDG351° / 28 は 700FT → 左旋回(会合は仮定)で R036 → NIPPO(D45)。28 は 5.0%(4000FT まで)
+     SAITO ONE(RWY28 のみ): 700FT → 右 HDG081° で R036 → NIPPO / TENSO FOUR: 左旋回で R066 → 35DME を時計回りに R086 → TENSO(R076 で 13000 以上)
+     TRANSITION: ASHIZURI(NIPPO → SUC)・MUSASHI(NIPPO → TFE)・NOBEOKA(NIPPO → NHT) */
+  RJFN:(()=>{
+    const g={'28':{pct:5,to:4000}};
+    const np={fix:'NIPPO',nav:'NHT',name:'NIPPO SEVEN',tac:1,grad:g,'10':[{climbTo:700},{turn:'L',hdg:351},{intercept:36}],'28':[{climbTo:700},{to:{rad:36,dme:3},turn:'L'},{to:'NIPPO'}]};
+    const tr=(nm,fx)=>Object.assign({},np,{m:/^TRANSITION$/,fix:fx,name:'NIPPO SEVEN・'+nm+' TRANSITION','10':np['10'].concat([{to:'NIPPO'},{to:fx}]),'28':np['28'].concat([{to:fx}])});
+    return {
+      rwy:{'10':{end:[32.081081, 131.465426],brgT:102,elev:259},'28':{end:[32.086137, 131.437353],brgT:282,elev:259}},
+      nav:{NHT:{lat:32.08041,lng:131.45378,var:7},SUC:{lat:32.75597,lng:132.99665,var:7},TFE:{lat:33.48971,lng:131.72876,var:7}},
+      sids:{
+        NIPPO:np,
+        SAITO:{fix:'NIPPO',nav:'NHT',name:'SAITO ONE',tac:1,grad:g,'28':[{climbTo:700},{turn:'R',hdg:81},{intercept:36}]},
+        TENSO:{fix:'TENSO',nav:'NHT',name:'TENSO FOUR',tac:1,alt:13000,grad:g,
+          '10':[{climbTo:700},{to:{rad:66,dme:3},turn:'L'},{to:{rad:66,dme:35}},{arc:'R',dme:35,to:{rad:86,dme:35}},{to:'TENSO'}],
+          '28':[{climbTo:700},{to:{rad:66,dme:3},turn:'L'},{to:{rad:66,dme:35}},{arc:'R',dme:35,to:{rad:86,dme:35}},{to:'TENSO'}]},
+        'TR SUC':tr('ASHIZURI','SUC'),'TR TFE':tr('MUSASHI','TFE'),'TR NHT':tr('NOBEOKA','NHT'),
+      }};
+  })(),
+  /* 宮崎(RJFM AD2.24-SID-1〜6)。滑走路は AD 2.12(085.18°/265.18°T)。MZE は VOR/DME・VAR 8°W。
+     SIIBA ONE: 27 は R275 → 6DME → 右 HDG060° / 09 は R091 → 8DME → 左 HDG330° で R015 → SIIBA(6000)。27 は 5.0%(5000FT まで)
+     LALAG ONE: 27 は R275 → 10DME → 右 HDG350° / 09 は 1000FT → 左 HDG275° で R305 → TORIK → LALAG
+     MIYAZAKI REVERSAL ONE: 27 は R275 → 10DME → 右旋回 / 09 は右旋回で R138 → 12DME → 左旋回 で MZE
+     JACKY ONE: 27 は 2DME → 右旋回で MZE / 09 は右旋回 → R138 → JACKY
+     KIZAK / KIRISHIMA(RNAV)は "RADAR service required" → 書かない(radar:1) */
+  RJFM:(()=>{
+    const g={'27':{pct:5,to:5000}};
+    return {
+      rwy:{'09':{end:[31.878072, 131.461611],brgT:85.18,elev:21},'27':{end:[31.876183, 131.435283],brgT:265.18,elev:15}},
+      nav:{MZE:{lat:31.87873,lng:131.43747,var:8}},
+      sids:{
+        SIIBA:{fix:'SIIBA',nav:'MZE',name:'SIIBA ONE',alt:6000,grad:g,
+          '27':[{intercept:275},{to:{rad:275,dme:6}},{turn:'R',hdg:60},{intercept:15}],'09':[{intercept:91},{to:{rad:91,dme:8}},{turn:'L',hdg:330},{intercept:15}]},
+        LALAG:{fix:'LALAG',nav:'MZE',name:'LALAG ONE',grad:{'27':{pct:5,to:5000},'09':{pct:5,to:1000}},
+          '27':[{intercept:275},{to:{rad:275,dme:10}},{turn:'R',hdg:350},{intercept:305}],'09':[{climbTo:1000},{turn:'L',hdg:275},{intercept:305}]},
+        'MIYAZAKI-REVERSAL':{m:'MIYAZAKI',fix:'MZE',nav:'MZE',name:'MIYAZAKI REVERSAL ONE',grad:g,
+          '27':[{intercept:275},{to:{rad:275,dme:10}},{to:'MZE',turn:'R'}],'09':[{to:{rad:138,dme:3},turn:'R'},{to:{rad:138,dme:12}},{to:'MZE',turn:'L'}]},
+        JACKY:{fix:'JACKY',nav:'MZE',name:'JACKY ONE',grad:{'27':{pct:5,to:500}},
+          '27':[{dme:2},{to:'MZE',turn:'R'},{to:'JACKY'}],'09':[{to:{rad:138,dme:3},turn:'R'},{to:'JACKY'}]},
+        KIZAK:{fix:'JACKY',nav:'MZE',name:'KIZAK (RNAV)',radar:1},KIRISHIMA:{fix:'KIZAK',nav:'MZE',name:'KIRISHIMA (RNAV)',radar:1},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -10721,6 +10779,23 @@ const IAC_DEF={
     'VOR RWY01':[{at:'TFE'},{to:{rd:[195,10]}},{to:'PATRO'},{mapt:{rd:[177,2.5]}}],
     'VOR A':[{at:'JEWEL'},{to:'IGMAN'},{mapt:{rd:[38,1.7]}}],
     'RNP Z RWY19':[{at:'KAGEX'},{to:'KAREI'},{to:'AKILU'},{thr:'19'}]}},
+  // 芦屋(IAC-1 2025-11-27・TACAN)。TACAN RWY12: HEIWA(IAF・待機・R050 D12)→ D12 アーク(反時計回り)→ R294 → D6.0 → MAPt(D1.0)
+  RJFA:{nav:{AHT:{lat:33.88743,lng:130.64987,var:8}},navId:'AHT',thr:{},pts:{},mah:{'TACAN RWY12':'HEIWA'},iac:{
+    'TACAN RWY12':[{at:'HEIWA'},{arc:12,to:294,dir:'L'},{to:{rd:[294,6]}},{mapt:{rd:[294,1]}}]}},
+  // 新田原(IAC-1〜5・TACAN 必須)。ILS Z / LOC Z・TACAN Z は ZARON(IAF・待機・R066 D21)→ D21 アーク(時計回り)→ R109 / R104 → AKBOX、
+  //   ILS Y / LOC Y は HYUGA(IAF・R091 D30)→ HDG260 → R109、TACAN Y は UBSOL(IAF・R086 D30)→ D21 アーク → R104。ILS X は IAF が無い(レーダー誘導前提)ので書かない
+  RJFN:{nav:{NHT:{lat:32.08041,lng:131.45378,var:7}},navId:'NHT',thr:{'28':[32.081081, 131.465426]},pts:{},fix:{HYUGA:[91,30]},
+    mah:{'TACAN Z RWY28':'ZARON','TACAN Y RWY28':'ZARON','ILS Z or LOC Z RWY28':'ZARON','ILS Y or LOC Y RWY28':'ZARON'},iac:{
+    'ILS Z or LOC Z RWY28':[{at:'ZARON'},{arc:21,to:109,dir:'R'},{to:{rd:[109,8]}},{thr:'28'}],
+    'ILS Y or LOC Y RWY28':[{at:'HYUGA'},{to:{rd:[94,23]}},{to:{rd:[109,15]}},{thr:'28'}],
+    'TACAN Z RWY28':[{at:'ZARON'},{arc:21,to:104,dir:'R'},{to:'AKBOX'},{to:'PAKMU'},{mapt:{rd:[104,1.5]}}],
+    'TACAN Y RWY28':[{at:'UBSOL'},{to:{rd:[86,21]}},{arc:21,to:104,dir:'R'},{to:'AKBOX'},{to:'PAKMU'},{mapt:{rd:[104,1.5]}}]}},
+  // 宮崎(IAC-1〜3 2025-03-20)。ILS Y / LOC Y・VOR RWY27 は MZE の待機から R109 / R112 → D11.0 で旋回 → SINWA / PEKAN、ILS Z は OYODO(IF・待機)から。RNP(AR) は対象外
+  RJFM:{nav:{MZE:{lat:31.87873,lng:131.43747,var:8}},navId:'MZE',thr:{'27':[31.878072, 131.461611]},pts:{},
+    mah:{'ILS Z or LOC Z RWY27':'MZE','ILS Y or LOC Y RWY27':'MZE','VOR RWY27':'MZE'},iac:{
+    'ILS Z or LOC Z RWY27':[{at:'OYODO'},{to:'SINWA'},{thr:'27'}],
+    'ILS Y or LOC Y RWY27':[{at:'MZE'},{to:{rd:[109,11]}},{to:'SINWA'},{thr:'27'}],
+    'VOR RWY27':[{at:'MZE'},{to:{rd:[112,11]}},{to:'PEKAN'},{mapt:{rd:[96,1.2]}}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
