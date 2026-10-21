@@ -478,3 +478,14 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 鳥取 RJOR: AYABE THREE / TOTTORI REVERSAL THREE(R030 13DME)・MIYAZU TWO(RNAV)。ILS Z / LOC・VOR RWY10(TRE の待機から)・
   ILS Y(KANNA → … → OR056 → RF → OR057。RNP1 RF required → GNSS)・RNP X RWY10(TRE → OR058)。RNP(AR) は書かない
 - 未対応(既存の動き): 但馬は全部の進入が GNSS を要るので、GNSS の無い機体で代替にすると「(仮)」の直線で繋がる(神戸→鳥取→但馬)
+
+## v6-274 大館能代・岡山・高松・隠岐の SID・進入の形、"RADAR service required" の SID
+- 大館能代 RJSR: ODATE REVERSAL TWO・LAGOON THREE(R287 → NOSSY → UWE R360)・YUWA ONE(RNAV)。ILS Y・VOR A(ODE の待機から)・ILS Z(BONJI → D13 アーク → ATKES)・RNP RWY11(BONJI)
+- 岡山 RJOB: KIBI REVERSAL SEVEN・CHIZU THREE(11000・MIYAZU TRANSITION → YME)・OLIVE FOUR(SANDA)/ WASYU THREE(RNAV)。
+  ILS Z / LOC・VOR RWY07/25(OYE の待機から)・ILS Y(INOOK → SARUU → OB791。初期進入 GNSS)。RNP(AR) は書かない
+- 高松 RJOT: KAGAWA NORTH THREE(KTE R352 → OYE)・KAGAWA REVERSAL EIGHT。ILS Y・VOR RWY26(KTE の待機から)・ILS Z(POPAI(IF・待機))・VOR A(UTAZU(IF・待機))
+- 隠岐 RJNO: DOZEN FOUR・NAKAU / OKUNI / TSUNO(RNAV)。LOC Y(DOZEN → D9.4 アーク → ASAJI)・LOC Z・VOR RWY26(OIE の待機から)・RNP RWY08/26(SAIGO)
+- **図の注記に "RADAR service required" がある SID は経路に使わない**(`SID_DEF` の鍵に `radar:1`・`procEnd` で外す。形は出す)。
+  自分の装備と公示の方式だけで計画するため。高松の RNAV SID 4つ(OLIVE/SAYOH/TAROH/WASYU)、既存の 小牧 TRANSITION-RNAV・新潟 SUKOB・百里 HITAKA にも付けた。
+  ⚠ 小牧 IBUKI の図にある RNAV TRANSITION(MIDER・KOMAZ)も RADAR required(書いていない)
+  全 AD2 の SID で該当: 成田7・羽田9・中部5・福岡5・大分4 など(後回しの飛行場に多い)
