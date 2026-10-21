@@ -360,3 +360,10 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 調布 KOSKA TWO(RNAV・GNSS): RWY17 は 700FT → TF511 → KOSKA(25.4NM)、RWY35 は 900FT → 右旋回 TF510 → TF511 → KOSKA(32.2NM)。
   TF510/TF511 は図の Waypoint Coordinates。RNP RWY35: KOSKA → ARENA → DROMP → TF550(MAPt・図の座標)
 
+## v6-263 大島(RJTO)の SID・進入の形
+- SID: OSHIMA REVERSAL FOUR(RWY03 1100FT 左 / RWY21 1400FT 右 → OSE)・MIHARA ONE(RNAV: RWY03 → HATSU / RWY21 → TO100 → HATSU)
+- 進入: LOC Z(SUNOD / OSE → TO350〜352 → GOMIM → NONIV → MAPt)・LOC Y(OSE → R230 8DME → 旋回 → OPETA)・VOR A(R246 → HOLNI)・
+  VOR B(R033 → SCOLI)・RNP RWY21(SUNOD → MUGEL → TO152 → RW21 / OSE → TO150 → TO151 → MUGEL)。待機からの旋回は 8DME の点 → FAF で近似
+- 仕組み: IAC_DEF の `req`(図の注記にだけある要件。LOC Z の初期進入 RNP1 = GNSS)を procOk で見る。
+  入口が複数の形を持つ方式は形の側の入口(OSE)を正とする(図は MIHARA と書くが経路網の点は OSE)
+
