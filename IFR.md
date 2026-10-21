@@ -375,3 +375,9 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 進入: TACAN Z(PIKUM)・Y(RILGI → D11 アーク)・X(UDOKU → D11 アーク)→ IDALU → OKADO → MAPt D1.0。
   VOR A は静岡の SZE から(`{rd:[ラジアル,DME,局]}` で IAC_DEF の別の局を指せるようにした)
 
+## v6-265 松本(RJAF)の SID・進入の形 / RNP AR は計画で使わない
+- SID: MATSUMOTO REVERSAL THREE・HAPPO TWO(RWY18 は 2700FT → 左 HDG322° で MBE R007 に会合)・NIIGATA ONE / MATSUMOTO ONE(RNAV・RWY36 だけ)。
+  ⚠ AF600 は図の座標が削除されていて近似
+- 進入: VOR RWY18(MBE → R035 12DME → D12 アーク → GAKTO → FKASI → MAPt D1.9)。
+- **RNP AR(名前に "(AR)")は procOk で使えない**(機体・乗員の特別の承認が要る。松本の RNP Y/Z 4 方式、他の飛行場の AR も同じ)
+
