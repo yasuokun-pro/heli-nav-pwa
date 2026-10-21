@@ -390,3 +390,10 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   RNP RWY02/20(SCOTT から)。VOR A/B の MAPt は飛行場から 3.6〜3.9NM(図は MAPt から FLY VISUAL)
 - 同じ IAF・同じ種類の方式が複数あれば**形の短い方**をその IAF の辺にする(三宅島 RNP RWY02 48NM より RWY20 20NM)
 
+## v6-267 浜松・福島の SID・進入の形
+- 浜松 RJNH: HAMAMATSU REVERSAL FOUR(R220 20DME → LHT)・KOWA SEVEN(R225 30DME → XMT)・OSHIMA FIVE(R156 → LELIN → XAC)。
+  TACAN RWY09/27(EKOVI R225 / VEPUP R165 から D13 アーク → DOGAT / VAPLO)。⚠ 滑走路は "To be issued" で、SID の「LHT 3.4DME(3.0NM FM DER)」等から置いた。
+  ⚠ KOWA の XMT(KOWA TACAN)は ENR 4.1 に ID が無く経路網に入らないので、KOWA SEVEN は形だけ
+- 福島 RJSF: FUKUSHIMA REVERSAL TWO・NASNO THREE・SOUTH ONE / WEST ONE(RNAV・SF の点は図の座標)。
+  ILS Y(SOUMA)・ILS Z / VOR A / VOR RWY19(FKE の待機から)・RNP RWY19(WAKAH)
+
