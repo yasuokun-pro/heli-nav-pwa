@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-279';
+const VER_TAG='v6-280';
 const BUILD='2026-10-22';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -9942,6 +9942,67 @@ const SID_DEF={
         'OZUKI IWT':Object.assign({},rv,{m:'OZUKI',fix:'IWT',name:'OZUKI REVERSAL FIVE・KUGA TRANSITION','17':rv['17'].concat([{to:{rad:173,dme:8}},{to:'IWT'}])}),
       }};
   })(),
+  /* 北九州(RJFR AD2.24-SID-1〜6)。滑走路は AD 2.12(170.35°/350.35°T)。SWE(SUOH)は VOR/DME・VAR 8°W。
+     ASARI THREE: 18 は 500FT → 左 HDG039° / 36 は 500FT → 右 HDG129° で R084 → ASARI。MATSUYAMA(UBE R133 → HIMEH → MYE R257 → MYE)・MUSASHI(HIMEH → TFE R346 → TFE)TRANSITION
+     ONGHA TWO: 500FT → 18 は左・36 は右に旋回して SWE(3000 以上)→ R259 → ONGHA
+     KOHEI ONE(RNAV・DOUGO / ABARTO TRANSITION)は "RADAR service required" → 書かない(radar:1) */
+  RJFR:(()=>{
+    const as={fix:'ASARI',nav:'SWE',name:'ASARI THREE',grad:{'18':{pct:5.8,to:500},'36':{pct:4,to:500}},
+      '18':[{climbTo:500},{turn:'L',hdg:39},{intercept:84}],'36':[{climbTo:500},{turn:'R',hdg:129},{intercept:84}]};
+    const ex=(x,o)=>Object.assign({},as,{'18':as['18'].concat(x),'36':as['36'].concat(x)},o);
+    return {
+      rwy:{'18':{end:[33.834467, 131.037269],brgT:170.35,elev:23},'36':{end:[33.856644, 131.032731],brgT:350.35,elev:22}},
+      nav:{SWE:{lat:33.85662,lng:131.0294,var:8},UBE:{lat:33.93563,lng:131.28353,var:8},MYE:{lat:33.8301,lng:132.69222,var:8},TFE:{lat:33.48971,lng:131.72876,var:8}},
+      sids:{
+        ASARI:as,
+        'ASARI MYE':ex([{to:'ASARI'},{to:'HIMEH'},{to:{rad:133,dme:37.1,nav:'UBE'}},{to:'MYE'}],{m:'ASARI',fix:'MYE',name:'ASARI THREE・MATSUYAMA TRANSITION'}),
+        'ASARI TFE':ex([{to:'ASARI'},{to:'HIMEH'},{to:'TFE'}],{m:'ASARI',fix:'TFE',name:'ASARI THREE・MUSASHI TRANSITION'}),
+        ONGHA:{fix:'ONGHA',nav:'SWE',name:'ONGHA TWO',grad:{'18':{pct:5.8,to:500},'36':{pct:4,to:500}},
+          '18':[{climbTo:500},{to:'SWE',turn:'L'},{to:'ONGHA'}],'36':[{climbTo:500},{to:'SWE',turn:'R'},{to:'ONGHA'}]},
+        KOHEI:{fix:'KOHEI',nav:'SWE',name:'KOHEI ONE (RNAV)',radar:1},
+      }};
+  })(),
+  /* 築城(RJFZ AD2.24-SID-1〜3)。TQT は TACAN・VAR 8°W。滑走路の真方位は "To be issued" なので THR 座標から(69.79°T)。TACAN 装備機のみ。
+     07 は右旋回・25 は 3NM 以内に左旋回して(会合は図に無いので放射線の 3DME で近似):
+     MISHIMA FIVE: R150 → 15DME → 15DME を反時計回りに R092 → MIT R180 → MINNE → MIT(FL150)
+     HIMESHIMA FOUR: R092 → HIMEH(MUSASHI TRANSITION → TFE)/ KUGA SIX: R150 → 15DME → 左旋回で IWT R240 → IWT
+     HIMESHIMA REVERSAL THREE: R092 → 20NM 以内で右に反転 → TQT / NAKATSU REVERSAL TWO: R150 → 20NM 以内で反転 → TQT(MCA 6000)。
+       KANMO(R351)・MINNE(R026 → MIT)・OGORI(R239)TRANSITION */
+  RJFZ:(()=>{
+    const tk=(r)=>({'07':[{to:{rad:r,dme:3},turn:'R'}],'25':[{to:{rad:r,dme:3},turn:'L'}]});
+    const mk=(r,x,o)=>{const b=tk(r);return Object.assign({nav:'TQT',tac:1},o,{'07':b['07'].concat(x),'25':b['25'].concat(x)})};
+    const nk=mk(150,[{to:{rad:150,dme:15}},{to:'TQT',turn:'L'}],{fix:'TQT',name:'NAKATSU REVERSAL TWO',alt:6000});
+    const hm=mk(92,[{to:'HIMEH'}],{fix:'HIMEH',name:'HIMESHIMA FOUR'});
+    const ex=(b,x,o)=>Object.assign({},b,{'07':b['07'].concat(x),'25':b['25'].concat(x)},o);
+    return {
+      rwy:{'07':{end:[33.689022, 131.052906],brgT:69.79,elev:19},'25':{end:[33.681578, 131.028592],brgT:249.79,elev:52}},
+      nav:{TQT:{lat:33.68823,lng:131.03582,var:8},MIT:{lat:34.77167,lng:131.13806,var:8},IWT:{lat:34.0799,lng:132.14731,var:8},TFE:{lat:33.48971,lng:131.72876,var:8}},
+      sids:{
+        'MISHIMA FIVE':mk(150,[{to:{rad:150,dme:15}},{arc:'L',dme:15,to:{rad:92,dme:15}},{to:'MINNE'},{to:'MIT'}],{fix:'MIT',name:'MISHIMA FIVE',alt:15000}),
+        'HIMESHIMA FOUR':hm,
+        'HIMESHIMA TFE':ex(hm,[{to:'TFE'}],{m:'HIMESHIMA FOUR',fix:'TFE',name:'HIMESHIMA FOUR・MUSASHI TRANSITION'}),
+        'KUGA SIX':mk(150,[{to:{rad:150,dme:15}},{to:'IWT',turn:'L'}],{fix:'IWT',name:'KUGA SIX'}),
+        'HIMESHIMA REVERSAL':mk(92,[{to:{rad:92,dme:15}},{to:'TQT',turn:'R'}],{fix:'TQT',name:'HIMESHIMA REVERSAL THREE'}),
+        'NAKATSU REVERSAL':nk,
+        'NAKATSU KANMO':ex(nk,[{to:'KANMO'}],{m:'NAKATSU REVERSAL',fix:'KANMO',name:'NAKATSU REVERSAL TWO・KANMO TRANSITION'}),
+        'NAKATSU MIT':ex(nk,[{to:'MINNE'},{to:'MIT'}],{m:'NAKATSU REVERSAL',fix:'MIT',name:'NAKATSU REVERSAL TWO・MINNE TRANSITION'}),
+        'NAKATSU OGORI':ex(nk,[{to:'OGORI'}],{m:'NAKATSU REVERSAL',fix:'OGORI',name:'NAKATSU REVERSAL TWO・OGORI TRANSITION',alt:7000}),
+      }};
+  })(),
+  /* 大分(RJFO AD2.24-SID-1〜5)。滑走路は AD 2.12(000°/180°T)。TFE(MUSASHI)は VOR/DME・VAR 8°W。
+     MUSASHI REVERSAL TWO: 01 は 500FT → 右 HDG177° / 19 は左旋回 で TFE R132 → 10DME → 右旋回で TFE(4000 以上)。01 は 5.0%(500FT まで)
+     EBOSHI / FUSHA / TOYO(RNAV)と RNAV TRANSITION は図の注記に "RADAR service required" → 書かない(radar:1) */
+  RJFO:{
+    rwy:{'01':{end:[33.493025, 131.737244],brgT:0,elev:17},'19':{end:[33.465981, 131.737006],brgT:180,elev:19}},
+    nav:{TFE:{lat:33.48971,lng:131.72876,var:8}},
+    sids:{
+      MUSASHI:{fix:'TFE',nav:'TFE',name:'MUSASHI REVERSAL TWO',alt:4000,grad:{'01':{pct:5,to:500}},
+        '01':[{climbTo:500},{turn:'R',hdg:177},{intercept:132},{to:{rad:132,dme:10}},{to:'TFE',turn:'R'}],
+        '19':[{to:{rad:132,dme:3},turn:'L'},{to:{rad:132,dme:10}},{to:'TFE',turn:'R'}]},
+      EBOSHI:{fix:'YANAI',nav:'TFE',name:'EBOSHI (RNAV)',radar:1},FUSHA:{fix:'FUSHA',nav:'TFE',name:'FUSHA (RNAV)',radar:1},
+      TOYO:{fix:'OOITA',nav:'TFE',name:'TOYO (RNAV)',radar:1},TRANSITION:{fix:'DONAR',nav:'TFE',name:'RNAV TRANSITION',radar:1},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -10632,6 +10693,34 @@ const IAC_DEF={
   // 小月(IAC-1 2026-04-16・CAT A/B)。TACAN RWY35: UGILA(IAF・待機・R082 D10)→ D10 アーク(時計回り)→ BODOB(IF・R159)→ IDVON → MAPt(D0.9)
   RJOZ:{nav:{OCT:{lat:34.04417,lng:131.04972,var:8}},navId:'OCT',thr:{},pts:{},mah:{'TACAN RWY35':'UGILA'},iac:{
     'TACAN RWY35':[{at:'UGILA'},{arc:10,to:159,dir:'R'},{to:'BODOB'},{to:'IDVON'},{mapt:{rd:[159,0.9]}}]}},
+  // 北九州(IAC-1〜7)。ILS Z / LOC Z・LOC Y・VOR RWY18 は ASARI(R084 D9.5・待機)→ SWE → R018 / R022 / R016 で外向き → 旋回して最終進入。
+  //   ILS Y は SUOH(SWE・IAF)→ R178 → AVBEK、または ASARI(IAF)→ BERBO → FR853(IF)→ FR854(RNP1・RF required → GNSS)。VOR A / B は ASARI → SWE(MAPt)。RNP(AR) は対象外
+  RJFR:{nav:{SWE:{lat:33.85662,lng:131.0294,var:8}},navId:'SWE',thr:{'18':[33.856644, 131.032731]},pts:{FR853:[33.99075,131.097356],FR854:[33.954028,131.012775]},
+    mah:{'ILS Z or LOC Z RWY18':'ASARI','ILS Y RWY18':'ASARI','LOC Y RWY18':'ASARI','VOR RWY18':'ASARI','VOR A':'ASARI','VOR B':'ASARI'},req:{'ILS Y RWY18':'GNSS'},iac:{
+    'ILS Z or LOC Z RWY18':[{at:'ASARI'},{to:'SWE'},{to:{rd:[18,9.7]}},{to:'AVBEK'},{thr:'18'}],
+    'LOC Y RWY18':[{at:'ASARI'},{to:'SWE'},{to:{rd:[22,7]}},{to:'AVBEK'},{thr:'18'}],
+    'VOR RWY18':[{at:'ASARI'},{to:'SWE'},{to:{rd:[16,7]}},{mapt:'SWE'}],
+    'ILS Y RWY18':{ASARI:[{at:'ASARI'},{to:'BERBO'},{to:'FR853'},{to:'FR854'},{to:'AVBEK'},{thr:'18'}]},
+    'VOR A':[{at:'ASARI'},{mapt:{rd:[84,1]}}],
+    'VOR B':[{at:'ASARI'},{to:{rd:[74,1]}},{mapt:{rd:[257,1]}}]}},
+  // 築城(IAC-1〜4 2025-12-25・TACAN)。TACAN Z / Y / X RWY25: SANKO(R131 D14.1)→ D12 アーク(反時計回り)/ USSAH(R086 D16.1)/ SARBA(R061 D26.1)→ D20 アーク(時計回り)
+  //   → R086 → D6.0 → MAPt(D1.4)。TACAN RWY07: SANKO → D13 アーク(時計回り)→ R247 → IPDIM → MAPt(D1.5)。進入復行は SANKO で待機
+  RJFZ:{nav:{TQT:{lat:33.68823,lng:131.03582,var:8}},navId:'TQT',thr:{},pts:{},
+    mah:{'TACAN Z RWY25':'SANKO','TACAN Y RWY25':'SANKO','TACAN X RWY25':'SANKO','TACAN RWY07':'SANKO'},iac:{
+    'TACAN Z RWY25':[{at:'SANKO'},{to:{rd:[131,12]}},{arc:12,to:86,dir:'L'},{to:{rd:[86,6]}},{mapt:{rd:[86,1.4]}}],
+    'TACAN Y RWY25':[{at:'USSAH'},{to:{rd:[86,6]}},{mapt:{rd:[86,1.4]}}],
+    'TACAN X RWY25':[{at:'SARBA'},{to:{rd:[61,20]}},{arc:20,to:86,dir:'R'},{to:{rd:[86,6]}},{mapt:{rd:[86,1.4]}}],
+    'TACAN RWY07':[{at:'SANKO'},{to:{rd:[131,13]}},{arc:13,to:247,dir:'R'},{to:{rd:[247,6.5]}},{mapt:{rd:[247,1.5]}}]}},
+  // 大分(IAC-1〜3・5〜7 2026-10-01)。ILS Y / LOC・VOR RWY01 は TFE の待機から R203 / R195 → D10.0 で旋回 → SONIC / PATRO。
+  //   ILS X は TANSO(IAF・待機)→ FO153(IF)→ RF → NINEN(RNP1・RF required → GNSS)、VOR A は JEWEL(IF・待機)→ IGMAN → MAPt(D1.7)、
+  //   RNP Z RWY19 は KAGEX → KAREI(IF)。ILS Z は IF(NOLEL)に待機が無いので書かない。RNP(AR) は対象外
+  RJFO:{nav:{TFE:{lat:33.48971,lng:131.72876,var:8}},navId:'TFE',thr:{'01':[33.465981, 131.737006],'19':[33.493025, 131.737244]},pts:{FO153:[33.368542, 131.834661]},
+    mah:{'ILS Y or LOC RWY01':'TFE','ILS X RWY01':'BAIEN','VOR RWY01':'TFE','VOR A':'JEWEL','RNP Z RWY19':'TFE'},req:{'ILS X RWY01':'GNSS'},iac:{
+    'ILS Y or LOC RWY01':[{at:'TFE'},{to:{rd:[203,10]}},{to:'SONIC'},{thr:'01'}],
+    'ILS X RWY01':[{at:'TANSO'},{to:'FO153'},{to:'NINEN'},{to:'IKOKU'},{thr:'01'}],
+    'VOR RWY01':[{at:'TFE'},{to:{rd:[195,10]}},{to:'PATRO'},{mapt:{rd:[177,2.5]}}],
+    'VOR A':[{at:'JEWEL'},{to:'IGMAN'},{mapt:{rd:[38,1.7]}}],
+    'RNP Z RWY19':[{at:'KAGEX'},{to:'KAREI'},{to:'AKILU'},{thr:'19'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
