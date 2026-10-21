@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-272';
+const VER_TAG='v6-273';
 const BUILD='2026-10-21';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -9466,6 +9466,90 @@ const SID_DEF={
         '15':[{climbTo:2100},{to:'KEC',turn:'L'}],'33':[{climbTo:800},{to:'BD300',turn:'L'},{to:'BD301'},{to:'KEC'}]},
     }
   },
+  /* 秋田(RJSK AD2.24-SID-1〜6)。滑走路は AD 2.12(096.61°/276.61°T)。UWE(YUWA)は VOR/DME・VAR 9°W。
+     YUWA REVERSAL SEVEN: 900FT → 10 は R105・28 は R285 を 10.8DME → 10 は左・28 は右に旋回して UWE(6000 以上)。RWY10 5.0%(3300FT まで)
+     MUTSU THREE / NIIGATA THREE / USYU TWO(RNAV): 10 は HDG106°・28 は HDG286° で 900FT → 図の点(SK011/SK012/SK801 は図の座標)→ MRE / GTC / YTE */
+  RJSK:{
+    rwy:{'10':{end:[39.61435,140.233125],brgT:96.61,elev:314},'28':{end:[39.616939,140.204206],brgT:276.61,elev:289}},
+    nav:{UWE:{lat:39.61713,lng:140.18694,var:9},MRE:{lat:40.73879,lng:140.70533,var:9},GTC:{lat:37.95829,lng:139.11489,var:9},
+      YTE:{lat:38.38862,lng:140.35795,var:9},SK011:{lat:39.60225,lng:140.367333,var:9},SK012:{lat:39.527667,lng:140.356028,var:9},
+      SK801:{lat:39.3325,lng:140.214028,var:9}},
+    sids:{
+      YUWA:{fix:'UWE',nav:'UWE',name:'YUWA REVERSAL SEVEN',alt:6000,grad:{'10':{pct:5,to:3300}},
+        '10':[{climbTo:900},{intercept:105},{to:{rad:105,dme:10.8}},{to:'UWE',turn:'L'}],
+        '28':[{climbTo:900},{intercept:285},{to:{rad:285,dme:10.8}},{to:'UWE',turn:'R'}]},
+      MUTSU:{fix:'MRE',nav:'UWE',name:'MUTSU THREE',grad:{'10':{pct:5,to:3800}},
+        '10':[{climbTo:900},{to:'SUGUT',turn:'L'},{to:'IRNOG'},{to:'MRE'}],'28':[{climbTo:900},{to:'NUPLI',turn:'R'},{to:'MRE'}]},
+      NIIGATA:{fix:'GTC',nav:'UWE',name:'NIIGATA THREE',
+        '10':[{climbTo:900},{to:'SK011'},{to:'SK012'},{to:'ELPEK'},{to:'GTC'}],'28':[{climbTo:900},{to:'ELPEK',turn:'L'},{to:'GTC'}]},
+      USYU:{fix:'YTE',nav:'UWE',name:'USYU TWO',
+        '10':[{climbTo:900},{to:'MUSHA',turn:'R'},{to:'YTE'}],'28':[{climbTo:900},{to:'SK801',turn:'L'},{to:'MUSHA'},{to:'YTE'}]},
+    }
+  },
+  /* 花巻(RJSI AD2.24-SID-1〜6)。滑走路は AD 2.12(010.73°/190.73°T)。HPE は VOR/DME・VAR 9°W。
+     OHSHU TWO: 02 は 900FT → 左旋回(会合針路は仮定)/ 20 は 1300FT → 左 HDG325° で R010 → OHSHU
+     NIIGATA SIX: 02 は HPE 3.5DME → 右・20 は 3.5DME → 左に旋回して HPE(2200 以上)→ R236 → D50(12000 以上)→ GTC R055 → GTC
+     HANAMAKI REVERSAL THREE: 700FT → 02 は R022・20 は R195 を 6.0DME → 02 は右・20 は左に旋回して HPE(6000 以上)
+     SAMBO ONE / HANKA ONE(RNAV): SAMBO は AKARI → DASCO → SAMBO(20 は SI010 経由)、HANKA は直接(11000 以上) */
+  RJSI:{
+    rwy:{'02':{end:[39.439789,141.138086],brgT:10.73,elev:298},'20':{end:[39.417661,141.132672],brgT:190.73,elev:283}},
+    nav:{HPE:{lat:39.43336,lng:141.1335,var:9},GTC:{lat:37.95829,lng:139.11489,var:9},SI010:{lat:39.449833,lng:141.032111,var:9}},
+    sids:{
+      OHSHU:{fix:'OHSHU',nav:'HPE','02':[{climbTo:900},{turn:'L',hdg:340,assumed:1},{intercept:10}],
+        '20':[{climbTo:1300},{turn:'L',hdg:325},{intercept:10}],name:'OHSHU TWO'},
+      NIIGATA:{fix:'GTC',nav:'HPE',name:'NIIGATA SIX',alt:12000,grad:{'02':{pct:4.5,to:2400},'20':{pct:3.9,to:1100}},
+        '02':[{dme:3.5},{to:'HPE',turn:'R'},{to:{rad:236,dme:50}},{to:'GTC'}],'20':[{dme:3.5},{to:'HPE',turn:'L'},{to:{rad:236,dme:50}},{to:'GTC'}]},
+      HANAMAKI:{fix:'HPE',nav:'HPE',name:'HANAMAKI REVERSAL THREE',alt:6000,grad:{'02':{pct:5,to:3200}},
+        '02':[{climbTo:700},{intercept:22},{to:{rad:22,dme:6}},{to:'HPE',turn:'R'}],'20':[{climbTo:700},{intercept:195},{to:{rad:195,dme:6}},{to:'HPE',turn:'L'}]},
+      SAMBO:{fix:'SAMBO',nav:'HPE',name:'SAMBO ONE',grad:{'02':{pct:4,to:700},'20':{pct:4,to:2700}},
+        '02':[{climbTo:700},{to:'AKARI'},{to:'DASCO'},{to:'SAMBO'}],'20':[{climbTo:1300},{to:'SI010',turn:'R'},{to:'AKARI'},{to:'DASCO'},{to:'SAMBO'}]},
+      HANKA:{fix:'HANKA',nav:'HPE',name:'HANKA ONE',alt:11000,grad:{'02':{pct:5,to:3600},'20':{pct:5,to:5400}},
+        '02':[{climbTo:1600},{to:'HANKA',turn:'L'}],'20':[{climbTo:800},{to:'HANKA',turn:'R'}]},
+    }
+  },
+  /* 徳島(RJOS AD2.24-SID-1〜6)。滑走路は AD 2.12(102.53°/282.53°T)。TSC は VORTAC(VOR の位置)・VAR 8°W。
+     TOKUSHIMA REVERSAL SEVEN: 11 は 500FT → 右 HDG205° / 29 は 600FT → 左 HDG115° で R160 → 13DME → 右旋回で TSC(6000 以上)
+     TOSAR SIX: 11 は 500FT → 右 HDG232° / 29 は 600FT → 左 HDG142° で R187 → TOSAR
+     MISAKI FOUR: 11 は 500FT → 右旋回(会合針路は仮定)/ 29 は 600FT → 左 HDG098° で R143 → HONMA(8000 以上)。KUSHIMOTO TRANSITION は KEC R306 → KEC
+     HONMA TWO(RNAV): HATIS → SIJIL(3000)→ HONMA(5000)。KILAP TRANSITION は KMANO → KILAP。KAGAWA ONE(RNAV): OBDED(5000)→ KTE */
+  RJOS:(()=>{
+    const ex=(b,x,o)=>Object.assign({},b,{'11':b['11'].concat(x),'29':b['29'].concat(x)},o);
+    const ms={fix:'HONMA',nav:'TSC',name:'MISAKI FOUR',alt:8000,grad:{'29':{pct:4,to:800}},
+      '11':[{climbTo:500},{turn:'R',hdg:170,assumed:1},{intercept:143}],'29':[{climbTo:600},{turn:'L',hdg:98},{intercept:143}]};
+    const hm={fix:'HONMA',nav:'TSC',name:'HONMA TWO',grad:{'29':{pct:5,to:1200}},
+      '11':[{climbTo:500},{to:'HATIS',turn:'R'},{to:'SIJIL'},{to:'HONMA'}],'29':[{climbTo:500},{to:'HATIS',turn:'L'},{to:'SIJIL'},{to:'HONMA'}]};
+    return {
+      rwy:{'11':{end:[34.129822,134.622492],brgT:102.53,elev:37},'29':{end:[34.134717,134.595],brgT:282.53,elev:6}},
+      nav:{TSC:{lat:34.12972,lng:134.60861,var:8},KEC:{lat:33.44774,lng:135.79449,var:8},KTE:{lat:34.2125,lng:134.02259,var:8}},
+      sids:{
+        TOKUSHIMA:{fix:'TSC',nav:'TSC',name:'TOKUSHIMA REVERSAL SEVEN',alt:6000,grad:{'29':{pct:4,to:800}},
+          '11':[{climbTo:500},{turn:'R',hdg:205},{intercept:160},{to:{rad:160,dme:13}},{to:'TSC',turn:'R'}],
+          '29':[{climbTo:600},{turn:'L',hdg:115},{intercept:160},{to:{rad:160,dme:13}},{to:'TSC',turn:'R'}]},
+        TOSAR:{fix:'TOSAR',nav:'TSC',name:'TOSAR SIX',grad:{'29':{pct:4,to:800}},
+          '11':[{climbTo:500},{turn:'R',hdg:232},{intercept:187}],'29':[{climbTo:600},{turn:'L',hdg:142},{intercept:187}]},
+        MISAKI:ms,'MISAKI KEC':ex(ms,[{to:'HONMA'},{to:'KEC'}],{m:'MISAKI',fix:'KEC',name:'MISAKI FOUR・KUSHIMOTO TRANSITION'}),
+        HONMA:hm,'HONMA KILAP':ex(hm,[{to:'KMANO'},{to:'KILAP'}],{m:'HONMA',fix:'KILAP',name:'HONMA TWO・KILAP TRANSITION'}),
+        KAGAWA:{fix:'KTE',nav:'TSC',name:'KAGAWA ONE',grad:{'11':{pct:5,to:1700},'29':{pct:5,to:2800}},
+          '11':[{climbTo:500},{to:'OBDED',turn:'R'},{to:'KTE'}],'29':[{climbTo:500},{to:'OBDED'},{to:'KTE'}]},
+      }};
+  })(),
+  /* 鳥取(RJOR AD2.24-SID-1〜2)。滑走路は AD 2.12(093.78°/273.78°T)。TRE は VOR/DME・VAR 8°W。
+     AYABE THREE / TOTTORI REVERSAL THREE: 10 は 500FT → 左 HDG345° / 28 は 500FT → 右 HDG075° で R030 → 13DME →
+       AYABE は右旋回で YME R300 → YME、REVERSAL は左旋回で TRE。10 は 5.5%(1300FT まで)・28 は 4.0%(700FT まで)
+     MIYAZU TWO(RNAV): 10 は HDG102° 500FT → 左旋回 / 28 は HDG282° 700FT → 右旋回 で OR001 → MARUB(6000)→ YME */
+  RJOR:(()=>{
+    const g={'10':{pct:5.5,to:1300},'28':{pct:4,to:700}};
+    const r030={'10':[{climbTo:500},{turn:'L',hdg:345},{intercept:30},{to:{rad:30,dme:13}}],'28':[{climbTo:500},{turn:'R',hdg:75},{intercept:30},{to:{rad:30,dme:13}}]};
+    return {
+      rwy:{'10':{end:[35.529453,134.176053],brgT:93.78,elev:65},'28':{end:[35.530644,134.154047],brgT:273.78,elev:29}},
+      nav:{TRE:{lat:35.5273,lng:134.16489,var:8},YME:{lat:35.48069,lng:135.13702,var:8},OR001:{lat:35.683056,lng:134.29625,var:8}},
+      sids:{
+        AYABE:{fix:'YME',nav:'TRE',name:'AYABE THREE',grad:g,'10':r030['10'].concat([{to:'YME',turn:'R'}]),'28':r030['28'].concat([{to:'YME',turn:'R'}])},
+        'TOTTORI REVERSAL':{fix:'TRE',nav:'TRE',name:'TOTTORI REVERSAL THREE',grad:g,'10':r030['10'].concat([{to:'TRE',turn:'L'}]),'28':r030['28'].concat([{to:'TRE',turn:'L'}])},
+        MIYAZU:{fix:'YME',nav:'TRE',name:'MIYAZU TWO',alt:6000,grad:{'10':{pct:5.3,to:1100},'28':{pct:3.6,to:700}},
+          '10':[{climbTo:500},{to:'OR001',turn:'L'},{to:'MARUB'},{to:'YME'}],'28':[{climbTo:700},{to:'OR001',turn:'R'},{to:'MARUB'},{to:'YME'}]},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -9933,6 +10017,50 @@ const IAC_DEF={
     'VOR A':[{at:'NKE'},{to:{rd:[207,11]}},{to:'SANDN'},{mapt:{rd:[190,1]}}],
     'RNP Y RWY15':[{at:'ESBAK'},{to:'BD559'},{to:'BD550'},{to:'BD551'},{to:'BD552'},{to:'GALAS'},{thr:'15'}],
     'RNP Y RWY33':[{at:'MUROH'},{to:'BD350'},{to:'BD351'},{to:'PANDA'},{to:'BD352'},{to:'BD353'},{thr:'33'}]}},
+  // 秋田(IAC-1〜5・9 2025-04-17)。ILS Y・VOR RWY28 は UWE の待機から R121/R118 → D11.0/D13.0 で旋回、VOR RWY10 は R263 → D11.0 で旋回。
+  //   ILS Z は GAKKO(→ NYUTO)/ BIJIN → ENPES(IF)(初期進入は RNP1・GNSS required)、RNP Z RWY28 は GAKKO → KUREE / BIJIN → ENPES、RNP Z RWY10 は POLTA / BRIKO → IKESO。
+  //   RNP Y(AR) は対象外
+  RJSK:(()=>{const z28=[{to:'ENPES'},{to:'KYOWA'},{thr:'28'}],r28=[{to:'ENPES'},{to:'SK852'},{to:'LEBAP'},{thr:'28'}],r10=[{to:'IKESO'},{to:'ALATO'},{to:'SK054'},{thr:'10'}];
+    return {nav:{UWE:{lat:39.61713,lng:140.18694,var:9}},navId:'UWE',thr:{'28':[39.61435,140.233125],'10':[39.616939,140.204206]},
+    pts:{SK054:[39.623619,140.129186],SK852:[39.602592,140.363453]},
+    mah:{'ILS Z or LOC Z RWY28':'UWE','ILS Y or LOC Y RWY28':'UWE','VOR RWY28':'UWE','VOR RWY10':'UWE','RNP Z RWY10':'BRIKO','RNP Z RWY28':'UWE'},
+    req:{'ILS Z or LOC Z RWY28':'GNSS'},iac:{
+    'ILS Y or LOC Y RWY28':[{at:'UWE'},{to:{rd:[121,11]}},{to:'KAKNO'},{thr:'28'}],
+    'ILS Z or LOC Z RWY28':{GAKKO:[{at:'GAKKO'},{to:'NYUTO'}].concat(z28),BIJIN:[{at:'BIJIN'}].concat(z28)},
+    'VOR RWY28':[{at:'UWE'},{to:{rd:[118,13]}},{to:'SEDMI'},{mapt:{rd:[104,2.1]}}],
+    'VOR RWY10':[{at:'UWE'},{to:{rd:[263,11]}},{to:'YAESU'},{mapt:'UWE'}],
+    'RNP Z RWY10':{POLTA:[{at:'POLTA'}].concat(r10),BRIKO:[{at:'BRIKO'}].concat(r10)},
+    'RNP Z RWY28':{GAKKO:[{at:'GAKKO'},{to:'KUREE'}].concat(r28),BIJIN:[{at:'BIJIN'}].concat(r28)}}};})(),
+  // 花巻(IAC-1〜5・12)。ILS Z・VOR RWY20 は HPE の待機から R006/R007 → D13.0/D12.0 で旋回、VOR RWY02 は R179 → D11.0 で旋回。
+  //   ILS Y は MORIO(IAF)→ D17 アーク → APUSO(IF)/ WANKO(IAF・初期進入 GNSS)、RNP X RWY20 は MORIO / WANKO → APUSO、RNP Z RWY02 は SIOMO / REMEN → NITBE。
+  //   RNP Y / Z(AR) は対象外
+  RJSI:(()=>{const x=[{to:'APUSO'},{to:'SI256'},{to:'HIZME'},{to:'SI257'},{thr:'20'}],z=[{to:'NITBE'},{to:'INAZO'},{to:'SI250'},{thr:'02'}];
+    return {nav:{HPE:{lat:39.43336,lng:141.1335,var:9}},navId:'HPE',thr:{'20':[39.439789,141.138086],'02':[39.417661,141.132672]},
+    pts:{SI254:[39.613264,141.314522],SI255:[39.613492,141.249797],SI256:[39.564517,141.168669],SI257:[39.468058,141.144453],SI250:[39.393067,141.126658]},
+    mah:{'ILS Z or LOC Z RWY20':'HPE','ILS Y or LOC Y RWY20':'HPE','VOR RWY20':'HPE','VOR RWY02':'HPE','RNP X RWY20':'HPE','RNP Z RWY02':'HPE'},iac:{
+    'ILS Z or LOC Z RWY20':[{at:'HPE'},{to:{rd:[6,13]}},{to:'HIZME'},{thr:'20'}],
+    'ILS Y or LOC Y RWY20':{MORIO:[{at:'MORIO'},{to:{rd:[54,17]}},{arc:17,to:20,dir:'L'},{to:'APUSO'},{to:'HIZME'},{thr:'20'}]},
+    'VOR RWY20':[{at:'HPE'},{to:{rd:[7,12]}},{to:'MASAH'},{mapt:{rd:[7,0.4]}}],
+    'VOR RWY02':[{at:'HPE'},{to:{rd:[179,11]}},{to:'SHIHO'},{mapt:{rd:[195,0.9]}}],
+    'RNP X RWY20':{MORIO:[{at:'MORIO'},{to:'SI254'},{to:'SI255'}].concat(x),WANKO:[{at:'WANKO'},{to:'RYUHO'},{to:'TAIHO'}].concat(x)},
+    'RNP Z RWY02':{SIOMO:[{at:'SIOMO'},{to:'RYUTA'}].concat(z),REMEN:[{at:'REMEN'}].concat(z)}}};})(),
+  // 徳島(IAC-1〜5・10)。ILS Y・VOR RWY29 は TSC の待機から R123/R120 → D12.0/D11.0 で旋回。ILS W・TACAN A は ENSES(IAF・待機)→ R140 → D13 アーク(反時計回り)
+  //   → IRTUG / INVUX(IF)。RNP Z RWY29 は DATIS → UZUPY(IF)。ILS Z は IF(LIGSU)に待機が無いので書かない。RNP(AR) は対象外
+  RJOS:{nav:{TSC:{lat:34.12972,lng:134.60861,var:8}},navId:'TSC',thr:{'29':[34.129822,134.622492]},pts:{OS950:[34.129822,134.622494]},
+    mah:{'ILS Y OR LOC Y RWY29':'TSC','ILS W OR LOC W RWY29':'ENSES','VOR RWY29':'TSC','TACAN A':'ENSES','RNP Z RWY29':'DATIS'},iac:{
+    'ILS Y OR LOC Y RWY29':[{at:'TSC'},{to:{rd:[123,12]}},{to:'GUNVI'},{thr:'29'}],
+    'ILS W OR LOC W RWY29':[{at:'ENSES'},{to:{rd:[140,13]}},{arc:13,to:109,dir:'L'},{to:'IRTUG'},{to:'GUNVI'},{thr:'29'}],
+    'VOR RWY29':[{at:'TSC'},{to:{rd:[120,11]}},{to:'ADKIP'},{mapt:{rd:[104,1]}}],
+    'TACAN A':[{at:'ENSES'},{to:{rd:[140,13]}},{arc:13,to:115,dir:'L'},{to:'INVUX'},{to:'OTKEV'},{mapt:{rd:[115,1]}}],
+    'RNP Z RWY29':[{at:'DATIS'},{to:'UZUPY'},{to:'DAIKU'},{mapt:'OS950'}]}},
+  // 鳥取(IAC-1〜4・9 2026-02-19)。ILS Z / LOC・VOR RWY10 は TRE の待機から R298/R305 → D11.0 で旋回 → NASSY / PEARS。
+  //   ILS Y は KANNA(IAF)→ AGULI → OR055 → OR056(IF)→ RF → OR057(RNP1・RF required → GNSS)、RNP X RWY10 は TRE → OR058 → OR059 → OR060(IF)。RNP(AR) は対象外
+  RJOR:{nav:{TRE:{lat:35.5273,lng:134.16489,var:8}},navId:'TRE',thr:{'10':[35.530644,134.154047]},pts:{OR054:[35.670475,134.238514],OR055:[35.616119,134.120514],OR056:[35.619392,134.059297],OR057:[35.536083,134.052656],OR058:[35.61875,134.045047],OR059:[35.624069,133.944006],OR060:[35.54215,133.937592]},
+    mah:{'ILS Z or LOC RWY10':'TRE','ILS Y RWY10':'TRE','VOR RWY10':'TRE','RNP X RWY10':'TRE'},req:{'ILS Y RWY10':'GNSS'},iac:{
+    'ILS Z or LOC RWY10':[{at:'TRE'},{to:{rd:[298,11]}},{to:'NASSY'},{thr:'10'}],
+    'ILS Y RWY10':[{at:'KANNA'},{to:'AGULI'},{to:'OR055'},{to:'OR056'},{to:'OR057'},{to:'UKDEP'},{thr:'10'}],
+    'VOR RWY10':[{at:'TRE'},{to:{rd:[305,11]}},{to:'PEARS'},{mapt:{rd:[289,1.6]}}],
+    'RNP X RWY10':[{at:'TRE'},{to:'OR058'},{to:'OR059'},{to:'OR060'},{to:'NASSY'},{thr:'10'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
