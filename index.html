@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-281';
+const VER_TAG='v6-282';
 const BUILD='2026-10-22';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8228,7 +8228,10 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t&&e.tag===tag))return;
     // SID の形がある方式は、その経路長を辺の長さにする(直線だと反転 SID が 0.4NM で「ただ」に見える)
     const sl=x.p.k==='SID'&&ap.icao?sidLenMin(ap.icao,x.p.n,t):0;
-    add(k,t,{d:sl||distNM(ap,G.nodes[t]),tr:1,tag,proc:x});linked++;
+    // 図の "Cross ◯◯ at or above"(SID_DEF の alt)はその SID の区間の最低高度として持つ → 巡航高度に入る(熊本 RINDO の MIYAZAKI TRANSITION 8000)
+    const SA=x.p.k==='SID'&&SID_DEF[ap.icao],ka=SA?Object.keys(SA.sids).filter(q=>sidHit(SA.sids[q],q,x.p.n.toUpperCase())&&sidEndOf(SA,q)===t&&SA.sids[q].alt):[];
+    const sa=ka.length?Math.min(...ka.map(q=>SA.sids[q].alt)):null;
+    add(k,t,{d:sl||distNM(ap,G.nodes[t]),tr:1,tag,proc:x,mea:sa});linked++;
   }));
   // 進入方式の IAF(進入図の "TOHNE(IAF)" から拾ったもの)。STAR が無い飛行場でも IAF へ向かう経路になる
   // 同じ IAF から入る方式が複数あれば、種類の優先順(ILS>RNP>LOC>VOR>TACAN>NDB)で上の方式をその IAF の辺にする
@@ -10061,6 +10064,79 @@ const SID_DEF={
         KIZAK:{fix:'JACKY',nav:'MZE',name:'KIZAK (RNAV)',radar:1},KIRISHIMA:{fix:'KIZAK',nav:'MZE',name:'KIRISHIMA (RNAV)',radar:1},
       }};
   })(),
+  /* 熊本(RJFT AD2.24-SID-1〜6)。滑走路は AD 2.12(064.58°/244.58°T)。KUE は VOR/DME・VAR 8°W。
+     25 は R251 → 3DME → 左旋回 / 07 は左旋回で KUE へ、のあと:
+     KUMAMOTO REVERSAL SEVEN: R206 → RINDO(7000)→ 左旋回で R186 → KUE(D8 で FL140)/ RINDO FIVE: R206 → RINDO。07 は 5.7%(2700FT まで)
+       TRANSITION: MIYAZAKI(25DME 反時計回り → MZE R339 → MZE)・KAGOSHIMA(HKC 45DME → HKC R039 → HKC)・MUSASHI(25DME → TFE R211 → TFE・FL150)。アークへの乗り方は近似
+     HINAG FOUR: R219 → HINAG(8000)/ IRUKA TWO: R228 → IRUKA(4000)
+     MIFNE(RNAV)は "RADAR service required" → 書かない(radar:1) */
+  RJFT:(()=>{
+    const g={'07':{pct:5.7,to:2700}};
+    const b=x=>({'25':[{intercept:251},{to:{rad:251,dme:3}},{to:{rad:x,dme:6},turn:'L'}],'07':[{to:'KUE',turn:'L'},{to:{rad:x,dme:6}}]});
+    const mk=(r,x,o)=>{const q=b(r);return Object.assign({nav:'KUE',grad:g},o,{'25':q['25'].concat(x),'07':q['07'].concat(x)})};
+    const rd=[{to:'RINDO'}];
+    return {
+      rwy:{'07':{end:[32.843122, 130.869522],brgT:64.58,elev:642},'25':{end:[32.831514, 130.840581],brgT:244.58,elev:601}},
+      nav:{KUE:{lat:32.8348,lng:130.84151,var:8},MZE:{lat:31.87873,lng:131.43747,var:8},HKC:{lat:31.69722,lng:130.58294,var:8},TFE:{lat:33.48971,lng:131.72876,var:8}},
+      sids:{
+        KUMAMOTO:mk(206,rd.concat([{to:{rad:186,dme:8},turn:'L'},{to:'KUE'}]),{fix:'KUE',name:'KUMAMOTO REVERSAL SEVEN',alt:14000}),
+        RINDO:mk(206,rd,{fix:'RINDO',name:'RINDO FIVE',alt:7000}),
+        'RINDO MZE':mk(206,rd.concat([{to:{rad:200,dme:25},turn:'L'},{arc:'L',dme:25,to:{rad:159,dme:25}},{to:'MZE'}]),{m:'RINDO',fix:'MZE',name:'RINDO FIVE・MIYAZAKI TRANSITION',alt:8000}),
+        'RINDO HKC':mk(206,rd.concat([{to:{rad:39,dme:45,nav:'HKC'},turn:'L'},{to:'HKC'}]),{m:'RINDO',fix:'HKC',name:'RINDO FIVE・KAGOSHIMA TRANSITION',alt:9000}),
+        'RINDO TFE':mk(206,rd.concat([{to:{rad:200,dme:25},turn:'L'},{arc:'L',dme:25,to:{rad:140,dme:25}},{to:'TFE'}]),{m:'RINDO',fix:'TFE',name:'RINDO FIVE・MUSASHI TRANSITION',alt:15000}),
+        HINAG:mk(219,[{to:'HINAG'}],{fix:'HINAG',name:'HINAG FOUR',alt:8000}),
+        IRUKA:mk(228,[{to:'IRUKA'}],{fix:'IRUKA',name:'IRUKA TWO',alt:4000}),
+        MIFNE:{fix:'MIFNE',nav:'KUE',name:'MIFNE (RNAV)',radar:1},
+      }};
+  })(),
+  /* 札幌(丘珠)(RJCO AD2.24-SID-1〜8)。滑走路は AD 2.12(134.85°/314.85°T)。SPE は VOR/DME・VAR 10°W。
+     KURIS THREE: 14 は左・32 は右に旋回して HDG057° で R103 → KURIS(5000)/ SAPPORO THREE: SPE へ
+     SAPPORO REVERSAL FOUR: SPE → R335 → 左旋回で R310 → SPE(R310/6DME で 10000)/ KURIS REVERSAL FOUR: SPE → R325 → 3000 → 左旋回で R305 → SPE → R103 → KURIS(7000)
+     TRANSITION(SPE から): RUMOI(R040)・BEEBA(R069)・MOIWA(R325 3000 → 左旋回で R203 → MOIWA 8000)
+     BANKE TWO / ADBEB ONE・TOBET EAST / NORTH・PEXOV ONE(RNAV): 14 は HDG145° 500FT・32 は HDG325°(BANKE / ADBEB は 2000FT)。6.0% */
+  RJCO:(()=>{
+    const g={'14':{pct:6,to:500},'32':{pct:6,to:500}};
+    const sp={m:/SAPPORO$/,fix:'SPE',nav:'SPE',name:'SAPPORO THREE','14':[{to:'SPE',turn:'L'}],'32':[{to:'SPE'}]};
+    const ex=(b,x,o)=>Object.assign({},b,{'14':b['14'].concat(x),'32':b['32'].concat(x)},o);
+    const rn=(fx,nm,a,c,o)=>Object.assign({fix:fx,nav:'SPE',name:nm,grad:g,
+      '14':[{climbTo:500},{to:a[0],turn:'L'}].concat(a.slice(1).map(t=>({to:t}))),'32':[{climbTo:o&&o.c32||500},{to:c[0],turn:o&&o.t32||'R'}].concat(c.slice(1).map(t=>({to:t})))},o);
+    return {
+      rwy:{'14':{end:[43.112661, 141.387822],brgT:134.85,elev:27},'32':{end:[43.122186, 141.374753],brgT:314.85,elev:20}},
+      nav:{SPE:{lat:43.17464,lng:141.30238,var:10}},
+      sids:{
+        KURIS:{m:/^KURIS,/,fix:'KURIS',nav:'SPE',name:'KURIS THREE',alt:5000,'14':[{turn:'L',hdg:57},{intercept:103}],'32':[{turn:'R',hdg:57},{intercept:103}]},
+        SAPPORO:sp,
+        'SAPPORO REVERSAL':ex(sp,[{to:{rad:335,dme:6}},{to:{rad:310,dme:12},turn:'L'},{to:'SPE',turn:'L'}],{m:'SAPPORO REVERSAL',name:'SAPPORO REVERSAL FOUR',alt:10000}),
+        'KURIS REVERSAL':ex(sp,[{to:{rad:325,dme:6}},{to:{rad:305,dme:9},turn:'L'},{to:'SPE',turn:'L'},{to:'KURIS'}],{m:/^KURIS REVERSAL/,fix:'KURIS',name:'KURIS REVERSAL FOUR',alt:7000}),
+        'SAPPORO RUMOI':ex(sp,[{to:'RUMOI'}],{fix:'RUMOI',name:'SAPPORO THREE・RUMOI TRANSITION'}),
+        'SAPPORO BEEBA':ex(sp,[{to:'BEEBA'}],{fix:'BEEBA',name:'SAPPORO THREE・BEEBA TRANSITION'}),
+        'SAPPORO MOIWA':ex(sp,[{to:{rad:325,dme:5}},{to:{rad:203,dme:5},turn:'L'},{to:'MOIWA'}],{fix:'MOIWA',name:'SAPPORO THREE・MOIWA TRANSITION',alt:8000}),
+        BANKE:rn('MOIWA','BANKE TWO',['YAFFL','FUUTA','BANKE','MOIWA'],['BANKE','MOIWA'],{alt:8000,c32:2000,t32:'L'}),
+        ADBEB:rn('ADBEB','ADBEB ONE',['YAFFL','FUUTA','BANKE','MOIWA','ADBEB'],['BANKE','MOIWA','ADBEB'],{alt:11000,c32:2000,t32:'L'}),
+        'TOBET EAST':rn('KURIS','TOBET EAST ONE',['TOBET','KURIS'],['TOBET','KURIS'],{alt:5000}),
+        NORTH:rn('RUMOI','TOBET NORTH ONE',['TOBET','RUMOI'],['TOBET','RUMOI']),
+        PEXOV:rn('PEXOV','PEXOV ONE',['YAFFL','PEXOV'],['PEXOV'],{alt:6000}),
+      }};
+  })(),
+  /* 帯広(RJCB AD2.24-SID-1〜6)。滑走路は AD 2.12(159.30°/339.30°T)。OBE は VOR/DME・VAR 9°W。17 は 1000FT・35 は 900FT まで滑走路方位。35 は 5.0%(1500FT まで)
+     KUSHIRO SIX: 17 は左 HDG031° / 35 は右 HDG121° で R076 → TCE(D20 で 5000)/ NODUK TWO: 17 は左 HDG301° / 35 はそのまま R346 → NODUK(6000)
+     OBIHIRO REVERSAL EIGHT: 17 は左で R131 / 35 は右で R040 → 3000FT → 旋回して OBE(6000)/ RACKO THREE: 17 はそのまま / 35 は右 HDG215° で R170 → RACKO(10000)
+     RUGMO TWO: 17 は左 HDG355° / 35 は右旋回で R040 → RUGMO(6000)/ OTTER TWO(RNAV): RACKO へ直行(10000) */
+  RJCB:(()=>{
+    const g={'35':{pct:5,to:1500}};
+    return {
+      rwy:{'17':{end:[42.723075, 143.222822],brgT:159.3,elev:505},'35':{end:[42.744128, 143.212031],brgT:339.3,elev:470}},
+      nav:{OBE:{lat:42.73396,lng:143.22045,var:9},TCE:{lat:43.03605,lng:144.20076,var:9}},
+      sids:{
+        KUSHIRO:{fix:'TCE',nav:'OBE',name:'KUSHIRO SIX',alt:5000,grad:g,'17':[{climbTo:1000},{turn:'L',hdg:31},{intercept:76},{to:'TCE'}],'35':[{climbTo:900},{turn:'R',hdg:121},{intercept:76},{to:'TCE'}]},
+        NODUK:{fix:'NODUK',nav:'OBE',name:'NODUK TWO',alt:6000,grad:g,'17':[{climbTo:1000},{turn:'L',hdg:301},{intercept:346}],'35':[{climbTo:900},{intercept:346}]},
+        'OBIHIRO REVERSAL':{fix:'OBE',nav:'OBE',name:'OBIHIRO REVERSAL EIGHT',alt:6000,grad:g,
+          '17':[{climbTo:1000},{to:{rad:131,dme:3},turn:'L'},{climbTo:3000},{to:'OBE',turn:'L'}],'35':[{climbTo:900},{to:{rad:40,dme:3},turn:'R'},{climbTo:3000},{to:'OBE',turn:'R'}]},
+        RACKO:{fix:'RACKO',nav:'OBE',name:'RACKO THREE',alt:10000,grad:g,'17':[{climbTo:1000},{intercept:170}],'35':[{climbTo:900},{turn:'R',hdg:215},{intercept:170}]},
+        RUGMO:{fix:'RUGMO',nav:'OBE',name:'RUGMO TWO',alt:6000,grad:g,'17':[{climbTo:1000},{turn:'L',hdg:355},{intercept:40}],'35':[{climbTo:900},{to:{rad:40,dme:3},turn:'R'},{to:'RUGMO'}]},
+        OTTER:{fix:'RACKO',nav:'OBE',name:'OTTER TWO',alt:10000,grad:g,'17':[{climbTo:1000},{to:'RACKO'}],'35':[{climbTo:900},{to:'RACKO',turn:'R'}]},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -10796,6 +10872,31 @@ const IAC_DEF={
     'ILS Z or LOC Z RWY27':[{at:'OYODO'},{to:'SINWA'},{thr:'27'}],
     'ILS Y or LOC Y RWY27':[{at:'MZE'},{to:{rd:[109,11]}},{to:'SINWA'},{thr:'27'}],
     'VOR RWY27':[{at:'MZE'},{to:{rd:[112,11]}},{to:'PEKAN'},{mapt:{rd:[96,1.2]}}]}},
+  // 熊本(IAC-1〜4 2025-12-01)。ILS or LOC・VOR RWY07・RNP RWY07 は MISMI(IF・待機・KUE R251 D10.5)から、VOR A は TAKAS(IF・待機)→ MASAT → MAPt(D1.0)。
+  //   ILS の図は "CAT II & III" だが CAT I のミニマあり。RNP Y/Z RWY25(AR) は対象外
+  RJFT:{nav:{KUE:{lat:32.8348,lng:130.84151,var:8}},navId:'KUE',thr:{'07':[32.831514, 130.840581]},pts:{FT760:[32.827214, 130.829864]},
+    mah:{'ILS or LOC RWY07 CAT II & III':'MISMI','VOR RWY07':'MISMI','VOR A':'MISMI','RNP RWY07':'MISMI'},iac:{
+    'ILS or LOC RWY07 CAT II & III':[{at:'MISMI'},{to:'HINOK'},{thr:'07'}],
+    'VOR RWY07':[{at:'MISMI'},{to:'KENGU'},{mapt:{rd:[247,0.7]}}],
+    'VOR A':[{at:'TAKAS'},{to:'MASAT'},{mapt:{rd:[297,1]}}],
+    'RNP RWY07':[{at:'MISMI'},{to:'POPEV'},{mapt:'FT760'}]}},
+  // 札幌(丘珠)(IAC-1〜3・5)。VOR RWY14 は SPE の待機から R350 → 反転 → SPE → R144、VOR RWY32 は SPE → R130 → 反転 → R144(SPE 13DME 以内)。
+  //   RNP RWY14 は PEXOV / SOBEE / NIKAN → OLSUT(IF)、RNP RWY32 は CLAKY / JODAI → ADPIN(IF)
+  RJCO:(()=>{const r14=[{to:'OLSUT'},{to:'AGOVO'},{to:'CO451'},{thr:'14'}],r32=[{to:'ADPIN'},{to:'IKANU'},{to:'CO252'},{thr:'32'}];
+    return {nav:{SPE:{lat:43.17464,lng:141.30238,var:10}},navId:'SPE',thr:{'14':[43.122186, 141.374753],'32':[43.112661, 141.387822]},pts:{CO451:[43.152756,141.332764],CO252:[43.0925,141.415467]},
+    mah:{'VOR RWY14':'SPE','VOR RWY32':'SPE','RNP RWY14':'SOBEE','RNP RWY32':'SPE'},iac:{
+    'VOR RWY14':[{at:'SPE'},{to:{rd:[350,8]}},{to:'SPE'},{mapt:{rd:[144,4.4]}}],
+    'VOR RWY32':[{at:'SPE'},{to:{rd:[130,12]}},{to:{rd:[144,9]}},{mapt:{rd:[144,4.4]}}],
+    'RNP RWY14':{PEXOV:[{at:'PEXOV'}].concat(r14),SOBEE:[{at:'SOBEE'}].concat(r14),NIKAN:[{at:'NIKAN'}].concat(r14)},
+    'RNP RWY32':{CLAKY:[{at:'CLAKY'},{to:'OKEBA'}].concat(r32),JODAI:[{at:'JODAI'},{to:'PALSI'}].concat(r32)}}};})(),
+  // 帯広(IAC-1〜4)。ILS Y / LOC Y・VOR RWY17・VOR RWY35 は OBE の待機から R153 / R327 / R190 → D11.0 で旋回 → AIKOK / SAIRO / BANBA。
+  //   ILS Z は TAIKI(IAF)→ KOFUK(IF)(初期進入は RNP1・GNSS required)。RNP RWY17(AR) は対象外
+  RJCB:{nav:{OBE:{lat:42.73396,lng:143.22045,var:9}},navId:'OBE',thr:{'35':[42.723075, 143.222822],'17':[42.744128, 143.212031]},pts:{},
+    mah:{'ILS Z or LOC Z RWY35':'OBE','ILS Y or LOC Y RWY35':'OBE','VOR RWY17':'OBE','VOR RWY35':'OBE'},req:{'ILS Z or LOC Z RWY35':'GNSS'},iac:{
+    'ILS Y or LOC Y RWY35':[{at:'OBE'},{to:{rd:[153,11]}},{to:'AIKOK'},{thr:'35'}],
+    'ILS Z or LOC Z RWY35':[{at:'TAIKI'},{to:'KOFUK'},{to:'AIKOK'},{thr:'35'}],
+    'VOR RWY17':[{at:'OBE'},{to:{rd:[327,11]}},{to:'SAIRO'},{mapt:'OBE'}],
+    'VOR RWY35':[{at:'OBE'},{to:{rd:[190,11]}},{to:'BANBA'},{mapt:'OBE'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
