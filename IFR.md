@@ -525,3 +525,10 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   ILS or LOC RWY02(MYE → 290°/24.7NM → MUTHA(IF/IAF)→ MOOOE → BUCKI)・RNAV(GPS) RWY02(PPOPS)。点は図の DME / 区間距離から滑走路の延長線上に置いた近似。
   RNAV(RNP) Z RWY20 は "AUTHORIZATION REQUIRED" → `req:'AR'`(`procOk` で RNP AR と同じ扱い)
 - IAF が遠くの局(岩国の MYE)のとき、`ifrLinkAp` の `join` がその局を経路網に入れる(以前は FIX でないと繋がらなかった)
+
+## v6-278 函館・石見・奥尻の SID・進入の形
+- 函館 RJCH: HAKODATE REVERSAL SIX(R194 → HWE)・TSUGARU TWO(KOMACHI → UWE)/ TOI ONE / OKUSHIRI ONE(RNAV)。
+  ILS Y・VOR RWY12/30(HWE の待機から)・ILS Z / RNP Z RWY12(ESASI → KARPA → PATRA。ILS Z の初期進入は GNSS)・RNP Z RWY30(CHIYO / YAKEI → EGURO)。RNP Y(AR) は書かない
+- 石見 RJOW: SAMBA THREE(R037・IZUMO → XZE)・SEKISYU ONE(RNAV)。VIBEL TRANSITION は "RADAR service required"(radar:1)。
+  ILS or LOC / VOR RWY11(BLUES → D13 アーク → KADAD / ENRAB)・VOR A(BLUES → TELOB)
+- 奥尻 RJEO: ESASI TWO(ORE R115)・AONAE ONE / UKIBI ONE(RNAV)。VOR RWY31/13(ORE の待機から 10DME 以内で旋回)・VOR A(MAIKA → ORE)・RNP RWY13/31(IKORU)

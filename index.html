@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-277';
+const VER_TAG='v6-278';
 const BUILD='2026-10-22';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -9846,6 +9846,53 @@ const SID_DEF={
         'MATSUYAMA MALTA':ex([{to:'MALTA'}],{m:'MATSUYAMA',fix:'MALTA',name:'MATSUYAMA SE FOUR・MALTA TRANSITION',alt:15000}),
       }};
   })(),
+  /* 函館(RJCH AD2.24-SID-1〜5)。滑走路は AD 2.12(107.98°/287.98°T)。HWE は VOR/DME・VAR 10°W。
+     HAKODATE REVERSAL SIX: 12 は 600FT → 右 HDG239° / 30 は 500FT → 左 HDG149° で R194 → 3000FT → 右旋回で HWE(5000 以上)
+     TSUGARU TWO(TAPPI・KOMACHI → UWE)・TOI ONE(TIKYU 6000)・OKUSHIRI ONE(ESASI 5000)(RNAV) */
+  RJCH:(()=>{
+    const ts={fix:'TAPPI',nav:'HWE',name:'TSUGARU TWO',grad:{'12':{pct:4,to:600},'30':{pct:5.2,to:1600}},
+      '12':[{climbTo:600},{to:'TAPPI',turn:'R'}],'30':[{climbTo:500},{to:'TAPPI',turn:'L'}]};
+    return {
+      rwy:{'12':{end:[41.765983, 140.839167],brgT:107.98,elev:151},'30':{end:[41.774339, 140.804892],brgT:287.98,elev:92}},
+      nav:{HWE:{lat:41.77403,lng:140.83222,var:10},UWE:{lat:39.61713,lng:140.18694,var:10}},
+      sids:{
+        HAKODATE:{fix:'HWE',nav:'HWE',name:'HAKODATE REVERSAL SIX',alt:5000,grad:{'12':{pct:4,to:600},'30':{pct:5.2,to:1600}},
+          '12':[{climbTo:600},{turn:'R',hdg:239},{intercept:194},{climbTo:3000},{to:'HWE',turn:'R'}],
+          '30':[{climbTo:500},{turn:'L',hdg:149},{intercept:194},{climbTo:3000},{to:'HWE',turn:'R'}]},
+        TSUGARU:ts,'TSUGARU UWE':Object.assign({},ts,{m:'TSUGARU',fix:'UWE',name:'TSUGARU TWO・KOMACHI TRANSITION','12':ts['12'].concat([{to:'UWE'}]),'30':ts['30'].concat([{to:'UWE'}])}),
+        TOI:{fix:'TIKYU',nav:'HWE',name:'TOI ONE',grad:{'12':{pct:6,to:1500},'30':{pct:5.2,to:1600}},'12':[{climbTo:600},{to:'TIKYU'}],'30':[{climbTo:500},{to:'TIKYU',turn:'L'}]},
+        OKUSHIRI:{fix:'ESASI',nav:'HWE',name:'OKUSHIRI ONE',grad:{'12':{pct:4,to:600},'30':{pct:3.4,to:700}},'12':[{climbTo:600},{to:'ESASI',turn:'R'}],'30':[{climbTo:700},{to:'ESASI'}]},
+      }};
+  })(),
+  /* 石見(RJOW AD2.24-SID-1〜3)。滑走路は AD 2.12(104.78°/284.78°T)。IME は VOR/DME・VAR 8°W。
+     SAMBA THREE: 11 は 800FT → 左 HDG352° / 29 は 700FT → 右 HDG082° で R037 → SAMBA(7000 以上)。IZUMO TRANSITION は XZE R253 → XZE
+     SEKISYU ONE(RNAV): 11 は 700FT → 左旋回・29 は 600FT → 右旋回 で OW100 → SAMBA。VIBEL TRANSITION(RNAV)は "RADAR service required" → 書かない */
+  RJOW:(()=>{
+    const sb={fix:'SAMBA',nav:'IME',name:'SAMBA THREE',alt:7000,grad:{'11':{pct:5.7,to:1700}},
+      '11':[{climbTo:800},{turn:'L',hdg:352},{intercept:37}],'29':[{climbTo:700},{turn:'R',hdg:82},{intercept:37}]};
+    return {
+      rwy:{'11':{end:[34.674089, 131.800853],brgT:104.78,elev:170},'29':{end:[34.678689, 131.779753],brgT:284.78,elev:184}},
+      nav:{IME:{lat:34.676244,lng:131.779881,var:8},XZE:{lat:35.41724,lng:132.89237,var:8},OW100:{lat:34.804639,lng:131.86525,var:8}},
+      sids:{
+        SAMBA:sb,
+        'SAMBA XZE':Object.assign({},sb,{m:'SAMBA',fix:'XZE',name:'SAMBA THREE・IZUMO TRANSITION','11':sb['11'].concat([{to:'SAMBA'},{to:'XZE'}]),'29':sb['29'].concat([{to:'SAMBA'},{to:'XZE'}])}),
+        SEKISYU:{fix:'SAMBA',nav:'IME',name:'SEKISYU ONE',alt:7000,grad:{'11':{pct:7,to:800}},
+          '11':[{climbTo:700},{to:'OW100',turn:'L'},{to:'SAMBA'}],'29':[{climbTo:600},{to:'OW100',turn:'R'},{to:'SAMBA'}]},
+        'RNAV TRANSITION':{m:'RNAV TRANSITION',fix:'VIBEL',nav:'IME',name:'VIBEL TRANSITION (RNAV)',radar:1},
+      }};
+  })(),
+  /* 奥尻(RJEO AD2.24-SID-1〜4)。滑走路は AD 2.12(120.15°/300.15°T)。ORE は VOR/DME・VAR 10°W。
+     ESASI TWO: 13 は左旋回 / 31 は 1500FT → 左旋回(ORE 10DME 以内)で R115 → ESASI
+     AONAE ONE(13 は 600FT → 左旋回で AONAE / 31 は 600FT → 左旋回で EO100 → AONAE)→ ESASI、UKIBI ONE(7000)(RNAV)。EO の点は図の座標 */
+  RJEO:{
+    rwy:{'13':{end:[42.068183, 139.440869],brgT:120.15,elev:141},'31':{end:[42.074969, 139.425197],brgT:300.15,elev:180}},
+    nav:{ORE:{lat:42.0703,lng:139.4434,var:10},EO100:{lat:41.98175,lng:139.365167,var:10},EO101:{lat:42.01625,lng:139.502806,var:10}},
+    sids:{
+      ESASI:{fix:'ESASI',nav:'ORE',name:'ESASI TWO','13':[{turn:'L',hdg:20,assumed:1},{to:'ORE',turn:'L'},{to:'ESASI'}],'31':[{climbTo:1500},{to:{rad:300,dme:5}},{to:'ORE',turn:'L'},{to:'ESASI'}]},
+      AONAE:{fix:'ESASI',nav:'ORE',name:'AONAE ONE',grad:{'31':{pct:4.5,to:600}},'13':[{climbTo:600},{to:'AONAE',turn:'L'},{to:'ESASI'}],'31':[{climbTo:600},{to:'EO100',turn:'L'},{to:'AONAE'},{to:'ESASI'}]},
+      UKIBI:{fix:'UKIBI',nav:'ORE',name:'UKIBI ONE',alt:7000,grad:{'31':{pct:4.5,to:600}},'13':[{climbTo:800},{to:'UKIBI',turn:'L'}],'31':[{climbTo:600},{to:'EO101',turn:'L'},{to:'UKIBI'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -10494,6 +10541,34 @@ const IAC_DEF={
     mah:{'ILS or LOC RWY02':'MYE','RNAV (GPS) RWY02':'MYE'},req:{'RNAV (RNP) Z RWY20':'AR'},iac:{
     'ILS or LOC RWY02':{MYE:[{at:'MYE'},{to:'MUTHA'},{to:'MOOOE'},{to:'BUCKI'},{thr:'02'}]},
     'RNAV (GPS) RWY02':[{at:'PPOPS'},{to:'TAZZZ'},{to:'STYNE'},{to:'ORLFD'},{thr:'02'}]}},
+  // 函館(IAC-1〜5・9)。ILS Y・VOR RWY12 は HWE の待機から R119/R109 → D14.0/D11.0 で旋回 → ISARI / AKLES、VOR RWY30 は R148 → D11.0 で旋回 → AIRIS。
+  //   ILS Z / RNP Z RWY12 は ESASI(IAF)→ KARPA → PATRA(IF)(ILS Z の初期進入は RNP1・GNSS required)、RNP Z RWY30 は CHIYO / YAKEI → EGURO(IF)。RNP Y(AR) は対象外
+  RJCH:(()=>{const z30=[{to:'EGURO'},{to:'PASPI'},{to:'CH061'},{to:'CH062'},{mapt:'CH063'}];
+    return {nav:{HWE:{lat:41.77403,lng:140.83222,var:10}},navId:'HWE',thr:{'12':[41.774339, 140.804892],'30':[41.765983, 140.839167]},pts:{CH275:[41.775372,140.800653],CH061:[41.742008,140.921236],CH062:[41.751419,140.890278],CH063:[41.762075,140.855181]},
+    mah:{'ILS Z or LOC Z RWY12':'HWE','ILS Y or LOC Y RWY12':'HWE','VOR RWY12':'HWE','VOR RWY30':'HWE','RNP Z RWY12':'TAXIR','RNP Z RWY30':'TAXIR'},
+    req:{'ILS Z or LOC Z RWY12':'GNSS'},iac:{
+    'ILS Y or LOC Y RWY12':[{at:'HWE'},{to:{rd:[119,14]}},{to:'ISARI'},{thr:'12'}],
+    'ILS Z or LOC Z RWY12':[{at:'ESASI'},{to:'KARPA'},{to:'PATRA'},{to:'ISARI'},{thr:'12'}],
+    'VOR RWY12':[{at:'HWE'},{to:{rd:[109,11]}},{to:'AKLES'},{mapt:{rd:[289,2.2]}}],
+    'VOR RWY30':[{at:'HWE'},{to:{rd:[148,11]}},{to:'AIRIS'},{mapt:{rd:[132,1.4]}}],
+    'RNP Z RWY12':[{at:'ESASI'},{to:'KARPA'},{to:'PATRA'},{to:'OSOPU'},{mapt:'CH275'}],
+    'RNP Z RWY30':{CHIYO:[{at:'CHIYO'}].concat(z30),YAKEI:[{at:'YAKEI'}].concat(z30)}}};})(),
+  // 石見(IAC-1〜3)。ILS or LOC RWY11・VOR RWY11 は BLUES(IAF・待機・R037 D13)→ D13 アーク(反時計回り)→ KADAD / ENRAB(IF)、VOR A は BLUES(IF)→ TELOB → MAPt(D1.4)。
+  //   RNP(AR) は対象外
+  RJOW:{nav:{IME:{lat:34.676244,lng:131.779881,var:8}},navId:'IME',thr:{'11':[34.678689, 131.779753]},pts:{},
+    mah:{'ILS or LOC RWY11':'BLUES','VOR RWY11':'BLUES','VOR A':'BLUES'},iac:{
+    'ILS or LOC RWY11':[{at:'BLUES'},{arc:13,to:294,dir:'L'},{to:'KADAD'},{to:'TOGIL'},{thr:'11'}],
+    'VOR RWY11':[{at:'BLUES'},{arc:13,to:297,dir:'L'},{to:'ENRAB'},{to:'ANPEP'},{mapt:'IME'}],
+    'VOR A':[{at:'BLUES'},{to:'TELOB'},{mapt:{rd:[37,1.4]}}]}},
+  // 奥尻(IAC-1〜4・6 2026-03-19)。VOR RWY31 / RWY13 は ORE の待機から R163 / R284 → 10DME 以内で旋回 → MAPt(D0.8 / D1.4)、VOR A は MAIKA(R115 D25・待機)→ ORE。
+  //   RNP RWY13 は IKORU → EO350 → EO351 → EO352 → EO353 → LEDOP(IF)、RNP RWY31 は IKORU → WOONY(IF)
+  RJEO:{nav:{ORE:{lat:42.0703,lng:139.4434,var:10}},navId:'ORE',thr:{'13':[42.074969, 139.425197],'31':[42.068183, 139.440869]},pts:{EO350:[41.97775,139.371967],EO351:[42.004575,139.313525],EO352:[42.048364,139.281072],EO353:[42.098389,139.281731],EO150:[42.066303,139.445211]},
+    mah:{'VOR RWY31':'ORE','VOR RWY13':'ORE','VOR A':'ORE','RNP RWY31':'IKORU','RNP RWY13':'IKORU'},iac:{
+    'VOR RWY31':[{at:'ORE'},{to:{rd:[163,8]}},{to:{rd:[143,5]}},{mapt:{rd:[143,0.8]}}],
+    'VOR RWY13':[{at:'ORE'},{to:{rd:[284,8]}},{to:{rd:[304,5]}},{mapt:{rd:[304,1.4]}}],
+    'VOR A':[{at:'MAIKA'},{mapt:'ORE'}],
+    'RNP RWY13':[{at:'IKORU'},{to:'EO350'},{to:'EO351'},{to:'EO352'},{to:'EO353'},{to:'LEDOP'},{to:'SABOX'},{thr:'13'}],
+    'RNP RWY31':[{at:'IKORU'},{to:'WOONY'},{to:'MARUU'},{mapt:'EO150'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
