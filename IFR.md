@@ -352,3 +352,11 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   出る辺(`出発(navaid)`・入る向きには使わない)を足す
 - [ ] 横田は YOK から出る公示の経路が少なく、代替(TIMAP→YOK→HATAR→宇都宮回り)が大回りになる。navaid 間の直行(ラジアル)をどう扱うか
 
+## v6-262 調布(RJTF)の SID・進入の形 / 索引に名前の無い方式を図の題名から
+- 調布は AD 2.24 の索引に方式名が無く(proc.json の n が '#')、計画で使えなかった。`gen_proc.py` の `title_by_page`:
+  名前が '#' の方式は図の題名から(SID/STAR は「〜 TWO DEPARTURE」、IAC は「RJTF / CHOFU … RNP RWY35」の右端)。
+  図が「RNAV SID / GNSS required / RNP1」なら rnav。全国で 13 方式に名前が付いた(調布・静浜 OSHIMA FIVE・八戸・大湊・防府・築城・熊本 MIFNE ONE・中部 MORIZ TWO)。
+  残り 7(STAR 6・三沢 SID 1)は題名の形が違って取れていない
+- 調布 KOSKA TWO(RNAV・GNSS): RWY17 は 700FT → TF511 → KOSKA(25.4NM)、RWY35 は 900FT → 右旋回 TF510 → TF511 → KOSKA(32.2NM)。
+  TF510/TF511 は図の Waypoint Coordinates。RNP RWY35: KOSKA → ARENA → DROMP → TF550(MAPt・図の座標)
+
