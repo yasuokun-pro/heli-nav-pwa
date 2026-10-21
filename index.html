@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-265';
+const VER_TAG='v6-266';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8205,7 +8205,9 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   }));
   // 進入方式の IAF(進入図の "TOHNE(IAF)" から拾ったもの)。STAR が無い飛行場でも IAF へ向かう経路になる
   // 同じ IAF から入る方式が複数あれば、種類の優先順(ILS>RNP>LOC>VOR>TACAN>NDB)で上の方式をその IAF の辺にする
-  (iacs||[]).filter(x=>x.ok===1&&iacIafs(ap.icao,x.p)).slice().sort((a,b)=>IAC_PRI(a.p.typ||'')-IAC_PRI(b.p.typ||'')).forEach(x=>iacIafs(ap.icao,x.p).forEach(t=>{
+  // ⚠ 同じ種類なら形の短い方(三宅島: SCOTT からの RNP RWY02 48NM と RWY20 20NM。並び順の先の RWY02 になっていた)
+  const iLen=x=>{const t=ap.icao&&iacTrackOf(ap.icao,x.p.n);return t?t.len:999};
+  (iacs||[]).filter(x=>x.ok===1&&iacIafs(ap.icao,x.p)).slice().sort((a,b)=>IAC_PRI(a.p.typ||'')-IAC_PRI(b.p.typ||'')||iLen(a)-iLen(b)).forEach(x=>iacIafs(ap.icao,x.p).forEach(t=>{
     if(!join(t,'IAF→航空路(仮)'))return;
     if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t))return;
     // 進入方式の形(IAC_DEF)があれば IAF→滑走路の経路の長さ。無ければ直線(⚠ 飛行場の真上の IAF が短く見える)
@@ -8911,6 +8913,63 @@ const SID_DEF={
         '36':[{climbTo:2600},{to:'AF600'},{to:'MBE',turn:'R'}]},
     }
   },
+  /* 新島(RJAN AD2.24-SID-1・EFF 18 JUL 2019)。滑走路は AD 2.12(102.32°/282.32°T)。XAC は OSHIMA VORTAC(VAR 7°W)。
+     OSHIMA ONE: RWY11 は 3000FT → 左旋回で XAC R185 → XAC / RWY29 は 3000FT → 右 HDG080° で R215 に会合 → XAC。どちらも 5.0%(3000FT まで) */
+  RJAN:{
+    rwy:{'11':{end:[34.368769,139.272789],brgT:102.32,elev:92},'29':{end:[34.370308,139.264289],brgT:282.32,elev:89}},
+    nav:{XAC:{lat:34.71225,lng:139.41402,var:7}},
+    sids:{
+      OSHIMA:{fix:'XAC',nav:'XAC',name:'OSHIMA ONE',grad:{pct:5.0,to:3000},
+        '11':[{climbTo:3000},{to:'XAC',turn:'L'}],'29':[{climbTo:3000},{turn:'R',hdg:80},{intercept:215},{to:'XAC'}]},
+    }
+  },
+  /* 神津島(RJAZ AD2.24-SID-1・EFF 21 MAR 2024)。RNAV(RNP1・GNSS)。滑走路は AD 2.12(105.11°/285.11°T)。
+     KOZU ONE: RWY11 は HDG112° で 1800FT → 左旋回で XAC / RWY29 は HDG292° で 1700FT → 右旋回で XAC。5.0%(2100FT / 2200FT まで) */
+  RJAZ:{
+    rwy:{'11':{end:[34.188503,139.137681],brgT:105.11,elev:471},'29':{end:[34.190381,139.1293],brgT:285.11,elev:437}},
+    nav:{XAC:{lat:34.71225,lng:139.41402,var:7}},
+    sids:{
+      KOZU:{fix:'XAC',nav:'XAC',name:'KOZU ONE',grad:{'11':{pct:5.0,to:2100},'29':{pct:5.0,to:2200}},
+        '11':[{climbTo:1800},{to:'XAC',turn:'L'}],'29':[{climbTo:1700},{to:'XAC',turn:'R'}]},
+    }
+  },
+  /* 静岡(RJNS AD2.24-SID-1/3/6)。滑走路は AD 2.12(112.00°/292.00°T)。SZE は AD 2.19(344748.63N/1381135.51E)・VAR 8°W。
+     SHIZUOKA REVERSAL TWO: RWY12 は 900FT → 右旋回 / RWY30 は 1200FT → 左 HDG116° で SZE R161 に会合 → 14DME → 左旋回で SZE。
+       RWY12 の右旋回は会合針路の記載が無く 30°会合(HDG191°)と仮定。RWY30 5.2%(1200FT まで)
+     FUJIK THREE(RNAV): → ONMAE → NS301 → NS302 → NS303 → FUJIK。KANZA / GAKKI の TRANSITION は書かない(FUJIK から航空路)
+     MOSLO TWO(RNAV): → ONMAE → KAWAI → MOSLO。RNAV の2つも RWY12 900FT 右 / RWY30 1200FT 左 */
+  RJNS:(()=>{
+    const g={'30':{pct:5.2,to:1200}};
+    const dep={'12':[{climbTo:900},{to:'ONMAE',turn:'R'}],'30':[{climbTo:1200},{to:'ONMAE',turn:'L'}]};
+    return {
+      rwy:{'12':{end:[34.791761,138.202139],brgT:112,elev:412},'30':{end:[34.800203,138.176811],brgT:292,elev:454}},
+      nav:{SZE:{lat:34.796842,lng:138.193197,var:8},NS301:{lat:34.483556,lng:138.336889,var:8},NS302:{lat:34.453361,lng:138.545417,var:8},
+        NS303:{lat:34.626806,lng:138.582278,var:8}},
+      sids:{
+        'SHIZUOKA REVERSAL':{fix:'SZE',nav:'SZE',name:'SHIZUOKA REVERSAL TWO',grad:g,
+          '12':[{climbTo:900},{turn:'R',hdg:191,assumed:1},{intercept:161},{to:{rad:161,dme:14}},{to:'SZE',turn:'L'}],
+          '30':[{climbTo:1200},{turn:'L',hdg:116},{intercept:161},{to:{rad:161,dme:14}},{to:'SZE',turn:'L'}]},
+        FUJIK:{fix:'FUJIK',nav:'SZE',name:'FUJIK THREE',grad:g,
+          '12':dep['12'].concat([{to:'NS301'},{to:'NS302'},{to:'NS303'},{to:'FUJIK'}]),'30':dep['30'].concat([{to:'NS301'},{to:'NS302'},{to:'NS303'},{to:'FUJIK'}])},
+        MOSLO:{fix:'MOSLO',nav:'SZE',name:'MOSLO TWO',grad:g,
+          '12':dep['12'].concat([{to:'KAWAI'},{to:'MOSLO'}]),'30':dep['30'].concat([{to:'KAWAI'},{to:'MOSLO'}])},
+      }};
+  })(),
+  /* 三宅島(RJTQ AD2.24-SID-1/3・2026)。滑走路は AD 2.12(016.88°/196.88°T)。MOE は OYAMA VOR/DME(340416N/1393341E)・VAR 7°W。
+     MIYAKE REVERSAL TWO: RWY02 は右旋回で MOE R046 を 2800FT まで → 15DME 以内で右旋回 → MOE / RWY20 は左旋回で R151 → 左旋回 → MOE。
+       「R046 に乗る点」は MOE R046 2DME で近似
+     SCOTT TWO(RNAV): RWY02 は HDG024° で 500FT → SCOTT / RWY20 は HDG204° で 500FT → 左旋回で TQ001 → SCOTT。
+       5.8%(RWY02)・5.3%(RWY20)とも 500FT まで。TQ001 は図の座標 */
+  RJTQ:{
+    rwy:{'02':{end:[34.077286,139.561722],brgT:16.88,elev:61},'20':{end:[34.066933,139.557947],brgT:196.88,elev:67}},
+    nav:{MOE:{lat:34.07104,lng:139.56129,var:7},TQ001:{lat:34.076694,lng:139.620417,var:7}},
+    sids:{
+      MIYAKE:{fix:'MOE',nav:'MOE',name:'MIYAKE REVERSAL TWO',
+        '02':[{to:{rad:46,dme:2}},{climbTo:2800},{to:'MOE',turn:'R'}],'20':[{to:{rad:151,dme:2}},{climbTo:2800},{to:'MOE',turn:'L'}]},
+      SCOTT:{fix:'SCOTT',nav:'MOE',name:'SCOTT TWO',grad:{'02':{pct:5.8,to:500},'20':{pct:5.3,to:500}},
+        '02':[{climbTo:500},{to:'SCOTT'}],'20':[{climbTo:500},{to:'TQ001',turn:'L'},{to:'SCOTT'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -9187,6 +9246,33 @@ const IAC_DEF={
     // 松本(IAC-1 2026-04-16)。MBE の待機から R035 で 12DME → D12 アーク(反時計回り)→ GAKTO(IF・R006)→ FKASI(FAF・D6.9)→ MAPt D1.9。
     // RNP Y/Z(AR) は特別の承認が要るので計画では使わない(procOk)。形も書かない
     'VOR RWY18':[{at:'MBE'},{to:{rd:[35,12]}},{arc:12,to:6,dir:'L'},{to:{rd:[6,6.9]}},{mapt:{rd:[6,1.9]}}]}},
+  // 新島(IAC-1/2 2022-10-06)。RNP(GNSS)。点は図の座標
+  RJAN:{nav:{},navId:null,thr:{},iac:{
+    'RNP RWY11':[{at:'WAVES'},{to:'VESEL'},{to:'AN150'},{to:'HAMAU'},{mapt:'AN151'}],
+    'RNP RWY29':[{at:'WAVES'},{to:'PADLE'},{to:'AN950'},{to:'HABSI'},{mapt:'AN951'}]},
+    pts:{VESEL:[34.568711,139.178353],AN150:[34.487233,139.089631],HAMAU:[34.431089,139.164208],AN151:[34.374933,139.238722],
+      PADLE:[34.532094,139.445019],AN950:[34.406431,139.493175],HABSI:[34.385286,139.395756],AN951:[34.364142,139.298361],WAVES:[34.570008,139.358094]}},
+  // 神津島(IAC-1/2 2025-10-02)。RNP(GNSS)。IAF は KOUGA(XAC D23)
+  RJAZ:{nav:{},navId:null,thr:{},iac:{
+    'RNP RWY11':[{at:'KOUGA'},{to:'SENOL'},{to:'AZ150'},{to:'ONBAS'},{mapt:'AZ151'}],
+    'RNP RWY29':[{at:'KOUGA'},{to:'TENJO'},{to:'AZ950'},{to:'TAKOU'},{mapt:'AZ951'}]},
+    pts:{KOUGA:[34.3481,139.271253],SENOL:[34.349619,139.02525],AZ150:[34.262878,138.964878],ONBAS:[34.221114,139.051911],AZ151:[34.196025,139.104092],
+      TENJO:[34.282681,139.324022],AZ950:[34.182497,139.323608],TAKOU:[34.182744,139.22315],AZ951:[34.182853,139.162878]}},
+  // 静岡(IAC-1〜3 2025-10-02)。ILS Y と VOR は SZE の待機から出て 12DME 以内で旋回して最終へ。ILS Z は OHCHA(IF・待機あり)から。
+  // RNP RWY12(AR)は特別の承認が要るので書かない
+  RJNS:{nav:{SZE:{lat:34.796842,lng:138.193197,var:8}},navId:'SZE',thr:{'30':[34.791761,138.202139]},pts:{},iac:{
+    'ILS Y or LOC Y RWY30':[{at:'SZE'},{to:{rd:[136,12]}},{to:'KAMRU'},{thr:'30'}],
+    'ILS Z or LOC Z RWY30':[{at:'OHCHA'},{to:'KAMRU'},{thr:'30'}],
+    'VOR RWY30':[{at:'SZE'},{to:{rd:[140,12]}},{to:'ENPOM'},{mapt:{rd:[125,1.0]}}]}},
+  // 三宅島(IAC-1〜4)。VOR A は SCOTT(R025 D20)から、または RASYA から D15 アーク(反時計回り)で R025 へ。VOR B は RASYA → MOE → R222 → 旋回 → R207 D3.5
+  RJTQ:{nav:{MOE:{lat:34.07104,lng:139.56129,var:7}},navId:'MOE',thr:{'02':[34.066933,139.557947],'20':[34.077286,139.561722]},
+    pts:{TQ250:[34.123825,139.706733],TQ251:[33.871842,139.614606],TQ252:[33.886403,139.557131],TQ253:[33.901419,139.497722],TQ254:[33.957358,139.51805],
+      TQ050:[34.302144,139.64395],TQ051:[34.222261,139.614686]},iac:{
+    'VOR A':{SCOTT:[{at:'SCOTT'},{to:{rd:[25,10]}},{mapt:{rd:[25,4.0]}}],
+      RASYA:[{at:'RASYA'},{to:{rd:[134,15]}},{arc:15,to:33,dir:'L'},{to:{rd:[25,10]}},{mapt:{rd:[25,4.0]}}]},
+    'VOR B':[{at:'RASYA'},{to:'MOE'},{to:{rd:[222,10]}},{mapt:{rd:[207,3.5]}}],
+    'RNP RWY02':[{at:'SCOTT'},{to:'TQ250'},{to:'TQ251'},{to:'TQ252'},{to:'TQ253'},{to:'TQ254'},{thr:'02'}],
+    'RNP RWY20':[{at:'SCOTT'},{to:'TQ050'},{to:'TQ051'},{thr:'20'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],

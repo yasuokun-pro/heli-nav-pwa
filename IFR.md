@@ -381,3 +381,12 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 進入: VOR RWY18(MBE → R035 12DME → D12 アーク → GAKTO → FKASI → MAPt D1.9)。
 - **RNP AR(名前に "(AR)")は procOk で使えない**(機体・乗員の特別の承認が要る。松本の RNP Y/Z 4 方式、他の飛行場の AR も同じ)
 
+## v6-266 新島・神津島・静岡・三宅島の SID・進入の形
+- 新島 RJAN: OSHIMA ONE(XAC へ)・RNP RWY11/29(WAVES から)
+- 神津島 RJAZ: KOZU ONE(RNAV・XAC へ)・RNP RWY11/29(KOUGA から)
+- 静岡 RJNS: SHIZUOKA REVERSAL TWO(R161 14DME → SZE)・FUJIK THREE / MOSLO TWO(RNAV・ONMAE 経由)・
+  ILS Y(SZE 待機 → R136 12DME → KAMRU)・ILS Z(OHCHA から)・VOR RWY30(SZE → R140 → ENPOM)。RNP RWY12(AR)は書かない
+- 三宅島 RJTQ: MIYAKE REVERSAL TWO(R046 / R151 → MOE)・SCOTT TWO(RNAV)・VOR A(SCOTT / RASYA → D15 アーク)・VOR B(RASYA → MOE → R222)・
+  RNP RWY02/20(SCOTT から)。VOR A/B の MAPt は飛行場から 3.6〜3.9NM(図は MAPt から FLY VISUAL)
+- 同じ IAF・同じ種類の方式が複数あれば**形の短い方**をその IAF の辺にする(三宅島 RNP RWY02 48NM より RWY20 20NM)
+
