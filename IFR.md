@@ -467,3 +467,14 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - ⚠ **SID のアークが描かれていなかった**: `{arc,dme,to}` の dme を「その針路のまま DME まで」の手順として先に処理していて、アークは素通りで次の点へ直線だった
   (小牧 IBUKI の ADGUN/OHNNO・MORIZ の SHIMA・岐阜・新潟 OKESA の NAEBA/HAKBA・松島 RIASU)。arc を持つ手順は dme の扱いから外した
 - SID の終点(`fix`)が FIX でなく nav の局のとき(但馬 MIYAZU THREE の YME)NaN になっていたのを直した
+
+## v6-273 秋田・花巻・徳島・鳥取の SID・進入の形
+- 秋田 RJSK: YUWA REVERSAL SEVEN(R105/R285 10.8DME)・MUTSU THREE / NIIGATA THREE / USYU TWO(RNAV)。ILS Y・VOR RWY28/10(UWE の待機から)・
+  ILS Z(GAKKO/BIJIN → ENPES・初期進入 GNSS)・RNP Z RWY28(GAKKO/BIJIN)/ RWY10(POLTA/BRIKO)。RNP Y(AR) は書かない
+- 花巻 RJSI: OHSHU TWO(R010)・NIIGATA SIX(HPE → R236 D50 → GTC R055・12000)・HANAMAKI REVERSAL THREE・SAMBO ONE / HANKA ONE(RNAV)。
+  ILS Z・VOR RWY20/02(HPE の待機から)・ILS Y(MORIO → D17 アーク → APUSO)・RNP X RWY20(MORIO/WANKO)・RNP Z RWY02(SIOMO/REMEN)
+- 徳島 RJOS: TOKUSHIMA REVERSAL SEVEN・TOSAR SIX・MISAKI FOUR(KUSHIMOTO)・HONMA TWO(KILAP)/ KAGAWA ONE(RNAV)。
+  ILS Y・VOR RWY29(TSC の待機から)・ILS W / TACAN A(ENSES → R140 → D13 アーク)・RNP Z RWY29(DATIS)。ILS Z は IF(LIGSU)に待機が無いので書かない
+- 鳥取 RJOR: AYABE THREE / TOTTORI REVERSAL THREE(R030 13DME)・MIYAZU TWO(RNAV)。ILS Z / LOC・VOR RWY10(TRE の待機から)・
+  ILS Y(KANNA → … → OR056 → RF → OR057。RNP1 RF required → GNSS)・RNP X RWY10(TRE → OR058)。RNP(AR) は書かない
+- 未対応(既存の動き): 但馬は全部の進入が GNSS を要るので、GNSS の無い機体で代替にすると「(仮)」の直線で繋がる(神戸→鳥取→但馬)
