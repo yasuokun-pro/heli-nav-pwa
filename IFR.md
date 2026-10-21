@@ -502,3 +502,13 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - ⚠⚠ **CAT II/III の図も CAT I の機体で使える**(`procOk`)。索引名に "(CAT II & III)" が付く図は CAT II/III 専用で CAT I の図は別にある、としていたが、
   全国の該当図(成田・関西・中部・釧路・広島・青森・羽田・新千歳・徳島…)を見たところ **CAT I のミニマが同じ表に載っていて、別の CAT I 図は無い**。
   以前は青森・釧路・広島などで CAT I の機体に ILS が使えなかった。CAT I の機体は CAT I のミニマ(代替の最低気象条件も CAT I の行)
+
+## v6-276 三沢・出雲の SID・進入の形、評定できない点への直線を引かない
+- 三沢 RJSM(米軍 FLIP の転載): ENKAI THREE(RWY10 のみ)。RWY28: ILS Z(GABII → DEVLS → GABII)・VOR Z / TACAN Z(KUJII)・HI-ILS Y / HI-VOR Y(SHOJU → CHELL → D15 アーク)・
+  RNAV(GPS)(DEVLS)。RWY10: HI-ILS Y(WEASL)・HI-ILS Z / HI-VOR Y(SHOJU → D15 アーク)・RNAV(GPS)(BAXIL / ELKID → DUKER)。
+  ⚠ 点が ENR 4.3 に無いので MIS の [ラジアル, DME] から `IAC_DEF.fix` で足した(RNAV(GPS) の点は図の距離からの近似)。
+  RWY28 の方式は "Missed approach requires use of RNAV or ATC RADAR monitoring" → `req:'GNSS'`
+- 出雲 RJOC: DOZEN SIX・IZUMO REVERSAL FIVE・MATSUE THREE(TSUNO)/ TAKHI / SAIGO / KYOKA(CARPS)(RNAV)。LOC Y・VOR RWY25(XZE の待機から)・
+  LOC Z / RNP RWY25(NAKAU)・RNP RWY07(OKUNI / SUSAR)。滑走路の真方位は "To be issued" なので THR 座標から(059.33°T)
+- ⚠ **評定できる局が無い点へ、GNSS も RNAV 装置も無い機体で「(仮)」の直線を引かない**(`ifrLinkAp` の `join`)。出雲 NAKAU は ILS の LOC/DME(IXZ)でしか決まらず、
+  美保→出雲で YGE → NAKAU の直線で LOC Z を選んでいた。今は LOC Y(XZE の待機から)。関東・中部・東北・関西の既存の経路 19 本で変化なしを確認
