@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-268';
+const VER_TAG='v6-269';
 const BUILD='2026-10-21';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -7574,7 +7574,7 @@ function ifrPrintTable(rows,ac,startAp,ff,fob,etdMs){
       <td rowspan="2" class="cCrs">${fmt3(r.mc)}°</td><td class="cNum">${pad3(r.w.d)}/${r.w.s}</td>
       <td rowspan="2" class="cNum">${r.mh==null?'不可':fmt3(r.mh)+'°'}</td><td rowspan="2" class="cNum">${r.gs?Math.round(r.gs):''}</td>
       <td class="cNum">${f1(e.d)}</td><td class="cNum">${r.ete?fmtHM(r.ete):''}</td><td class="cNum">${eta}</td><td class="cNum">${r.ete?fuelTxt(r.ete*ff):''}</td></tr>
-      <tr class="fixB"><td class="fixName">${b.ap?b.ap.icao:b.n}</td><td class="cNav">${fq}</td><td class="cNav">${e.mea!=null?e.mea:''}</td>
+      <tr class="fixB"><td class="fixName">${b.ap?b.ap.icao:b.n}</td><td class="cNav">${fq}</td><td class="cNav">${e.mea!=null?e.mea:ifrPlanRes&&ifrNoMea([r.l],ifrPlanRes.G).length?'なし※':''}</td>
       <td class="cNum">${r.bad?'不可':fw(r.wca)}</td><td class="cNum rem">${Math.max(0,D-r.cum).toFixed(0)}</td><td class="cNum rem">${T-r.t>1/120?fmtHM(T-r.t):'0:00'}</td><td class="cNum rem"></td><td class="cNum rem">${fob>0?Math.round(fob-r.fuel):''}</td></tr>`;
   });
   h+=`<tr class="total"><td>TOTAL</td><td></td><td></td><td></td><td></td><td></td><td></td><td class="cNum">${D.toFixed(1)}</td><td class="cNum">${fmtHM(T)}</td><td></td><td class="cNum">${fuelTxt(F)}</td></tr></tbody>`;
@@ -7595,16 +7595,18 @@ function ifrPrintLog(){
   const tod=ifrTod(rows,ac,CA.alt,ifrPlanRes.todAlt||0,tk,tas);
   const todFix=tod&&!tod.none&&!tod.before&&rows[tod.i]?(n=>n.ap?n.ap.icao:n.n)(rows[tod.i].a):'';
   const nl=(k,v)=>`<div class="adNote"><b>${k}</b> ${v}</div>`;
+  const noMea=rs=>ifrNoMea((rs||[]).map(r=>r.l),ifrPlanRes.G).length?nl('MEA','⚠ なし※の区間は MEA が無い。高度は MSA・図で確認'):'';
   const notesM=[prAdNote(dep.icao),prAdNote(dst.icao),
     nl('SID',pn(S.sid))+nl('STAR',pn(S.star))+nl('IAC',pn(S.iac)),
     nl('CRZ',`${crz} ｜ ASSIGNED ${asg.toLocaleString()}ft ｜ IAF ${ifrPlanRes.todAlt?ifrPlanRes.todAlt.toLocaleString()+'ft':'—'} ｜ TAS ${tas}kt ｜ FF ${ff}/h`),
     rca?nl('RCA',`${asg.toLocaleString()}ft ${rca.dist.toFixed(1)}NM ${fmtHM(rca.time)}${rca.ok?'':' ⚠ SID 終点までに届かない'}`):'',
     tod&&!tod.none?nl('TOD',tod.before?'⚠ 経路が短い':`${todFix} から ${tod.fromStart.toFixed(1)}NM(${tod.dist.toFixed(1)}NM・${fmtHM(tod.time)} の降下)`):'',
-    ff>0?nl('FUEL',`TRIP ${Math.round(m.fuel)} + ALTN ${Math.round(a.fuel)} + RES ${Math.round(res)} = ${Math.round(need)}${fob>0?` ｜ FOB ${Math.round(fob)}`:''}`):''].join('');
+    ff>0?nl('FUEL',`TRIP ${Math.round(m.fuel)} + ALTN ${Math.round(a.fuel)} + RES ${Math.round(res)} = ${Math.round(need)}${fob>0?` ｜ FOB ${Math.round(fob)}`:''}`):'',
+    noMea(rows)].join('');
   const sec=[{title:`IFR LOG　${dep.icao} → ${dst.icao}`,head:prHeadHtml(notesM,m.cum.toFixed(1)+' NM',fmtHM(m.t),ff>0?Math.round(m.fuel)+'':'',etd?jstHm(etd):''),
     table:ifrPrintTable(rows,ac,dep,ff,fob,etd)}];
   if(rowsA&&alt){
-    const notesA=[prAdNote(alt.icao),nl('IAC',pn(S.iacA)),nl('CRZ',`${crz} ｜ TAS ${tas}kt ｜ FF ${ff}/h`)].join('');
+    const notesA=[prAdNote(alt.icao),nl('IAC',pn(S.iacA)),nl('CRZ',`${crz} ｜ TAS ${tas}kt ｜ FF ${ff}/h`),noMea(rowsA)].join('');
     sec.push({title:`IFR LOG ALTN　${dst.icao} → ${alt.icao}`,head:prHeadHtml(notesA,a.cum.toFixed(1)+' NM',fmtHM(a.t),ff>0?Math.round(a.fuel)+'':''),
       table:ifrPrintTable(rowsA,ac,dst,ff,fob>0?fob-m.fuel:0,0)});
   }
@@ -8713,7 +8715,7 @@ function ifrTable(rows,key,warr,ac,dep,cruise,depAp){
       `<button data-ed="avoid" data-n="${b.n}" title="この点を通らない経路に組み直す">✕</button><button data-ed="ins" data-n="${b.n}" title="この点のあとに経由点を足す">＋</button></span>`:'';
     h+=`<tr${e.tr?' class="ap"':''}><td>${b.ap?b.ap.icao+' '+b.ap.n:b.n}${ed}</td><td>${rn}</td><td class="r">${fmt3(r.mc)}°</td><td>${wcell}</td>`+
       `<td class="r">${r.bad?'<span class="ifrNg">不可</span>':fw(r.wca)+'°'}</td><td class="r">${r.mh==null?'—':fmt3(r.mh)+'°'}</td><td class="r">${r.ch==null?'—':fmt3(r.ch)+'°'}</td>`+
-      `<td class="r">${f0(r.gs)}</td><td class="r">${e.d.toFixed(1)}</td><td class="r">${fmtHM(r.ete)}</td><td class="r">${fmtHM(r.t)}</td><td class="r"${e.mea!=null&&!ac.press&&e.mea>ac.maxAlt?' style="color:var(--red);font-weight:700" title="与圧なしの上限を超える"':''}>${e.mea!=null?e.mea:'—'}</td><td class="brg">${ev}</td></tr>`;
+      `<td class="r">${f0(r.gs)}</td><td class="r">${e.d.toFixed(1)}</td><td class="r">${fmtHM(r.ete)}</td><td class="r">${fmtHM(r.t)}</td><td class="r"${e.mea!=null&&!ac.press&&e.mea>ac.maxAlt?' style="color:var(--red);font-weight:700" title="与圧なしの上限を超える"':''}>${e.mea!=null?e.mea:ifrNoMea([l],ifrPlanRes.G).length?'<span style="color:var(--amb);font-weight:700" title="MEA の無い区間。高度は MSA・図で確認">なし⚠</span>':'—'}</td><td class="brg">${ev}</td></tr>`;
   });
   return h;
 }
@@ -8758,6 +8760,7 @@ function renderIfrOut(P){
     <span style="font-family:var(--mono);font-size:18px;color:${CA.over?'var(--red)':'var(--grn)'}">${CA.alt>=18000?'FL'+CA.alt/100:CA.alt.toLocaleString()+'ft'}</span>
     <span class="hint" style="display:inline;margin-left:8px">最大MEA ${CA.mea?CA.mea.toLocaleString()+'ft':'記載なし'}${CA.meaLeg?'('+G.nodes[CA.meaLeg.from].n+'→'+G.nodes[CA.meaLeg.to].n+')':''}・全体の磁針路 ${fmt3(CA.mc)}° → ${CA.odd?'奇数':'偶数'}千ft</span>
     ${CA.over?ifrCapHtml(CA,R,G):''}
+    ${ifrNoMeaHtml(R,RA,G)}
     ${R.legs.some(l=>l.e.sg&&l.e.sg.inh)?'<div class="hint">MEAは記載の無い区間に前の区間の値を継いだものを含む</div>':''}
   </div>
   <div class="ifrBox"><b class="k">方式(装備で使えるもの。タップで選択)</b>
@@ -8824,6 +8827,25 @@ function renderIfrOut(P){
     if(!w.same&&w.d==null){const cur=ifrWindOf(W[c.dataset.k],+c.dataset.i,W.base);w.d=cur.d;w.s=cur.s}rerender()});
   document.querySelectorAll('#ifrOut .wd,#ifrOut .ws').forEach(inp=>inp.onchange=()=>{const w=W[inp.dataset.k][+inp.dataset.i];
     w[inp.classList.contains('wd')?'d':'s']=parseFloat(inp.value)||0;w.same=false;rerender()});
+}
+/* MEA の無い区間(v6-269・ユーザー要望)。navaid のラジアルで繋いだ辺(ENR 4.3 の評定・RNAV 区間をラジアルで通すもの以外)・
+   直行経路などで表に MEA が無い区間。巡航高度はこの区間の地形を見ていない(KCC R034 → KROBE 86NM で 3,000ft と出た)。
+   方式の辺(SID・STAR・IAF)・飛行場と局の辺・同じ局の付け替えは除く(方式の図の高度で飛ぶ)。
+   両端とも出発・目的・代替の飛行場から 25NM 以内の区間も除く(IAF・待機点へのつなぎ。図の MSA の範囲) */
+function ifrNoMea(legs,G){
+  const P=ifrPlanRes,aps=P?[P.dep,P.dst,P.alt].filter(Boolean):[];
+  const near=(a,b)=>aps.some(ap=>distNM(ap,a)<=25&&distNM(ap,b)<=25);
+  return (legs||[]).filter(l=>{const e=l.e,a=G.nodes[l.from],b=G.nodes[l.to];
+    return !e.proc&&!e.same&&e.mea==null&&!a.ap&&!b.ap&&!near(a,b)});
+}
+function ifrNoMeaHtml(R,RA,G){
+  const nm=k=>{const n=G.nodes[k];return n.ap?n.ap.icao:n.n};
+  const one=(l,pre)=>`<b>${pre}${nm(l.from)}→${nm(l.to)}</b> ${(+l.e.d).toFixed(1)}NM(${l.e.tr?l.e.tag:l.e.r?l.e.r.n:''})`;
+  const a=ifrNoMea(R.legs,G).map(l=>one(l,'')),b=RA?ifrNoMea(RA.legs,G).map(l=>one(l,'代替 ')):[];
+  if(!a.length&&!b.length)return '';
+  return `<div class="ifrWarn">⚠ <b>MEA の無い区間がある</b>。巡航高度はこの区間の地形・障害物を見ていない。`+
+    `ENR の図の最低高度(MOCA/GRID MORA)・区分航空図の最高標高で高度を確かめること(飛行場から 25NM 以内の区間は図の MSA)</div>`+
+    `<div class="ifrCapList" style="color:var(--amb)">${a.concat(b).join('・')}</div>`;
 }
 /* 与圧なしの上限を超えるときの案内。上限を超える区間・必要な高度・上限を気にしない場合の短い経路・対策 */
 function ifrCapHtml(CA,R,G){
