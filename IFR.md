@@ -455,3 +455,15 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   先にあって ILS Y の IAF の辺が張られず、最寄りの点への「(仮)」の直線で着陸していた
 - 進入復行の待機点の取り違え(gen_proc の mah)を `IAC_DEF.mah` で直した: 福井 RNP RWY18(KAGAR → AWARA)・新潟 RNP Z RWY10(FOIRU → INAHO)。
   KAGAR は RNAV 専用の IF で経路網に無く、小松→福井で代替(小松)への経路が無かった
+
+## v6-272 八尾・神戸・但馬・南紀白浜の SID・進入の形
+- 八尾 RJOY: ASUKA SEVEN(R281 7.1DME → KCE R086 → ASUKA・NAGOYA TRANSITION → KCC 9000)・IZUMI THREE(R229・5000)。VOR B(IZUMI → OLNOK → YOE)
+- 神戸 RJBE: KOBE SIX(YOE R274 → KIE R333 → KCE R272 → MAIKO)・TRANSITION(KIBI/YABUU/KAGAWA/OMBIP・KAWAT 7000)・MUKRI ONE(RNAV)と
+  RNAV TRANSITION1(SOUJA/WASYU/TANTA)/ 2(MIDER/SANDA/MIYAZU)。ILS Y / ILS Z / RNP RWY09(どれも SIOJI(IF・待機)から。ILS Z の進入復行は GNSS)
+- 但馬 RJBT: MIYAZU THREE(YME R285)・ROKKO ONE(RNAV)。LOC RWY01(ASAGI/OLSOP → TAKDA。初期進入 GNSS required)・RNP RWY01/19(OLSOP/ASAGI)
+- 南紀白浜 RJBD: NANKI REVERSAL THREE・KUSHIMOTO TWO(RNAV)。LOC/VOR RWY15・VOR A(NKE の待機から)・RNP Y RWY15(ESBAK)/ RWY33(MUROH)。RNP Z(AR) は書かない
+- `SID_DEF` の鍵の `m` に **RegExp** を使えるようにした(`sidHit`)。神戸は従来の "TRANSITION" と "RNAV TRANSITION1/2" が別の索引名で、
+  文字列の部分一致だと従来の TRANSITION が RNAV の索引名にも当たる
+- ⚠ **SID のアークが描かれていなかった**: `{arc,dme,to}` の dme を「その針路のまま DME まで」の手順として先に処理していて、アークは素通りで次の点へ直線だった
+  (小牧 IBUKI の ADGUN/OHNNO・MORIZ の SHIMA・岐阜・新潟 OKESA の NAEBA/HAKBA・松島 RIASU)。arc を持つ手順は dme の扱いから外した
+- SID の終点(`fix`)が FIX でなく nav の局のとき(但馬 MIYAZU THREE の YME)NaN になっていたのを直した

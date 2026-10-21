@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-271';
+const VER_TAG='v6-272';
 const BUILD='2026-10-21';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8103,7 +8103,7 @@ function procEnd(G,ap,x){
     // m: 図の方式名(TRANSITION ごとに鍵を分けたとき)。tac: TACAN 装備機のみの TRANSITION(小牧 IBUKI の ADGUN/OHNNO)
     // alt: 図の "Cross ◯◯ at or above" の高度。与圧なしで上限(maxAlt)を超えるものは使えない(小牧 IBUKI 11000・NIIGATA TRANSITION FL200)
     //   名前は合うが全部使えないときは [](図の文の自動抽出 to に戻さない。戻すと使えない TRANSITION の終点に繋がる)
-    const nm=x.p.n.toUpperCase(),hit=Object.keys(A.sids).filter(k=>nm.includes(A.sids[k].m||k));
+    const nm=x.p.n.toUpperCase(),hit=Object.keys(A.sids).filter(k=>sidHit(A.sids[k],k,nm));
     // gnss: 図に "GNSS required" の RNAV SID で、索引(gen_proc)に RNAV の印が無いもの(能登 HOUSU/KAIOH)
     const ks=hit.filter(k=>{const S=A.sids[k];return !(S.tac&&G.ac&&!G.ac.tacan)&&!(S.gnss&&G.ac&&!G.ac.gnss)&&!(S.alt&&G.ac&&!G.ac.press&&S.alt>(G.ac.maxAlt||10000))});
     if(hit.length&&!ks.length)return [];
@@ -9387,6 +9387,85 @@ const SID_DEF={
         '27':[{climbTo:900},{to:'SY900',turn:'L'},{to:'TADAT'},{to:'YTE'},{to:'ZUNDA'}]},
     }
   },
+  /* 八尾(RJOY AD2.24-SID-1〜2)。滑走路は AD 2.12(09/27 086.65°/266.65°T・13/31 127.34°/308.34°T)。YOE は VOR/DME・VAR 8°W。
+     ASUKA SEVEN: 27 は右・09/13 は右(3.0NM 以内)・31 は左に旋回して R281 → 7.1DME(ITE R176)→ 右旋回で KCE R086 → ASUKA(NAGOYA TRANSITION は KCC へ・9000 以上)
+     IZUMI THREE: 27/31 は左・09/13 は右に旋回して R229 → IZUMI(5000 以上)。旋回の位置は図の 3.0NM 以内の目安 */
+  RJOY:(()=>{
+    const tr=(r,d)=>({'27':[{to:{rad:r,dme:d},turn:'R'}],'09':[{to:{rad:r,dme:d},turn:'R'}],'13':[{to:{rad:r,dme:d},turn:'R'}],'31':[{to:{rad:r,dme:d},turn:'L'}]});
+    const iz=tr(229,3);iz['27']=[{to:{rad:229,dme:3},turn:'L'}];
+    const as=tr(281,3),asx=[{to:{rad:281,dme:7.1}},{to:'ASUKA',turn:'R'}];
+    const asu={fix:'ASUKA',nav:'YOE',name:'ASUKA SEVEN'};['27','09','13','31'].forEach(k=>asu[k]=as[k].concat(asx));
+    return {
+      rwy:{'09':{end:[34.596389,135.605594],brgT:86.65,elev:38},'27':{end:[34.595606,135.589375],brgT:266.65,elev:36},
+        '13':{end:[34.594444,135.605750],brgT:127.34,elev:39},'31':{end:[34.599667,135.597472],brgT:308.34,elev:34}},
+      nav:{YOE:{lat:34.59846,lng:135.59371,var:8},KCC:{lat:35.26527,lng:136.91493,var:8}},
+      sids:{
+        ASUKA:asu,
+        'ASUKA KCC':Object.assign({},asu,{m:'ASUKA',fix:'KCC',name:'ASUKA SEVEN・NAGOYA TRANSITION',alt:9000},
+          Object.fromEntries(['27','09','13','31'].map(k=>[k,asu[k].concat([{to:'KCC'}])]))),
+        IZUMI:Object.assign({fix:'IZUMI',nav:'YOE',name:'IZUMI THREE',alt:5000},
+          Object.fromEntries(['27','09','13','31'].map(k=>[k,iz[k].concat([{to:'IZUMI'}])]))),
+      }};
+  })(),
+  /* 神戸(RJBE AD2.24-SID-1〜8・EFF 20 MAR 2025)。滑走路は AD 2.12(084.61°/264.61°T)。KCE は VOR/DME・VAR 8°W。
+     KOBE SIX: 09 は右旋回で YOE R274 → D25.2(KIE R333)→ KCE R272 → MAIKO / 27 は KCE R272 → MAIKO。5.0%(500FT まで)
+     TRANSITION(MAIKO → KAWAT 7000 以上): KIBI(OYE R114 → OYE)・YABUU(KCE 33.3DME 時計回り → OMBIP → YME R215 → YME・8000)・KAGAWA(KTE)・OMBIP
+     MUKRI ONE(RNAV): TARUP → LEMET(3000)→ MUKRI。RNAV TRANSITION1(SOUJA・WASYU・TANTA)/ 2(MIDER・SANDA・MIYAZU) */
+  RJBE:(()=>{
+    const g={'09':{pct:5,to:500},'27':{pct:5,to:500}};
+    const kb={fix:'MAIKO',nav:'KCE',name:'KOBE SIX',grad:g,'09':[{to:{rad:274,dme:25.2,nav:'YOE'},turn:'R'},{to:'MAIKO'}],'27':[{to:'MAIKO'}]};
+    const ex=(b,x,o)=>Object.assign({},b,{'09':b['09'].concat(x),'27':b['27'].concat(x)},o);
+    const kt=(nm,fx,x,o)=>ex(kb,[{to:'KAWAT'}].concat(x),Object.assign({m:/^TRANSITION$/,fix:fx,name:'KOBE SIX・'+nm+' TRANSITION',alt:7000},o));
+    const mk={fix:'MUKRI',nav:'KCE',name:'MUKRI ONE',grad:g,
+      '09':[{climbTo:500},{to:'TARUP',turn:'R'},{to:'LEMET'},{to:'MUKRI'}],'27':[{climbTo:500},{to:'TARUP',turn:'L'},{to:'LEMET'},{to:'MUKRI'}]};
+    const rt=(n,nm,fx,x,o)=>ex(mk,x,Object.assign({m:'RNAV TRANSITION'+n,fix:fx,name:'MUKRI ONE・'+nm+' TRANSITION'},o));
+    const lan=[{to:'LANID'},{to:'REVUE'},{to:'HYOGO'},{to:'SANDA'}];
+    return {
+      rwy:{'09':{end:[34.633758,135.237456],brgT:84.61,elev:20},'27':{end:[34.631642,135.210311],brgT:264.61,elev:21}},
+      nav:{KCE:{lat:34.631111,lng:135.228333,var:8},YOE:{lat:34.59846,lng:135.59371,var:8},OYE:{lat:34.75038,lng:133.83506,var:8},
+        KTE:{lat:34.2125,lng:134.02259,var:8},YME:{lat:35.48069,lng:135.13702,var:8}},
+      sids:{
+        KOBE:kb,
+        'TR OYE':kt('KIBI','OYE',[{to:'OYE'}]),
+        'TR YME':kt('YABUU','YME',[{arc:'R',dme:33.3,to:'OMBIP'},{to:'YME'}],{alt:8000}),
+        'TR KTE':kt('KAGAWA','KTE',[{to:'KTE'}]),
+        'TR OMBIP':kt('OMBIP','OMBIP',[{arc:'R',dme:33.3,to:'OMBIP'}]),
+        MUKRI:mk,
+        'R1 SOUJA':rt(1,'SOUJA','SOUJA',[{to:'ATKAS'},{to:'GUMID'},{to:'SOUJA'}]),
+        'R1 WASYU':rt(1,'WASYU','WASYU',[{to:'ATKAS'},{to:'SHION'},{to:'WASYU'}]),
+        'R1 TANTA':rt(1,'TANTA','TANTA',[{to:'ATKAS'},{to:'TANTA'}]),
+        'R2 MIDER':rt(2,'MIDER','MIDER',lan.concat([{to:'MIDER'}])),
+        'R2 SANDA':rt(2,'SANDA','SANDA',lan),
+        'R2 YME':rt(2,'MIYAZU','YME',[{to:'LANID'},{to:'PORUS'},{to:'TRIPY'},{to:'ASAGI'},{to:'YME'}]),
+      }};
+  })(),
+  /* 但馬(RJBT AD2.24-SID-1〜2・EFF 1 OCT 2026)。滑走路は AD 2.12(003.00°/183.00°T)。飛行場の VOR は無い(nav は偏差のための YME・VAR 8°W)。
+     MIYAZU THREE: 01 は 1900FT → 右 HDG150° / 19 は 1900FT → 左 HDG060° で YME R285 → YME(D10 で 5000 以上)
+     ROKKO ONE(RNAV): 1900FT → 01 は右・19 は左に旋回して GUNZE → ROKKO。5.0%(01 は 2200FT・19 は 3200FT まで) */
+  RJBT:{
+    rwy:{'01':{end:[35.518253,134.787342],brgT:3,elev:572},'19':{end:[35.507453,134.78665],brgT:183,elev:583}},
+    nav:{YME:{lat:35.48069,lng:135.13702,var:8}},
+    sids:{
+      MIYAZU:{fix:'YME',nav:'YME',name:'MIYAZU THREE',grad:{'01':{pct:5,to:2200},'19':{pct:5,to:3200}},
+        '01':[{climbTo:1900},{turn:'R',hdg:150},{intercept:285}],'19':[{climbTo:1900},{turn:'L',hdg:60},{intercept:285}]},
+      ROKKO:{fix:'ROKKO',nav:'YME',name:'ROKKO ONE',grad:{'01':{pct:5,to:2200},'19':{pct:5,to:3200}},
+        '01':[{climbTo:1900},{to:'GUNZE',turn:'R'},{to:'ROKKO'}],'19':[{climbTo:1900},{to:'GUNZE',turn:'L'},{to:'ROKKO'}]},
+    }
+  },
+  /* 南紀白浜(RJBD AD2.24-SID-1〜2)。滑走路は AD 2.12(140.97°/320.97°T)。NKE は VOR/DME・VAR 8°W。
+     NANKI REVERSAL THREE: 15 は HDG163° で NKE 4.0DME → 右旋回 / 33 は 1500FT → 左旋回 で NKE(4000 以上)。RWY15 5.8%(1300FT まで)
+     KUSHIMOTO TWO(RNAV): 15 は HDG149° 2100FT → 左旋回で KEC / 33 は HDG329° 800FT → 左旋回で BD300 → BD301(5000)→ KEC */
+  RJBD:{
+    rwy:{'15':{end:[33.655308,135.371317],brgT:140.97,elev:274},'33':{end:[33.669317,135.357736],brgT:320.97,elev:298}},
+    nav:{NKE:{lat:33.661389,lng:135.359444,var:8},KEC:{lat:33.44774,lng:135.79449,var:8},
+      BD300:{lat:33.595833,lng:135.273444,var:8},BD301:{lat:33.556889,lng:135.411417,var:8}},
+    sids:{
+      NANKI:{fix:'NKE',nav:'NKE',name:'NANKI REVERSAL THREE',grad:{'15':{pct:5.8,to:1300}},
+        '15':[{turn:'R',hdg:163},{dme:4},{to:'NKE',turn:'R'}],'33':[{climbTo:1500},{to:'NKE',turn:'L'}]},
+      KUSHIMOTO:{fix:'KEC',nav:'NKE',name:'KUSHIMOTO TWO',grad:{'15':{pct:6.1,to:2100}},
+        '15':[{climbTo:2100},{to:'KEC',turn:'L'}],'33':[{climbTo:800},{to:'BD300',turn:'L'},{to:'BD301'},{to:'KEC'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -9594,6 +9673,8 @@ function sidLenMin(icao,name,end){
   for(const r of Object.keys(A.rwy)){const t=sidTrackOf(icao,name,r,ac,end);if(t&&t.fix===end&&!t.rwyNote&&(!m||t.len<m))m=t.len}
   return m;
 }
+/* 索引の方式名 nm がこの鍵の SID か。m は名前の一部(文字列)か RegExp(神戸: 従来の "TRANSITION" と "RNAV TRANSITION1" を分ける) */
+function sidHit(S,k,nm){const m=S.m||k;return m instanceof RegExp?m.test(nm):nm.includes(m)}
 function sidEndOf(A,k){const t=A.sids[k].then;return t?t[t.length-1].to:A.sids[k].fix}
 /* ── 進入方式の形(IAF → 滑走路)。図の飛び方を手で写したもの(SID_DEF と同じ考え方・まず百里) ──
    手順: {at:'NAKAH'} 開始(IAF) / {to:'名前'|[緯度,経度]|{rd:[磁方位,DME]}} 直進 / {arc:DME,to:磁方位,dir:'R'|'L'} DME アーク
@@ -9819,6 +9900,39 @@ const IAC_DEF={
     'LOC RWY27':[{at:'YSE'},{to:{rd:[72,12]}},{to:'AMARU'},{thr:'27'}],
     'VOR RWY09':[{at:'YSE'},{to:{rd:[290,11]}},{to:'ANCOU'},{mapt:{rd:[273,1.1]}}],
     'RNP Z RWY27':[{at:'MOKKE'},{to:'SY752'},{to:'MINAM'},{to:'KYODN'},{thr:'27'}]}},
+  // 八尾(IAC-1 2024-12-26)。VOR B: IZUMI(IF・MAHF・待機)→ OLNOK → YOE(MAPt)
+  RJOY:{nav:{YOE:{lat:34.59846,lng:135.59371,var:8}},navId:'YOE',thr:{},pts:{},mah:{'VOR B':'IZUMI'},iac:{
+    'VOR B':[{at:'IZUMI'},{to:'OLNOK'},{mapt:'YOE'}]}},
+  // 神戸(IAC-1〜3 2025-03-20)。どれも SIOJI(IF・待機)から。ILS Y の進入復行は SIOJI、ILS Z・RNP は TRACY(ILS Z の進入復行は RNP1・GNSS required)
+  RJBE:{nav:{KCE:{lat:34.631111,lng:135.228333,var:8}},navId:'KCE',thr:{'09':[34.631642,135.210311]},pts:{BE950:[34.624075,135.113925]},
+    mah:{'ILS Y or LOC Y RWY09':'SIOJI','ILS Z or LOC Z RWY09':'TRACY','RNP RWY09':'TRACY'},req:{'ILS Z or LOC Z RWY09':'GNSS'},iac:{
+    'ILS Y or LOC Y RWY09':[{at:'SIOJI'},{to:'PEGDO'},{thr:'09'}],
+    'ILS Z or LOC Z RWY09':[{at:'SIOJI'},{to:'PEGDO'},{thr:'09'}],
+    'RNP RWY09':[{at:'SIOJI'},{to:'AKPUN'},{to:'BE950'},{thr:'09'}]}},
+  // 但馬(IAC-1〜3 2026-10-01)。LOC RWY01 は ASAGI → FOSTA → BT159 / OLSOP → BT160 → BT158 から TAKDA(IF)(初期進入は RNP1・GNSS required)。
+  //   RNP RWY01 は OLSOP → BT156 → BT157 / ASAGI → FOSTA → BT150 から BT151(IF)、RNP RWY19 は OLSOP → BT950 → BT951 / ASAGI → FOSTA → BT950 から BT952(IF)。
+  //   navaid は LOC(ITH)だけ
+  RJBT:(()=>{const r01=[{to:'BT151'},{to:'YABOO'},{to:'BT152'},{to:'BT153'},{thr:'01'}],r19=[{to:'BT951'},{to:'BT952'},{to:'AMARB'},{to:'BT953'},{to:'BT954'},{thr:'19'}],
+    l01=[{to:'TAKDA'},{to:'SHRAK'},{thr:'01'}];
+    return {nav:{ITH:{lat:35.519044,lng:134.787725,var:8}},navId:'ITH',thr:{'01':[35.507453,134.78665],'19':[35.518253,134.787342]},
+    pts:{BT160:[35.361722,134.877222],BT158:[35.263528,134.869111],BT159:[35.219083,134.764194],BT156:[35.358139,134.879172],BT157:[35.274761,134.87375],
+      BT150:[35.212561,134.765756],BT151:[35.279158,134.772072],BT152:[35.434078,134.781956],BT153:[35.459092,134.783556],BT950:[35.634817,134.858317],
+      BT951:[35.693178,134.862114],BT952:[35.695908,134.798744],BT953:[35.606633,134.793008],BT954:[35.559942,134.790014]},
+    mah:{'LOC RWY01':'OLSOP','RNP RWY01':'OLSOP','RNP RWY19':'OLSOP'},req:{'LOC RWY01':'GNSS'},iac:{
+    'LOC RWY01':{ASAGI:[{at:'ASAGI'},{to:'FOSTA'},{to:'BT159'}].concat(l01),OLSOP:[{at:'OLSOP'},{to:'BT160'},{to:'BT158'}].concat(l01)},
+    'RNP RWY01':{OLSOP:[{at:'OLSOP'},{to:'BT156'},{to:'BT157'}].concat(r01),ASAGI:[{at:'ASAGI'},{to:'FOSTA'},{to:'BT150'}].concat(r01)},
+    'RNP RWY19':{OLSOP:[{at:'OLSOP'},{to:'BT950'}].concat(r19),ASAGI:[{at:'ASAGI'},{to:'FOSTA'},{to:'BT950'}].concat(r19)}}};})(),
+  // 南紀白浜(IAC-1〜3・6・9)。LOC RWY15・VOR RWY15 は NKE の待機から R305/R319 → D8.0/D9.0 で旋回、VOR A は R207 → D11.0 で旋回 → SANDN。
+  //   RNP Y RWY15 は ESBAK(IAF)→ … → BD552(IF)、RNP Y RWY33 は MUROH(IAF)→ BD350 → BD351(IF)。RNP Z(AR) は対象外
+  RJBD:{nav:{NKE:{lat:33.661389,lng:135.359444,var:8}},navId:'NKE',thr:{'15':[33.669317,135.357736],'33':[33.655308,135.371317]},
+    pts:{BD559:[33.815806,135.532925],BD550:[33.812628,135.411319],BD551:[33.809925,135.311322],BD552:[33.773075,135.256964],
+      BD350:[33.557989,135.547225],BD351:[33.529917,135.485981],BD352:[33.599739,135.405242],BD353:[33.622611,135.393017]},
+    mah:{'LOC RWY15':'NKE','VOR RWY15':'NKE','VOR A':'NKE','RNP Y RWY15':'KISEI','RNP Y RWY33':'KISEI'},iac:{
+    'LOC RWY15':[{at:'NKE'},{to:{rd:[305,8]}},{to:'ENGEZ'},{thr:'15'}],
+    'VOR RWY15':[{at:'NKE'},{to:{rd:[319,9]}},{to:'HAYAH'},{mapt:{rd:[319,1.5]}}],
+    'VOR A':[{at:'NKE'},{to:{rd:[207,11]}},{to:'SANDN'},{mapt:{rd:[190,1]}}],
+    'RNP Y RWY15':[{at:'ESBAK'},{to:'BD559'},{to:'BD550'},{to:'BD551'},{to:'BD552'},{to:'GALAS'},{thr:'15'}],
+    'RNP Y RWY33':[{at:'MUROH'},{to:'BD350'},{to:'BD351'},{to:'PANDA'},{to:'BD352'},{to:'BD353'},{thr:'33'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
@@ -9914,12 +10028,12 @@ function iacTrackOf(icao,name,iafName){
 }
 function sidTrackOf(icao,sidName,rwy,ac,endFix,only){
   const A=SID_DEF[icao];if(!A||!sidName)return null;
-  const nm=sidName.toUpperCase(),keys=only?[only]:Object.keys(A.sids).filter(k=>nm.includes(A.sids[k].m||k));
+  const nm=sidName.toUpperCase(),keys=only?[only]:Object.keys(A.sids).filter(k=>sidHit(A.sids[k],k,nm));
   // 同じ終点の SID が図に複数(百里 OGITU EAST / WEST)あれば、その滑走路で短い方
   const cand=endFix?keys.filter(k=>sidEndOf(A,k)===endFix):[];
   if(cand.length>1)return cand.map(k=>sidTrackOf(icao,k,rwy,ac,endFix,k)).filter(Boolean)
     .sort((a,b)=>(a.rwyNote?1:0)-(b.rwyNote?1:0)||a.len-b.len)[0]||null;
-  const key=cand[0]||keys.find(k=>nm.startsWith(A.sids[k].m||k))||keys[0];if(!key)return null;
+  const key=cand[0]||keys.find(k=>A.sids[k].m instanceof RegExp?A.sids[k].m.test(nm):nm.startsWith(A.sids[k].m||k))||keys[0];if(!key)return null;
   const S=A.sids[key];if(!A.rwy[rwy])rwy=Object.keys(A.rwy)[0];
   let R=A.rwy[rwy],steps=S[rwy],rwyNote='';
   // 図で "(Not established)" の滑走路(木更津 KOSKA の RWY20 など)は、ある方の滑走路で描いて断り書きを出す
@@ -9950,7 +10064,8 @@ function sidTrackOf(icao,sidName,rwy,ac,endFix,only){
       let L0=0;for(let i=1;i<pts.length;i++)L0+=distNM(pts[i-1],pts[i]);
       const now=Math.max(alt,R.elev+L0/vcl*60*roc);
       go(Math.max(0,(st.climbTo-now)/roc)*vcl/60);alt=st.climbTo}
-    else if(st.dme!=null){                                       // その針路のまま nav から dme NM になるまで
+    // ⚠ アーク {arc,dme,to} も dme を持つので、ここは arc の無いものだけ(v6-272 まで小牧・岐阜・新潟・松島のアークが素通りで直線になっていた)
+    else if(st.dme!=null&&!st.arc){                              // その針路のまま nav から dme NM になるまで
       const n=A.nav[st.nav||S.nav];let k=0;
       while(k++<600&&distNM(p,n)<st.dme){p=destLL(p.lat,p.lng,hdg,0.05)}
       pts.push(p);
@@ -9985,7 +10100,8 @@ function sidTrackOf(icao,sidName,rwy,ac,endFix,only){
   // 手順が点で終わっていなければ、S.fix(無ければ S.rad/S.dme の点)へ。続きは S.then
   let end=p;
   if(fin==null){
-    const fx=FIX&&FIX._ix[S.fix];
+    // 終点は FIX か、nav の局(但馬 MIYAZU THREE の YME。⚠ 以前は FIX だけ見ていて NaN になった)
+    const fx=(FIX&&FIX._ix[S.fix])||A.nav[S.fix];
     end=fx?{lat:fx.lat,lng:fx.lng}:destLL(nav.lat,nav.lng,tru(S.rad),S.dme);fin=S.fix;
     pts.push(end);
     if(S.then){hdg=trueBrg(pts[pts.length-2],end);p=end;
