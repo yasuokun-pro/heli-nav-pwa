@@ -1235,8 +1235,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-276';
-const BUILD='2026-10-21';
+const VER_TAG='v6-277';
+const BUILD='2026-10-22';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -8106,7 +8106,7 @@ function procEnd(G,ap,x){
     const nm=x.p.n.toUpperCase(),hit=Object.keys(A.sids).filter(k=>sidHit(A.sids[k],k,nm));
     // gnss: 図に "GNSS required" の RNAV SID で、索引(gen_proc)に RNAV の印が無いもの(能登 HOUSU/KAIOH)
     // radar: 図の注記に "RADAR service required" がある SID(高松の RNAV SID)。自分の装備と公示の方式だけで計画するので使わない(形は出す)
-    const ks=hit.filter(k=>{const S=A.sids[k];return !(S.tac&&G.ac&&!G.ac.tacan)&&!(S.gnss&&G.ac&&!G.ac.gnss)&&!S.radar&&!(S.alt&&G.ac&&!G.ac.press&&S.alt>(G.ac.maxAlt||10000))});
+    const ks=hit.filter(k=>{const S=A.sids[k];return !(S.tac&&G.ac&&!G.ac.tacan)&&!(S.gnss&&G.ac&&!G.ac.gnss)&&!(S.rnavReq&&G.ac&&!G.ac.gnss&&!G.ac.rnav)&&!S.radar&&!(S.alt&&G.ac&&!G.ac.press&&S.alt>(G.ac.maxAlt||10000))});
     if(hit.length&&!ks.length)return [];
     const all=[...new Set(ks.map(k=>sidEndOf(A,k)))].filter(t=>{
       if(!G.nodes[t]&&!(FIX&&FIX._ix[t]))navNode(G,t);return G.nodes[t]||(FIX&&FIX._ix[t])});
@@ -8205,6 +8205,8 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
   // 経路網に無い点は「評定できる navaid」経由で繋ぐ。評定の無い点(RNAV専用)だけ最寄りに直線
   const join=(t,lab)=>{
     if(G.nodes[t])return true;
+    // IAF が遠くの局(岩国 ILS の MYE)のときは、その局を経路網に入れる(装備で使える局だけ)
+    if(!(FIX&&FIX._ix[t])&&navPt(t))return !!navNode(G,t);
     const f=FIX&&FIX._ix[t];if(!f||!usable(t))return false;
     if(!linkFixVia(G,t)){
       // ⚠ 評定できる局が無い点(ILS の LOC/DME でしか決まらない出雲 NAKAU など)へ、GNSS も RNAV 装置も無い機体で直線を引かない
@@ -8308,6 +8310,8 @@ function procOk(p,ac){
   if(rq==='GNSS'&&!ac.gnss)return {ok:0,why:'GNSS(図の注記: 初期進入 RNP1)'};
   // 初期進入にレーダー業務が要る(新潟 ILS Z: IAF から IF までの区間)。自分の装備と公示の方式だけで計画するので使わない
   if(rq==='RADAR')return {ok:0,why:'レーダー業務が要る(図の注記: 初期進入)'};
+  // 図に "AUTHORIZATION REQUIRED"(RNP AR 相当。岩国 RNAV(RNP) Z RWY20)。名前に (AR) が無い図
+  if(rq==='AR')return {ok:0,why:'RNP AR(特別の承認が要る)'};
   if(eq.includes('TACAN')&&!ac.tacan)return {ok:0,why:'TACAN(図の必要装備)'};
   if(eq.includes('DME')&&!(ac.dme||ac.tacan))return {ok:0,why:'DME(図の必要装備)'};
   if(eq.includes('VOR')&&!ac.vor)return {ok:0,why:'VOR(図の必要装備)'};
@@ -9805,6 +9809,43 @@ const SID_DEF={
         MUTSU:mu,'MUTSU MIS':ex(mu,[{to:'MIS'}],{m:'MUTSU',fix:'MIS',name:'MUTSU TWO・MISAWA TRANSITION'}),
       }};
   })(),
+  /* 松山(RJOM AD2.24-SID-1〜9)。滑走路は AD 2.12(130.55°/310.55°T)。MYE は VOR/DME・VAR 8°W。
+     MATSUYAMA REVERSAL FIVE: 32 は 500FT → 左 HDG270° で 3500FT → 左旋回 / 14 は 1300FT → 右 HDG270° で 3500FT → 右旋回 で MYE(6500 以上)。14 は 7.0%(3200FT まで)
+     IYO TWO(SHONO 10000)・MARCO TWO(OM401 → OM402 → MARCO)・SAKAR TWO(OM400 → SAKAR 5000・URDET / JINBE / ROSIE / KOCHI TRANSITION)(RNAV)。OM の点は図の座標 */
+  RJOM:(()=>{
+    const g={'14':{pct:7,to:3200}},g2={'14':{pct:7,to:1800}};
+    const sk={fix:'SAKAR',nav:'MYE',name:'SAKAR TWO',grad:{'14':{pct:7,to:3200},'32':{pct:5.3,to:3600}},
+      '14':[{climbTo:1300},{to:'OM400',turn:'R'},{to:'SAKAR'}],'32':[{climbTo:500},{to:'OM400',turn:'L'},{to:'SAKAR'}]};
+    const ex=(b,x,o)=>Object.assign({},b,{'14':b['14'].concat(x),'32':b['32'].concat(x)},o);
+    const st=(nm,fx,x,a)=>ex(sk,x.map(t=>({to:t})),{m:'SAKAR',fix:fx,name:'SAKAR TWO・'+nm+' TRANSITION',alt:a});
+    return {
+      rwy:{'14':{end:[33.819931, 132.709892],brgT:130.55,elev:17},'32':{end:[33.834583, 132.689369],brgT:310.55,elev:25}},
+      nav:{MYE:{lat:33.8301,lng:132.69222,var:8},NAE:{lat:33.55091,lng:133.65911,var:8},OM400:{lat:33.673167,lng:132.694861,var:8},OM401:{lat:33.767611,lng:132.629333,var:8},OM402:{lat:33.858194,lng:132.490028,var:8}},
+      sids:{
+        MATSUYAMA:{fix:'MYE',nav:'MYE',name:'MATSUYAMA REVERSAL FIVE',grad:g,alt:6500,
+          '14':[{climbTo:1300},{turn:'R',hdg:270},{climbTo:3500},{to:'MYE',turn:'R'}],'32':[{climbTo:500},{turn:'L',hdg:270},{climbTo:3500},{to:'MYE',turn:'L'}]},
+        IYO:{fix:'SHONO',nav:'MYE',name:'IYO TWO',grad:g2,alt:10000,'14':[{climbTo:1300},{to:'SHONO',turn:'R'}],'32':[{climbTo:500},{to:'SHONO',turn:'L'}]},
+        MARCO:{fix:'MARCO',nav:'MYE',name:'MARCO TWO',grad:g2,'14':[{climbTo:1300},{to:'OM401',turn:'R'},{to:'OM402'},{to:'MARCO'}],'32':[{climbTo:500},{to:'OM402',turn:'L'},{to:'MARCO'}]},
+        SAKAR:sk,
+        'SAKAR URDET':st('URDET','URDET',['JINBE','URDET'],13000),'SAKAR JINBE':st('JINBE','JINBE',['JINBE'],13000),
+        'SAKAR ROSIE':st('ROSIE','ROSIE',['MOTOQ','ROSIE'],16000),'SAKAR NAE':st('KOCHI','NAE',['NOUEH','NOKMO','NAE'],16000),
+      }};
+  })(),
+  /* 岩国(RJOI AD2.24-SID-1・米軍 FLIP の転載)。滑走路は AD 2.12(009.2°/189.2°T)。NEU は TACAN・MYE(松山)VOR/DME・VAR 8°W。
+     MATSUYAMA SE FOUR(RNAV1・DME/DME/IRU か GNSS か RNP2.0 → rnavReq): 02 は HDG015° 510FT → 右旋回 / 20 は HDG195° 510FT → 左旋回 で MYE(6000)。
+     KOCHI(MYE → 115° → NAE(旧 KRE)・FL150)・MALTA(078° → MALTA・FL150)TRANSITION */
+  RJOI:(()=>{
+    const se={fix:'MYE',nav:'NEU',name:'MATSUYAMA SE FOUR',rnavReq:1,'02':[{climbTo:510},{to:'MYE',turn:'R'}],'20':[{climbTo:510},{to:'MYE',turn:'L'}]};
+    const ex=(x,o)=>Object.assign({},se,{'02':se['02'].concat(x),'20':se['20'].concat(x)},o);
+    return {
+      rwy:{'02':{end:[34.155777, 132.249082],brgT:9.2,elev:10},'20':{end:[34.13406, 132.244868],brgT:189.2,elev:10}},
+      nav:{NEU:{lat:34.15841,lng:132.2455,var:8},MYE:{lat:33.8301,lng:132.69222,var:8},NAE:{lat:33.55091,lng:133.65911,var:8}},
+      sids:{
+        MATSUYAMA:se,
+        'MATSUYAMA NAE':ex([{to:'NAE'}],{m:'MATSUYAMA',fix:'NAE',name:'MATSUYAMA SE FOUR・KOCHI TRANSITION',alt:15000}),
+        'MATSUYAMA MALTA':ex([{to:'MALTA'}],{m:'MATSUYAMA',fix:'MALTA',name:'MATSUYAMA SE FOUR・MALTA TRANSITION',alt:15000}),
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -10440,6 +10481,19 @@ const IAC_DEF={
   // 大湊(IAC-1 2026-03-19・CAT A/B の周回のみ)。TACAN A: BATTL(IAF・待機・R205 D11)→ D11 アーク(時計回り)→ R230 → D6.0 → MAPt(D1.0)
   RJSO:{nav:{OMT:{lat:41.230833,lng:141.135833,var:9}},navId:'OMT',thr:{},pts:{},mah:{'TACAN A':'BATTL'},iac:{
     'TACAN A':[{at:'BATTL'},{arc:11,to:230,dir:'R'},{to:{rd:[230,6]}},{mapt:{rd:[230,1]}}]}},
+  // 松山(IAC-1〜3)。ILS Y・VOR RWY14 は MYE の待機から R335/R336 → D11.0 で旋回 → MIKAS / KOFJI、ILS Z は ROBIN(IF・待機)から。RNP(AR) は対象外
+  RJOM:{nav:{MYE:{lat:33.8301,lng:132.69222,var:8}},navId:'MYE',thr:{'14':[33.834583, 132.689369]},pts:{},
+    mah:{'ILS Z or LOC Z RWY14':'MYE','ILS Y or LOC Y RWY14':'MYE','VOR RWY14':'MYE'},iac:{
+    'ILS Z or LOC Z RWY14':[{at:'ROBIN'},{to:'MIKAS'},{thr:'14'}],
+    'ILS Y or LOC Y RWY14':[{at:'MYE'},{to:{rd:[335,11]}},{to:'MIKAS'},{thr:'14'}],
+    'VOR RWY14':[{at:'MYE'},{to:{rd:[336,11]}},{to:'KOFJI'},{mapt:{rd:[320,1]}}]}},
+  // 岩国(IAC-1〜3・米軍 FLIP の転載)。点は図の I-IJO DME / 区間距離から滑走路の延長線上に置いた近似。
+  //   ILS or LOC RWY02: MUTHA(IF/IAF・待機。MYE から 290°/24.7NM で入る)→ MOOOE → BUCKI。RNAV(GPS) RWY02: PPOPS(IF/IAF・待機)→ TAZZZ → STYNE → ORLFD。
+  //   進入復行は MYE で待機。RNAV(RNP) Z RWY20 は "AUTHORIZATION REQUIRED" → req AR
+  RJOI:{nav:{NEU:{lat:34.15841,lng:132.2455,var:8},MYE:{lat:33.8301,lng:132.69222,var:8}},navId:'NEU',thr:{'02':[34.13406, 132.244868]},pts:{MUTHA:[33.931827,132.205392],MOOOE:[33.974577,132.213721],BUCKI:[34.027191,132.223983],PPOPS:[33.892366,132.197711],TAZZZ:[33.974577,132.213721],STYNE:[34.037056,132.225909],ORLFD:[34.084736,132.235222]},
+    mah:{'ILS or LOC RWY02':'MYE','RNAV (GPS) RWY02':'MYE'},req:{'RNAV (RNP) Z RWY20':'AR'},iac:{
+    'ILS or LOC RWY02':{MYE:[{at:'MYE'},{to:'MUTHA'},{to:'MOOOE'},{to:'BUCKI'},{thr:'02'}]},
+    'RNAV (GPS) RWY02':[{at:'PPOPS'},{to:'TAZZZ'},{to:'STYNE'},{to:'ORLFD'},{thr:'02'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],

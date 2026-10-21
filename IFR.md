@@ -517,3 +517,11 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 大湊 RJSO(v6-276 に追加): OMINATO REVERSAL THREE(OHMAR / HIBAR)・MUTSU TWO(MISAWA)(TACAN のみ)。TACAN A(BATTL → D11 アーク → R230)。
   ⚠ 滑走路は "To be issued" / Nil なので ARP から 040°T で近似
 - 形のある飛行場: SID_DEF 52・IAC_DEF 52(全部の SID・進入の形で異常なしを確認)
+
+## v6-277 松山・岩国の SID・進入の形
+- 松山 RJOM: MATSUYAMA REVERSAL FIVE(HDG270° 3500FT → MYE)・IYO TWO / MARCO TWO / SAKAR TWO(URDET・JINBE・ROSIE・KOCHI)(RNAV)。
+  ILS Y・VOR RWY14(MYE の待機から D11 で旋回)・ILS Z(ROBIN(IF・待機))。RNP(AR) は書かない
+- 岩国 RJOI(米軍 FLIP の転載): MATSUYAMA SE FOUR(RNAV1。DME/DME でも可 → `SID_DEF` の鍵に `rnavReq:1`= GNSS か RNAV 装置)・KOCHI / MALTA TRANSITION(FL150)。
+  ILS or LOC RWY02(MYE → 290°/24.7NM → MUTHA(IF/IAF)→ MOOOE → BUCKI)・RNAV(GPS) RWY02(PPOPS)。点は図の DME / 区間距離から滑走路の延長線上に置いた近似。
+  RNAV(RNP) Z RWY20 は "AUTHORIZATION REQUIRED" → `req:'AR'`(`procOk` で RNP AR と同じ扱い)
+- IAF が遠くの局(岩国の MYE)のとき、`ifrLinkAp` の `join` がその局を経路網に入れる(以前は FIX でないと繋がらなかった)
