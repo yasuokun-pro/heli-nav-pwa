@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-264';
+const VER_TAG='v6-265';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8290,6 +8290,8 @@ function procOk(p,ac){
     return {ok:1,prec:/ILS/.test(t),cat:p.cat?(ac.ilsCat>=3?'CAT III':'CAT II'):'CAT I'};
   }
   if(/^GLS/.test(t))return {ok:0,why:'GLS'};
+  // RNP AR(名前に "(AR)")は機体・乗員の特別の承認が要る。装備だけでは使えない(松本・百里の RNP Y/Z 等)
+  if(/\(AR\)/.test(p.n||''))return {ok:0,why:'RNP AR(特別の承認が要る)'};
   if(/RNP|RNAV/.test(t))return ac.gnss?{ok:1,rnp:1}:{ok:0,why:'GNSS'};
   if(/TACAN/.test(t))return ac.tacan?{ok:1}:{ok:0,why:'TACAN'};
   if(/VOR/.test(t)){ if(!ac.vor)return {ok:0,why:'VOR'}; if(/DME/.test(t)&&!ac.dme)return {ok:0,why:'DME'}; return {ok:1} }
@@ -8889,6 +8891,26 @@ const SID_DEF={
         SHIZUOKA:{fix:'SZE',nav:'SZE',name:'SHIZUOKA ONE','09':[{climbTo:500},{to:'SZE',turn:'R'}],'27':[{climbTo:500},{to:'SZE'}]},
       }};
   })(),
+  /* 松本(RJAF AD2.24-SID-1〜3・EFF 2026)。滑走路は AD 2.12(171.24°/351.24°T)。MBE は 360922N/1375511E・VAR 8°W。
+     MATSUMOTO REVERSAL THREE: RWY18 は 2700FT → 左 HDG322° で R007 に会合 → 5DME → 右旋回で MBE / RWY36 は R007 で 5900FT → 右旋回で MBE。
+     HAPPO TWO: RWY18 は同じく R007 に会合 → HAPPO(D56.8)/ RWY36 は R007 で HAPPO。RWY18 6.6%(4200FT まで)。
+     NIIGATA ONE / MATSUMOTO ONE(RNAV・RWY36 だけ・RWY18 は Not established): HDG359° で 2600FT → AZUMI → HOKUE → GTC /
+     → AF600 → 右旋回で MBE。5.0%(5600FT まで)。⚠ AF600 は図の座標が削除されていて、図の格子(36°20'N)から置いた近似 */
+  RJAF:{
+    rwy:{'18':{end:[36.157858,137.924403],brgT:171.24,elev:2182},'36':{end:[36.175658,137.920936],brgT:351.24,elev:2132}},
+    nav:{MBE:{lat:36.15597,lng:137.91982,var:8},GTC:{lat:37.95825,lng:139.11557,var:8},AF600:{lat:36.3333,lng:137.92,var:8}},
+    sids:{
+      'MATSUMOTO REVERSAL':{fix:'MBE',nav:'MBE',name:'MATSUMOTO REVERSAL THREE',grad:{'18':{pct:6.6,to:4200}},
+        '18':[{climbTo:2700},{turn:'L',hdg:322},{intercept:7},{to:{rad:7,dme:5}},{to:'MBE',turn:'R'}],
+        '36':[{climbTo:5900},{to:'MBE',turn:'R'}]},
+      HAPPO:{fix:'HAPPO',nav:'MBE',name:'HAPPO TWO',grad:{'18':{pct:6.6,to:4200}},
+        '18':[{climbTo:2700},{turn:'L',hdg:322},{intercept:7},{to:'HAPPO'}],'36':[{to:'HAPPO'}]},
+      NIIGATA:{fix:'GTC',nav:'MBE',name:'NIIGATA ONE',grad:{'36':{pct:5.0,to:5600}},
+        '36':[{climbTo:2600},{to:'AZUMI'},{to:'HOKUE'},{to:'GTC'}]},
+      'MATSUMOTO- RNAV':{fix:'MBE',nav:'MBE',name:'MATSUMOTO ONE',grad:{'36':{pct:5.0,to:5600}},
+        '36':[{climbTo:2600},{to:'AF600'},{to:'MBE',turn:'R'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -9161,6 +9183,10 @@ const IAC_DEF={
     'TACAN Y RWY27':[{at:'RILGI'},{to:{rd:[61,11]}},{arc:11,to:100,dir:'R'},{to:'OKADO'},{mapt:{rd:[100,1.0]}}],
     'TACAN X RWY27':[{at:'UDOKU'},{to:{rd:[171,11]}},{arc:11,to:100,dir:'L'},{to:'OKADO'},{mapt:{rd:[100,1.0]}}],
     'VOR A':[{at:'SZE'},{to:{rd:[118,13,'SZE']}},{to:'ODENN'},{mapt:{rd:[99,6.3,'SZE']}}]}},
+  RJAF:{nav:{MBE:{lat:36.15597,lng:137.91982,var:8}},navId:'MBE',thr:{},pts:{},iac:{
+    // 松本(IAC-1 2026-04-16)。MBE の待機から R035 で 12DME → D12 アーク(反時計回り)→ GAKTO(IF・R006)→ FKASI(FAF・D6.9)→ MAPt D1.9。
+    // RNP Y/Z(AR) は特別の承認が要るので計画では使わない(procOk)。形も書かない
+    'VOR RWY18':[{at:'MBE'},{to:{rd:[35,12]}},{arc:12,to:6,dir:'L'},{to:{rd:[6,6.9]}},{mapt:{rd:[6,1.9]}}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
