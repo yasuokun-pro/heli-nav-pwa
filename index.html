@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-262';
+const VER_TAG='v6-263';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8275,6 +8275,9 @@ function procOk(p,ac){
     return (ac.vor||ac.gnss||ac.tacan)?{ok:1}:{ok:0,why:'VORかTACANが要る'} }
   // 図の右上の「EQPT REQUIRED」(gen_proc の eq)。進入の種類とは別に要る装備(百里 ILS Y は TACAN、ILS X は DME・VOR)
   const eq=p.eq||[];
+  // 図の注記にだけ書かれた要件(大島 LOC Z の初期進入は RNP1・GNSS required)。IAC_DEF の req
+  const rq=typeof IAC_DEF!=='undefined'&&IAC_DEF[p.icao]&&IAC_DEF[p.icao].req&&IAC_DEF[p.icao].req[p.n];
+  if(rq==='GNSS'&&!ac.gnss)return {ok:0,why:'GNSS(図の注記: 初期進入 RNP1)'};
   if(eq.includes('TACAN')&&!ac.tacan)return {ok:0,why:'TACAN(図の必要装備)'};
   if(eq.includes('DME')&&!(ac.dme||ac.tacan))return {ok:0,why:'DME(図の必要装備)'};
   if(eq.includes('VOR')&&!ac.vor)return {ok:0,why:'VOR(図の必要装備)'};
@@ -8854,6 +8857,20 @@ const SID_DEF={
         '35':[{climbTo:900},{to:'TF510',turn:'R'},{to:'TF511'},{to:'KOSKA'}]},
     }
   },
+  /* 大島(RJTO AD2.24-SID-1/2・EFF 10 JUL 2025)。滑走路は AD 2.12(020.15°/200.15°T)。OSE は MIHARA VOR/DME(AD 2.19・VAR 8°W)。
+     OSHIMA REVERSAL FOUR: RWY03 は 1100FT で左・RWY21 は 1400FT で右に旋回して OSE へ(OSE を 4000FT 以上で通過)。RWY21 は 4.2%(1400FT まで)。
+     MIHARA ONE(RNAV・GNSS): RWY03 は HDG028° で 700FT → HATSU / RWY21 は HDG208° で 1000FT → 右旋回 TO100 → HATSU。RWY21 3.8%(1000FT まで)。
+     TO100 は図の Waypoint Coordinates */
+  RJTO:{
+    rwy:{'03':{end:[34.789678,139.363681],brgT:20.15,elev:117},'21':{end:[34.774444,139.356908],brgT:200.15,elev:138}},
+    nav:{OSE:{lat:34.787742,lng:139.36485,var:8},TO100:{lat:34.864361,lng:139.378111,var:8}},
+    sids:{
+      OSHIMA:{fix:'OSE',nav:'OSE',name:'OSHIMA REVERSAL FOUR',grad:{'21':{pct:4.2,to:1400}},
+        '03':[{climbTo:1100},{to:'OSE',turn:'L'}],'21':[{climbTo:1400},{to:'OSE',turn:'R'}]},
+      MIHARA:{fix:'HATSU',nav:'OSE',name:'MIHARA ONE',grad:{'21':{pct:3.8,to:1000}},
+        '03':[{climbTo:700},{to:'HATSU'}],'21':[{climbTo:1000},{to:'TO100',turn:'R'},{to:'HATSU'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -9101,6 +9118,24 @@ const IAC_DEF={
   RJTF:{nav:{},navId:null,thr:{},pts:{TF550:[35.656011,139.533678]},iac:{
     // 調布(IAC-1 2025-10-02)。RNP(GNSS)。TF550 は図の座標(MAPt)。進入復行は ARENA → KOSKA で待機
     'RNP RWY35':[{at:'KOSKA'},{to:'ARENA'},{to:'DROMP'},{mapt:'TF550'}]}},
+  RJTO:(()=>{
+    // 大島(IAC-1〜5 2025-07-10 / 2026-10-01)。OSE(MIHARA VOR/DME)の待機から入る VOR A・B・LOC Y は、出ていく向きのラジアルで
+    // 8DME まで → 旋回(図の turn initiation within D8.0)→ FAF、で近似。LOC の MAPt は THR の手前 1.0/1.2NM(図の NM to THR)。
+    // ⚠ LOC Z の初期進入(SUNOD/MIHARA → TO350〜352 → GOMIM)は RNP1(GNSS required)。図の EQPT は DME だけなので req で GNSS を足す
+    const P={TO350:[34.715861,139.200528],TO351:[34.667583,139.184361],TO352:[34.654222,139.242778],GOMIM:[34.653861,139.303389],
+      NONIV:[34.711033,139.328744],OPETA:[34.709064,139.327869],HOLNI:[34.721944,139.306067],SCOLI:[34.868817,139.388983],
+      TO150:[34.868203,139.293817],TO151:[34.907983,139.351597],MUGEL:[34.890728,139.408672],TO152:[34.840575,139.386331],
+      SUNOD:[34.895806,139.472333],MZ:[34.758808,139.349924],MY:[34.75568,139.348528]};
+    const locZ=[{to:'TO350'},{to:'TO351'},{to:'TO352'},{to:'GOMIM'},{to:'NONIV'},{mapt:'MZ'}];
+    const rnp=[{to:'MUGEL'},{to:'TO152'},{thr:'21'}];
+    return {nav:{OSE:{lat:34.787742,lng:139.36485,var:8}},navId:'OSE',thr:{'21':[34.789678,139.363681],'03':[34.774444,139.356908]},pts:P,
+      req:{'LOC Z RWY03':'GNSS'},iac:{
+      'LOC Z RWY03':{SUNOD:[{at:'SUNOD'}].concat(locZ),OSE:[{at:'OSE'}].concat(locZ)},
+      'LOC Y RWY03':[{at:'OSE'},{to:{rd:[230,8.1]}},{to:'OPETA'},{mapt:'MY'}],
+      'VOR A':[{at:'OSE'},{to:{rd:[246,8.0]}},{to:'HOLNI'},{mapt:{rd:[224,1.9]}}],
+      'VOR B':[{at:'OSE'},{to:{rd:[33,8.0]}},{to:'SCOLI'},{mapt:{rd:[21,0.9]}}],
+      'RNP RWY21':{SUNOD:[{at:'SUNOD'}].concat(rnp),OSE:[{at:'OSE'},{to:'TO150'},{to:'TO151'}].concat(rnp)}}};
+  })(),
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
@@ -9164,9 +9199,11 @@ function iacFixInject(){
 }
 /* その進入方式の入口(IAF)。図から拾った IAF が無ければ、IAC_DEF の形の最初の点(IF・待機の点)を入口にする */
 function iacIafs(icao,p){
+  const v=IAC_DEF[icao]&&IAC_DEF[icao].iac[p.n];
+  // 入口が複数の形を持つ方式は、その入口(キー)を全部。図の IAF の書き方(MIHARA)と経路網の点の名前(OSE)が違うことがあるので形の側を正とする
+  if(v&&!Array.isArray(v))return Object.keys(v);
   if(p.iaf&&p.iaf.length)return p.iaf;
-  const v=IAC_DEF[icao]&&IAC_DEF[icao].iac[p.n];if(!v)return null;
-  return Array.isArray(v)?[v[0].at]:Object.keys(v);
+  return v?[v[0].at]:null;
 }
 function iacTrackOf(icao,name,iafName){
   const D_=IAC_DEF[icao];let st=D_&&D_.iac[name];if(!st)return null;
