@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-263';
+const VER_TAG='v6-264';
 const BUILD='2026-10-19';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8871,6 +8871,24 @@ const SID_DEF={
         '03':[{climbTo:700},{to:'HATSU'}],'21':[{climbTo:1000},{to:'TO100',turn:'R'},{to:'HATSU'}]},
     }
   },
+  /* 静浜(RJNY AD2.24-SID-1/2・EFF 6 AUG 2026)。滑走路は AD 2.12 が "To be issued later" なので図から:
+     THR27 = YZT R100 の 0.5NM(TACAN Z の NM to THR)、THR09 はそこから 272°T に 1500m。YZT は AD 2.19(344851.92N/1381744.92E)。
+     OSHIMA FIVE: RWY09 は YZT R104 で XAC へ / RWY27 は 500FT → 右 HDG149° で R104 に会合 → XAC。5.0%(RWY09 500FT・RWY27 1700FT まで)
+     SHIZUHAMA REVERSAL FOUR: 同じく R104 を 13DME まで → 左旋回で YZT
+     SHIZUOKA ONE: RWY09 は 500FT → 右旋回で SZE / RWY27 は 500FT → SZE。SZE を 4000FT 以上で */
+  RJNY:(()=>{
+    const r104={'09':[{to:{rad:104,dme:5}}],'27':[{climbTo:500},{turn:'R',hdg:149},{intercept:104}]};
+    const g={'09':{pct:5.0,to:500},'27':{pct:5.0,to:1700}};
+    return {
+      rwy:{'09':{end:[34.814131,138.305948],brgT:92,elev:17},'27':{end:[34.814601,138.289527],brgT:272,elev:20}},
+      nav:{YZT:{lat:34.814422,lng:138.295811,var:8},XAC:{lat:34.71225,lng:139.41402,var:8},SZE:{lat:34.79684,lng:138.1932,var:8}},
+      sids:{
+        OSHIMA:{fix:'XAC',nav:'YZT',name:'OSHIMA FIVE',grad:g,'09':r104['09'].concat([{to:'XAC'}]),'27':r104['27'].concat([{to:'XAC'}])},
+        SHIZUHAMA:{fix:'YZT',nav:'YZT',name:'SHIZUHAMA REVERSAL FOUR',grad:g,
+          '09':[{to:{rad:104,dme:13}},{to:'YZT',turn:'L'}],'27':r104['27'].concat([{to:{rad:104,dme:13}},{to:'YZT',turn:'L'}])},
+        SHIZUOKA:{fix:'SZE',nav:'SZE',name:'SHIZUOKA ONE','09':[{climbTo:500},{to:'SZE',turn:'R'}],'27':[{climbTo:500},{to:'SZE'}]},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -9136,6 +9154,13 @@ const IAC_DEF={
       'VOR B':[{at:'OSE'},{to:{rd:[33,8.0]}},{to:'SCOLI'},{mapt:{rd:[21,0.9]}}],
       'RNP RWY21':{SUNOD:[{at:'SUNOD'}].concat(rnp),OSE:[{at:'OSE'},{to:'TO150'},{to:'TO151'}].concat(rnp)}}};
   })(),
+  RJNY:{nav:{YZT:{lat:34.814422,lng:138.295811,var:8},SZE:{lat:34.79684,lng:138.1932,var:8}},navId:'YZT',thr:{},pts:{},iac:{
+    // 静浜(IAC-1〜4)。TACAN は YZT R100 の最終進入(IDALU D11 → OKADO D6 → MAPt D1.0)。Y は RILGI(R061)・X は UDOKU(R171)から D11 アーク。
+    // VOR A は静岡の SZE から: SZE → R118 で 13DME → 旋回 → ODENN(FAF・R099 D11.3)→ MAPt D6.3。{rd:[ラジアル,DME,局]} で別の局
+    'TACAN Z RWY27':[{at:'PIKUM'},{to:'IDALU'},{to:'OKADO'},{mapt:{rd:[100,1.0]}}],
+    'TACAN Y RWY27':[{at:'RILGI'},{to:{rd:[61,11]}},{arc:11,to:100,dir:'R'},{to:'OKADO'},{mapt:{rd:[100,1.0]}}],
+    'TACAN X RWY27':[{at:'UDOKU'},{to:{rd:[171,11]}},{arc:11,to:100,dir:'L'},{to:'OKADO'},{mapt:{rd:[100,1.0]}}],
+    'VOR A':[{at:'SZE'},{to:{rd:[118,13,'SZE']}},{to:'ODENN'},{mapt:{rd:[99,6.3,'SZE']}}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
@@ -9209,10 +9234,10 @@ function iacTrackOf(icao,name,iafName){
   const D_=IAC_DEF[icao];let st=D_&&D_.iac[name];if(!st)return null;
   if(!Array.isArray(st))st=(iafName&&st[iafName])||st[Object.keys(st)[0]];   // 入口が複数の方式は、その IAF からの形
   const N=D_.nav[D_.navId];
-  const rdPt=(r,d)=>d===0?{lat:N.lat,lng:N.lng}:destLL(N.lat,N.lng,(r-N.var+360)%360,d);
+  const rdPt=(r,d,id)=>{const M=id?D_.nav[id]:N;return d===0?{lat:M.lat,lng:M.lng}:destLL(M.lat,M.lng,(r-M.var+360)%360,d)};
   const named=n=>{if(D_.pts[n])return {lat:D_.pts[n][0],lng:D_.pts[n][1]};if(D_.nav[n])return D_.nav[n];
     const f=FIX&&FIX._ix[n];if(f)return {lat:f.lat,lng:f.lng};const a=navPt(n);return a?{lat:a.lat,lng:a.lng}:null};
-  const pt=t=>typeof t==='string'?named(t):Array.isArray(t)?{lat:t[0],lng:t[1]}:t.rd?rdPt(t.rd[0],t.rd[1]):null;
+  const pt=t=>typeof t==='string'?named(t):Array.isArray(t)?{lat:t[0],lng:t[1]}:t.rd?rdPt(t.rd[0],t.rd[1],t.rd[2]):null;
   const pts=[];let cur=null,iaf=null,end=null;
   for(const x of st){
     if(x.at){cur=named(x.at);iaf=x.at;if(!cur)return null;pts.push(cur);continue}

@@ -367,3 +367,11 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 仕組み: IAC_DEF の `req`(図の注記にだけある要件。LOC Z の初期進入 RNP1 = GNSS)を procOk で見る。
   入口が複数の形を持つ方式は形の側の入口(OSE)を正とする(図は MIHARA と書くが経路網の点は OSE)
 
+## v6-264 静浜(RJNY)の SID・進入の形 / 1枚に複数の SID が載る図
+- 静浜は索引に名前の無い1行だけ・図は2枚に SID が3つ(OSHIMA FIVE・SHIZUHAMA REVERSAL FOUR・SHIZUOKA ONE)。
+  `gen_proc.py` の題名読みを「1ページの全題名」にし、名前の無い1行しか無い飛行場・番号付き('#2')は全部を別々の方式に。
+  他の方式と同じ名前・その名前で始まる題名(中部 MORIZ / MORIZ TWO)は足さない。築城 5・八戸 2・大湊 2・防府 2 も揃った
+- 滑走路は AD 2.12 が "To be issued later" なので図から(THR27 = YZT R100 0.5NM、THR09 はそこから 1500m)
+- 進入: TACAN Z(PIKUM)・Y(RILGI → D11 アーク)・X(UDOKU → D11 アーク)→ IDALU → OKADO → MAPt D1.0。
+  VOR A は静岡の SZE から(`{rd:[ラジアル,DME,局]}` で IAC_DEF の別の局を指せるようにした)
+
