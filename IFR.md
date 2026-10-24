@@ -601,3 +601,17 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - **同じ終点の SID が複数あるときは短い方の辺にする**(`ifrLinkAp`)。以前は先に来た方だけ残り、長崎→鹿児島が WEST → SUMOU → OLE と西へ回っていた(今は NAGASAKI REVERSAL)。
   他の 24 経路(九州・中国・四国・東北・関東・中部・近畿)で変化なしを確認
 - 既知: TACAN の無い機体で鹿屋・築城を出発すると、使える SID が無いので最寄りの点への「(仮)」の直線になる(前からの動き)
+
+## v6-287 対馬・福江・種子島の SID・進入の形、航空路と同じ線を飛ぶ SID の MEA
+- 対馬 RJDT: IKISHIMA SEVEN(VCE R154 / IKE R334 → IKE・D20 VCE で 4000)・FRAIZ ONE(RNAV・DT200 → FRAIZ 6000)。
+  LOC Z(AGATA(IF・待機)→ HAZEL)・LOC Y(VCE → R160 → HAZEL)・VOR RWY14(VCE → R346 → KOUJI)・VOR RWY32(VCE → R172 → MOROM)・RNP RWY14 / 32(AGATA から)
+- 福江 RJFE: 索引名 "NAGASAKI, IKI, FUKUE REVERSAL"(1枚の図)の NAGASAKI FIVE(FUE R083 → OLE)・IKI SIX(FUE R044 → IKE)・FUKUE REVERSAL THREE、AGRIT ONE / OLVIN ONE(RNAV)。
+  LOC RWY03(FUE → R229 → TOMIE)・VOR RWY03(FUE → R220 → BAHAN)・LOC Z RWY21(CARCO → D11.5 アーク → KAYKN → KONGO)・LOC Y RWY21(FUE → R054 → KONGO)・
+  VOR RWY21(FUE → R061 → HISAK)・RNP RWY03 / 21(CARCO から)
+- 種子島 RJFG: TANEGASHIMA REVERSAL THREE(TGE 5.6DME で旋回・4000)・FREDY TWO(QUEEN・JACKY TRANSITION)・KAGYA TWO(KINKO)(RNAV)。
+  ILS Z or LOC(TGE → R149 → IPNEX)・ILS Y(TEPPO → FG152 → FG153 → IPNEX。図の EQPT に "RNP1 RF required" → `req:'GNSS'`)・VOR RWY13(TGE → R293 → LUGNO)・
+  RNP RWY13(KAGYA → ASERO)・RNP RWY31(KAGYA / TEPPO → MABIT → ATSOP)
+- **`SID_DEF` の鍵に `mea`**: 図に通過高度("Cross ◯◯ at or above" = `alt`)は無いが、航空路・直行経路と同じ線を飛ぶ SID はその MEA を持たせ、SID の辺の最低高度にする
+  (`alt` と大きい方)。福江→壱岐(IKI SIX = 直行経路 FUE-IKE・MEA 6000)が巡航 3,000ft になっていた → 7,000ft。
+  付けたのは 福江 NAGASAKI FIVE(V40・5000)/ IKI SIX(6000)・長崎 WEST の CARCO TRANSITION(5000)・大村 WEST の FUKUE TRANSITION(5000)
+- 確認: 形のある飛行場の SID・進入(363本)の終点、24 経路で変化なし
