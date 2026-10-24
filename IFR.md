@@ -658,3 +658,13 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   LOC Z(TOROS / SOTEZ / KBIRI → KN950 → MSIRO。初期進入は RNP1 → GNSS)・LOC Y(TKE → R352 → MSIRO)・VOR RWY01(TKE → R224 → KIBIZ)・RNP Z RWY01(SHODA / ISENN → HORAI)
 - 図の「点名 + 座標」を pdftotext -bbox の位置の近さで組にする道具を作業用に作った(RNAV SID の表が文字化けして名前と座標が離れて出るため)
 - 確認: 形のある飛行場の SID・進入(448本)の終点、24 経路で変化なし
+
+## v6-292 沖永良部・与論・久米島の SID・進入の形
+- 沖永良部 RJKB: ERABU REVERSAL TWO(R090 / R132 D12 → R110 → ONC・高度は指定)・索引名 "NEORI, AZEFU, SONNA, YUNTA" の RNAV SID 4本
+  (NEORI(MEKAX)/ AZEFU(INOBE → MEKAX)/ SONNA(YUWAN)/ YUNTA(ASATO))・HORAI(RNAV)。
+  VOR RWY04(ONC → R227 → ADPAB)・VOR RWY22(KUNIG → D9 アーク → FUCHA → EMIKO。索引に IAF が無いので入口のキーで)・RNP RWY04 / 22
+- 与論 RORY: YORON REVERSAL FOUR(R143 D8.8 / R325 D9.0 → YRE)・ERABU ONE / MEKAX ONE / TOMORI ONE(RNAV)。
+  VOR RWY14(YRE → R304 → ELBIP)・VOR RWY32(YRE → R164 → NUPDA)・RNP RWY14 / 32(ASATO / YORON から)
+- 久米島 ROKJ: SOUTH FIVE(KXC R190 → DORIS 3000)・DORIS ONE / DUFFY ONE(図は "GNSS required" だが索引に RNAV の印が無い → `gnss:1`)。
+  LOC RWY03(DUFFY / DORIS → D17.9 アーク → KOEBI → MEEFU)・RNP RWY03(DUFFY / DORIS / DECKS → KJ350)。RNP RWY21(AR)は書かない
+- 確認: 形のある飛行場の SID・進入(467本)の終点、24 経路で変化なし
