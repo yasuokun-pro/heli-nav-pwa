@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-289';
+const VER_TAG='v6-290';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -10551,6 +10551,42 @@ const SID_DEF={
         '14':[{climbTo:1400},{to:'LUBEK',turn:'R'}],'32':[{climbTo:500},{to:'EB210',turn:'R'},{to:'EB211'},{to:'LUBEK'}]},
     }
   },
+  /* 利尻(RJER AD2.24-SID-1〜3)。滑走路は AD 2.12(057.04°/237.04°T)。RSE は VOR/DME・VAR 11°W。
+     RISHIRI REVERSAL THREE: 07 は 600FT → 左旋回 / 25 は 600FT → 右 HDG080° で RSE R035 → 4000FT → 左旋回で RSE(8000)
+     RNAV(GNSS): LEDAX TWO(ER700 / ER500 → ER701 → LEDAX 8000)・UBKUX ONE(ER702 → ER703 / ER501 → UBKUX 6000)。ER5xx/ER7xx は図の座標 */
+  RJER:{
+    rwy:{'07':{end:[45.246411,141.197225],brgT:57.04,elev:112},'25':{end:[45.237597,141.177992],brgT:237.04,elev:98}},
+    nav:{RSE:{lat:45.24566,lng:141.18677,var:11}},
+    pts:{ER500:[45.337056,141.184889],ER501:[45.216444,141.132],ER700:[45.339778,141.401778],ER701:[45.227667,141.504083],ER702:[45.26775,141.243833],ER703:[45.172472,141.358972]},
+    sids:{
+      'RISHIRI REVERSAL':{fix:'RSE',nav:'RSE',name:'RISHIRI REVERSAL THREE',alt:8000,grad:{'07':{pct:4,to:600},'25':{pct:5.2,to:1000}},
+        '07':[{climbTo:600},{intercept:35},{climbTo:4000},{to:'RSE',turn:'L'}],'25':[{climbTo:600},{turn:'R',hdg:80},{intercept:35},{climbTo:4000},{to:'RSE',turn:'L'}]},
+      LEDAX:{fix:'LEDAX',nav:'RSE',name:'LEDAX TWO',alt:8000,grad:{'07':{pct:4,to:600},'25':{pct:5.2,to:600}},
+        '07':[{climbTo:600},{to:'ER700'},{to:'ER701'},{to:'LEDAX'}],'25':[{climbTo:600},{to:'ER500',turn:'R'},{to:'ER701'},{to:'LEDAX'}]},
+      UBKUX:{fix:'UBKUX',nav:'RSE',name:'UBKUX ONE',alt:6000,grad:{'07':{pct:4,to:600},'25':{pct:5.2,to:1000}},
+        '07':[{climbTo:600},{to:'ER702'},{to:'ER703',turn:'R'},{to:'UBKUX'}],'25':[{climbTo:600},{to:'ER501'},{to:'UBKUX',turn:'L'}]},
+    }
+  },
+  /* 稚内(RJCW AD2.24-SID-1〜4)。滑走路は AD 2.12(068.90°/248.90°T)。WKE は VOR/DME・VAR 10°W(2016)。08 は 4.4%(900FT)
+     PANKE TWO: 08 は 900FT → 右 HDG220° / 26 は 700FT → 左 HDG130° で WKE R175 → PANKE(R175 D16 で 6000 以下・PANKE で 6000 以上)。
+       URYU TRANSITION(R175 / AWE R355 → SPE R040 → RUMOI・WKE R175 D60 で 11000)
+     RUMOI FIVE: 08 は 900FT → 右 HDG237° / 26 は 700FT → 左 HDG147° で WKE R192(CHE R011)→ RUMOI
+     WAKKANAI REVERSAL ONE: 08 は 900FT → 左 HDG302° / 26 は 700FT → 右 HDG032° で R347 → 2500FT → 右旋回で WKE(5000)
+     YOROI ONE(RNAV): 旋回して WAPPY(6000 以下)→ YOROI(9000) */
+  RJCW:(()=>{
+    const pk={fix:'PANKE',nav:'WKE',name:'PANKE TWO',alt:6000,grad:{'08':{pct:4.4,to:900}},'08':[{climbTo:900},{turn:'R',hdg:220},{intercept:175}],'26':[{climbTo:700},{turn:'L',hdg:130},{intercept:175}]};
+    return {
+      rwy:{'08':{end:[45.407992,141.815217],brgT:68.9,elev:31},'26':{end:[45.400872,141.789008],brgT:248.9,elev:23}},
+      nav:{WKE:{lat:45.40736,lng:141.80565,var:10}},
+      sids:{
+        PANKE:pk,
+        'PANKE RUMOI':Object.assign({},pk,{m:'PANKE',fix:'RUMOI',name:'PANKE TWO・URYU TRANSITION',alt:11000,'08':pk['08'].concat({to:'PANKE'},{to:{rad:175,dme:60}},{to:'RUMOI'}),'26':pk['26'].concat({to:'PANKE'},{to:{rad:175,dme:60}},{to:'RUMOI'})}),
+        RUMOI:{fix:'RUMOI',nav:'WKE',name:'RUMOI FIVE',grad:{'08':{pct:4.4,to:900}},'08':[{climbTo:900},{turn:'R',hdg:237},{intercept:192}],'26':[{climbTo:700},{turn:'L',hdg:147},{intercept:192}]},
+        'WAKKANAI REVERSAL':{fix:'WKE',nav:'WKE',name:'WAKKANAI REVERSAL ONE',alt:5000,grad:{'08':{pct:4.4,to:900}},
+          '08':[{climbTo:900},{turn:'L',hdg:302},{intercept:347},{climbTo:2500},{to:'WKE',turn:'R'}],'26':[{climbTo:700},{turn:'R',hdg:32},{intercept:347},{climbTo:2500},{to:'WKE',turn:'R'}]},
+        YOROI:{fix:'YOROI',nav:'WKE',name:'YOROI ONE',alt:9000,grad:{'08':{pct:6,to:900},'26':{pct:5,to:700}},'08':[{climbTo:900},{to:'WAPPY',turn:'R'},{to:'YOROI'}],'26':[{climbTo:700},{to:'WAPPY',turn:'L'},{to:'YOROI'}]},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -11500,6 +11536,27 @@ const IAC_DEF={
     mah:{'ILS or LOC RWY32':'MVE','VOR A':'MVE'},iac:{
     'ILS or LOC RWY32':[{at:'MVE'},{to:{rd:[125,12]}},{to:'KOMKE'},{thr:'32'}],
     'VOR A':{MVE:[{at:'MVE'},{to:{rd:[8,11]}},{to:'GOMAF'},{mapt:{rd:[352,1]}}]}}},
+  // 利尻(IAC-1〜3・5 2026-03-19)。LOC RWY25 は ORISU(R349 D14.2)→ D12 アーク(時計回り)/ LEDAX(R129 D18.5)→ D12 アーク(反時計回り)→ ENRIT(IF・R068)→ MILPS(FAF)、
+  //   VOR A は ORISU → D12 アーク(反時計回り)→ KANRO(IF・R263)→ RIPPU(FAF)→ MAPt(D1.0)、RNP RWY25 は ORISU → ER550 / LEDAX・UBKUX → ER554 → ER551(IF)→ ER552、
+  //   RNP Z RWY07 は ORISU → ER772 / LEDAX → ER770 → ER771 → ER772 / UBKUX → ER773(IF)→ ER774。RNP Y は "(LPV only)" なので書かない(procOk で外す)。
+  //   ⚠ 索引の VOR A の IAF に RSE があるが、図の飛び方は ORISU からだけ描いた
+  RJER:(()=>{const r25=[{to:'ER551'},{to:'ER552'},{thr:'25'}],r07=[{to:'ER773'},{to:'ER774'},{thr:'07'}],l25=[{to:'ENRIT'},{to:'MILPS'},{thr:'25'}];
+    return {nav:{RSE:{lat:45.24566,lng:141.18677,var:11}},navId:'RSE',thr:{'07':[45.237597,141.177992],'25':[45.246411,141.197225]},
+    pts:{ER550:[45.405714,141.285058],ER554:[45.267075,141.412008],ER551:[45.321708,141.362072],ER552:[45.2845,141.280492],ER770:[45.287147,141.317092],ER771:[45.309864,141.166556],ER772:[45.218933,141.135364],ER773:[45.164472,141.018922],ER774:[45.199033,141.093992]},
+    mah:{'LOC RWY25':'ORISU','VOR A':'ORISU','RNP RWY25':'ORISU','RNP Z RWY07':'ORISU'},iac:{
+    'LOC RWY25':{ORISU:[{at:'ORISU'},{to:{rd:[349,12]}},{arc:12,to:68,dir:'R'}].concat(l25),LEDAX:[{at:'LEDAX'},{to:{rd:[129,12]}},{arc:12,to:68,dir:'L'}].concat(l25)},
+    'VOR A':{ORISU:[{at:'ORISU'},{to:{rd:[349,12]}},{arc:12,to:263,dir:'L'},{to:'RIPPU'},{mapt:{rd:[263,1]}}]},
+    'RNP RWY25':{ORISU:[{at:'ORISU'},{to:'ER550'}].concat(r25),LEDAX:[{at:'LEDAX'},{to:'ER554'}].concat(r25),UBKUX:[{at:'UBKUX'},{to:'ER554'}].concat(r25)},
+    'RNP Z RWY07':{ORISU:[{at:'ORISU'},{to:'ER772'}].concat(r07),LEDAX:[{at:'LEDAX'},{to:'ER770'},{to:'ER771'},{to:'ER772'}].concat(r07),UBKUX:[{at:'UBKUX'}].concat(r07)}}};})(),
+  // 稚内(IAC-1〜4 2026-04-01 / 10-29。10/29 の改正は周回進入の制限と TALBA の高度制限だけで形は同じ)。ILS or LOC RWY08 は WKE の待機から R276 → D10.0 以内で旋回 → HIGMA(FAF)、
+  //   VOR RWY08 は WKE → R273 → TALBA(FAF)→ MAPt(D0.8)、VOR RWY26 は WKE → R012 → D10 アーク → IKURA(IF・R084)→ UNIEY(FAF)→ MAPt(D0.4)、
+  //   VOR A は WKE → R012 → D11.0 以内で旋回 → LUIBE(FAF)→ MAPt(WKE)。RNP(AR)は書かない
+  RJCW:{nav:{WKE:{lat:45.40736,lng:141.80565,var:10}},navId:'WKE',thr:{'08':[45.400872,141.789008],'26':[45.407992,141.815217]},pts:{},
+    mah:{'ILS or LOC RWY08':'WKE','VOR RWY08':'WKE','VOR RWY26':'WKE','VOR A':'WKE'},iac:{
+    'ILS or LOC RWY08':[{at:'WKE'},{to:{rd:[276,10]}},{to:'HIGMA'},{thr:'08'}],
+    'VOR RWY08':[{at:'WKE'},{to:{rd:[273,10]}},{to:'TALBA'},{mapt:{rd:[255,0.8]}}],
+    'VOR RWY26':[{at:'WKE'},{to:{rd:[12,10]}},{arc:10,to:84,dir:'R'},{to:'UNIEY'},{mapt:{rd:[84,0.4]}}],
+    'VOR A':[{at:'WKE'},{to:{rd:[12,11]}},{to:'LUIBE'},{mapt:'WKE'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
