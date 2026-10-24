@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-286';
+const VER_TAG='v6-287';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8313,8 +8313,10 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
     // SID の形がある方式は、その経路長を辺の長さにする(直線だと反転 SID が 0.4NM で「ただ」に見える)
     const sl=x.p.k==='SID'&&ap.icao?sidLenMin(ap.icao,x.p.n,t):0;
     // 図の "Cross ◯◯ at or above"(SID_DEF の alt)はその SID の区間の最低高度として持つ → 巡航高度に入る(熊本 RINDO の MIYAZAKI TRANSITION 8000)
-    const SA=x.p.k==='SID'&&SID_DEF[ap.icao],ka=SA?Object.keys(SA.sids).filter(q=>sidHit(SA.sids[q],q,x.p.n.toUpperCase())&&sidEndOf(SA,q)===t&&SA.sids[q].alt):[];
-    const sa=ka.length?Math.min(...ka.map(q=>SA.sids[q].alt)):null;
+    //   mea: 図に通過高度は無いが、航空路・直行経路と同じ線を飛ぶ SID(福江 IKI SIX = FUE-IKE の MEA 6000)。無いと巡航 3,000ft になった(v6-287)
+    const am=q=>Math.max(SA.sids[q].alt||0,SA.sids[q].mea||0);
+    const SA=x.p.k==='SID'&&SID_DEF[ap.icao],ka=SA?Object.keys(SA.sids).filter(q=>sidHit(SA.sids[q],q,x.p.n.toUpperCase())&&sidEndOf(SA,q)===t&&am(q)):[];
+    const sa=ka.length?Math.min(...ka.map(am)):null;
     // 同じ終点の SID が複数(長崎の OLE: WEST の OMURA TRANSITION 42NM と NAGASAKI REVERSAL 13NM)なら短い方。
     //   ⚠ 以前は先に来た方の辺だけ残り、WEST → SUMOU → OLE と西へ回っていた(v6-286)
     const d=sl||distNM(ap,G.nodes[t]),ex=G.adj[k].find(e=>e.to===t&&e.tag===tag);
@@ -10347,7 +10349,7 @@ const SID_DEF={
         'NORTH IKE':ex(no,[{to:'PEARL'},{to:'IKE'}],{m:'NORTH',fix:'IKE',name:'NORTH ONE・IKI TRANSITION'}),
         WEST:we,
         'WEST OLE':ex(we,[{to:'SUMOU'},{to:{rad:279,dme:13},turn:'R'},{to:'OLE'}],{m:'WEST',fix:'OLE',name:'WEST SEVEN・OMURA TRANSITION',alt:9000}),
-        'WEST CARCO':ex(we,[{to:'SUMOU'},{to:{rad:263,dme:25},turn:'R'},{to:'CARCO'}],{m:'WEST',fix:'CARCO',name:'WEST SEVEN・CARCO TRANSITION'}),
+        'WEST CARCO':ex(we,[{to:'SUMOU'},{to:{rad:263,dme:25},turn:'R'},{to:'CARCO'}],{m:'WEST',fix:'CARCO',name:'WEST SEVEN・CARCO TRANSITION',mea:5000}),
         'NAGASAKI REVERSAL':{fix:'OLE',nav:'OLE',name:'NAGASAKI REVERSAL',alt:5000,grad:{'14':{pct:5,to:1800},'32':{pct:5,to:1600}},
           '14':[{climbTo:500},{dme:6},{to:'OLE',turn:'R'}],'32':[{dme:6.3},{to:'OLE',turn:'L'}]},
         AKNAG:{fix:'AKNAG',nav:'OLE',name:'AKNAG ONE',alt:7000,grad:{'14':{pct:5,to:1800},'32':{pct:5,to:1200}},
@@ -10383,7 +10385,7 @@ const SID_DEF={
         'NORTH DGC':ex(no,[{to:'PEARL'},{to:'DGC'}],{m:/^(OMURA )?(NORTH|TRANSITION)/,fix:'DGC',name:'OMURA NORTH THREE・FUKUOKA TRANSITION',alt:8000}),
         'NORTH IKE':ex(no,[{to:'PEARL'},{to:'IKE'}],{m:/^(OMURA )?(NORTH|TRANSITION)/,fix:'IKE',name:'OMURA NORTH THREE・IKI TRANSITION'}),
         WEST:we,
-        'WEST FUE':ex(we,[{to:'SUMOU'},{to:{rad:263,dme:25},turn:'R'},{to:'FUE'}],{m:/^(OMURA )?(WEST|TRANSITION)/,fix:'FUE',name:'OMURA WEST TWO・FUKUE TRANSITION'}),
+        'WEST FUE':ex(we,[{to:'SUMOU'},{to:{rad:263,dme:25},turn:'R'},{to:'FUE'}],{m:/^(OMURA )?(WEST|TRANSITION)/,fix:'FUE',name:'OMURA WEST TWO・FUKUE TRANSITION',mea:5000}),
         'WEST OLE':ex(we,[{to:'SUMOU'},{to:{rad:279,dme:13},turn:'R'},{to:'OLE'}],{m:/^(OMURA )?(WEST|TRANSITION)/,fix:'OLE',name:'OMURA WEST TWO・OMURA TRANSITION',alt:9000}),
         SOUTH:so,
         'SOUTH SASIK':ex(so,[{to:'KAZSA'},{to:'SASIK'}],{m:/^(OMURA )?(SOUTH|TRANSITION)/,fix:'SASIK',name:'OMURA SOUTH THREE・SASIK TRANSITION'}),
@@ -10409,6 +10411,51 @@ const SID_DEF={
         MAKRA:{fix:'MAKRA',nav:'JAT',name:'MAKRA THREE',tac:1,grad:{'26L':{pct:5,to:600}},'26L':[{dme:1},{to:{rad:263,dme:3}}]},
         QUEEN:{fix:'QUEEN',nav:'HKC',name:'QUEEN FOUR',tac:1,grad:{'08R':g8,'26L':{pct:5,to:3000}},
           '08R':[{to:{rad:83,dme:3,nav:'JAT'}},{intercept:127}],'26L':[{dme:3.6,nav:'JAT'},{climbTo:1000},{to:'JAT',turn:'L'},{to:{rad:83,dme:3,nav:'JAT'}},{intercept:127}]},
+      }};
+  })(),
+  /* 対馬(RJDT AD2.24-SID-1〜3)。滑走路は AD 2.12(136.04°/316.04°T)。VCE は VOR/DME・VAR 8°W。
+     IKISHIMA SEVEN: 14 は 900FT / 32 は 900FT → 右 HDG199° で VCE R154(IKE R334)→ IKE(D20.0 VCE で 4000)。32 は 5.2%(900FT)
+     FRAIZ ONE(RNAV): 14 は 600FT → 右旋回で FRAIZ / 32 は 900FT → 右旋回で DT200 → FRAIZ(6000) */
+  RJDT:{
+    rwy:{'14':{end:[34.278725,129.337714],brgT:136.04,elev:182},'32':{end:[34.291053,129.323386],brgT:316.04,elev:205}},
+    nav:{VCE:{lat:34.281508,lng:129.337011,var:8},IKE:{lat:33.74751,lng:129.77685,var:8}},
+    pts:{DT200:[34.354083,129.422528]},
+    sids:{
+      IKISHIMA:{fix:'IKE',nav:'VCE',name:'IKISHIMA SEVEN',alt:4000,grad:{'32':{pct:5.2,to:900}},'14':[{climbTo:900},{intercept:154}],'32':[{climbTo:900},{turn:'R',hdg:199},{intercept:154}]},
+      FRAIZ:{fix:'FRAIZ',nav:'VCE',name:'FRAIZ ONE',alt:6000,grad:{'32':{pct:5.2,to:900}},'14':[{climbTo:600},{to:'FRAIZ',turn:'R'}],'32':[{climbTo:900},{to:'DT200',turn:'R'},{to:'FRAIZ'}]},
+    }
+  },
+  /* 福江(RJFE AD2.24-SID-1〜3)。滑走路は AD 2.12(025.75°/205.75°T)。FUE は VOR/DME・VAR 8°W。索引名は "NAGASAKI, IKI, FUKUE REVERSAL"(1枚の図)
+     NAGASAKI FIVE: 03 は 1300FT → 右 HDG128° / 21 は 1300FT → 左 HDG038° で FUE R083(OLE R263)→ OLE。図に通過高度は無いので V40 の MEA 5000 を mea に
+     IKI SIX: 03 は 900FT → 右旋回 / 21 は 1300FT → 左 HDG359° で FUE R044(IKE R224)→ IKE。直行経路 FUE-IKE の MEA 6000 を mea に
+     FUKUE REVERSAL THREE: 2000FT → 旋回して FUE。AGRIT ONE / OLVIN ONE(RNAV・KAMIG 6000) */
+  RJFE:{
+    rwy:{'03':{end:[32.674392,128.837442],brgT:25.75,elev:273},'21':{end:[32.65815,128.828178],brgT:205.75,elev:223}},
+    nav:{FUE:{lat:32.66861,lng:128.82674,var:8},OLE:{lat:32.90525,lng:129.91798,var:8},IKE:{lat:33.74751,lng:129.77685,var:8}},
+    pts:{FE100:[32.568778,128.77725],FE101:[32.533917,128.862556],FE102:[32.52375,128.887417],FE300:[32.743611,128.876944]},
+    sids:{
+      NAGASAKI:{fix:'OLE',nav:'FUE',name:'NAGASAKI FIVE',mea:5000,'03':[{climbTo:1300},{turn:'R',hdg:128},{intercept:83}],'21':[{climbTo:1300},{turn:'L',hdg:38},{intercept:83}]},
+      IKI:{fix:'IKE',nav:'FUE',name:'IKI SIX',mea:6000,'03':[{climbTo:900},{intercept:44}],'21':[{climbTo:1300},{turn:'L',hdg:359},{intercept:44}]},
+      'FUKUE REVERSAL':{fix:'FUE',nav:'FUE',name:'FUKUE REVERSAL THREE','03':[{climbTo:2000},{to:'FUE',turn:'R'}],'21':[{climbTo:2000},{to:'FUE',turn:'L'}]},
+      AGRIT:{fix:'AGRIT',nav:'FUE',name:'AGRIT ONE','03':[{climbTo:700},{to:'FE300'},{to:'AGRIT'}],'21':[{climbTo:700},{to:'FE100'},{to:'FE101'},{to:'AGRIT'}]},
+      OLVIN:{fix:'OLVIN',nav:'FUE',name:'OLVIN ONE',alt:6000,'03':[{climbTo:700},{to:'KAMIG'},{to:'OLVIN'}],'21':[{climbTo:700},{to:'FE100'},{to:'FE102'},{to:'KAMIG'},{to:'OLVIN'}]},
+    }
+  },
+  /* 種子島(RJFG AD2.24-SID-1〜4)。滑走路は AD 2.12(122.91°/302.91°T)。TGE(NAKATANE)は VOR/DME・VAR 7°W。
+     TANEGASHIMA REVERSAL THREE: TGE 5.6DME で旋回して TGE(4000)。索引名は "TANEGASHIMA-REVERSAL"
+     FREDY TWO(RNAV): 13 は 1200FT → 左 / 31 は 1300FT → 右に旋回して FREDY(7000)→ QUEEN。JACKY TRANSITION
+     KAGYA TWO(RNAV): 旋回して KAGYA → FG801(6000)→ KINKO */
+  RJFG:(()=>{
+    const fr={fix:'QUEEN',nav:'TGE',name:'FREDY TWO',alt:7000,'13':[{climbTo:1200},{to:'FREDY',turn:'L'},{to:'QUEEN'}],'31':[{climbTo:1300},{to:'FREDY',turn:'R'},{to:'QUEEN'}]};
+    return {
+      rwy:{'13':{end:[30.600181,131.000342],brgT:122.91,elev:758},'31':{end:[30.609981,130.982828],brgT:302.91,elev:778}},
+      nav:{TGE:{lat:30.60216,lng:130.99153,var:7}},
+      pts:{FG801:[30.924944,130.872056]},
+      sids:{
+        REVERSAL:{fix:'TGE',nav:'TGE',name:'TANEGASHIMA REVERSAL THREE',alt:4000,'13':[{dme:5.6},{to:'TGE',turn:'R'}],'31':[{dme:5.6},{to:'TGE',turn:'L'}]},
+        FREDY:fr,
+        'FREDY JACKY':Object.assign({},fr,{m:'FREDY',fix:'JACKY',name:'FREDY TWO・JACKY TRANSITION','13':fr['13'].concat({to:'JACKY'}),'31':fr['31'].concat({to:'JACKY'})}),
+        KAGYA:{fix:'KINKO',nav:'TGE',name:'KAGYA TWO',alt:6000,'13':[{climbTo:1200},{to:'KAGYA',turn:'L'},{to:'FG801'},{to:'KINKO'}],'31':[{climbTo:1300},{to:'KAGYA',turn:'R'},{to:'FG801'},{to:'KINKO'}]},
       }};
   })(),
   RJTC:{
@@ -11248,6 +11295,44 @@ const IAC_DEF={
     'TACAN Z RWY 26L':[{at:'DAGRI'},{to:{rd:[80,8]}},{mapt:{rd:[80,1]}}],
     'TACAN Y RWY 26L':[{at:'AIRAH'},{arc:16,to:80,dir:'L'},{to:{rd:[80,8]}},{mapt:{rd:[80,1]}}],
     'TACAN RWY 08R':[{at:'TILAN'},{to:{rd:[272,13]}},{to:{rd:[272,6]}},{mapt:{rd:[272,1]}}]}},
+  // 対馬(IAC-1〜5・7 2024-06-13 / 10-03)。LOC Z は AGATA(IF・待機)→ HAZEL(FAF)、LOC Y は VCE の待機から R160 → D11.0 以内で旋回 → HAZEL、
+  //   VOR RWY14 は VCE → R346 → D8.0 以内で旋回 → KOUJI(R324 D5.0)→ MAPt(D0.9)、VOR RWY32 は VCE → R172 → D8.0 以内で旋回 → MOROM(R149 D5.0)→ MAPt(D0.2)、
+  //   RNP RWY14 は AGATA → DT452 → DT451 → SARUI(IF)→ ITTOK、RNP RWY32 は AGATA → DT250(IF)→ OMLAK
+  RJDT:{nav:{VCE:{lat:34.281508,lng:129.337011,var:8}},navId:'VCE',thr:{'14':[34.291053,129.323386],'32':[34.278725,129.337714]},
+    pts:{DT452:[34.268106,129.196225],DT451:[34.322111,129.133244],SARUI:[34.385992,129.212839],ITTOK:[34.330503,129.277494],DT250:[34.206061,129.422044],OMLAK:[34.242158,129.380175]},
+    mah:{'LOC Z RWY32':'VCE','LOC Y RWY32':'VCE','VOR RWY32':'VCE','VOR RWY14':'VCE','RNP RWY32':'AGATA','RNP RWY14':'AGATA'},iac:{
+    'LOC Z RWY32':[{at:'AGATA'},{to:'HAZEL'},{thr:'32'}],
+    'LOC Y RWY32':[{at:'VCE'},{to:{rd:[160,11]}},{to:'HAZEL'},{thr:'32'}],
+    'VOR RWY14':[{at:'VCE'},{to:{rd:[346,8]}},{to:'KOUJI'},{mapt:{rd:[324,0.9]}}],
+    'VOR RWY32':[{at:'VCE'},{to:{rd:[172,8]}},{to:'MOROM'},{mapt:{rd:[149,0.2]}}],
+    'RNP RWY14':[{at:'AGATA'},{to:'DT452'},{to:'DT451'},{to:'SARUI'},{to:'ITTOK'},{thr:'14'}],
+    'RNP RWY32':[{at:'AGATA'},{to:'DT250'},{to:'OMLAK'},{thr:'32'}]}},
+  // 福江(IAC-1〜6・8 2024-06-13 / 10-03)。LOC RWY03 は FUE の待機から R229 → D10.0 以内で旋回 → TOMIE(FAF)、VOR RWY03 は FUE → R220 → BAHAN(R202 D5.6)→ MAPt(D1.7)、
+  //   LOC Z RWY21 は CARCO(IAF・R083 D11.5)→ D11.5 アーク → KAYKN(IF・R037)→ KONGO(FAF)、LOC Y RWY21 は FUE → R054 → D11.0 以内で旋回 → KONGO、
+  //   VOR RWY21 は FUE → R061 → HISAK(R044 D6.8)→ MAPt(D1.7)、RNP RWY03 は CARCO → FE350 → FE351(IF)→ NENCH、RNP RWY21 は CARCO → FE150 → FE151(IF)→ TATAR
+  RJFE:{nav:{FUE:{lat:32.66861,lng:128.82674,var:8}},navId:'FUE',thr:{'03':[32.65815,128.828178],'21':[32.674392,128.837442]},
+    pts:{FE350:[32.499447,128.849669],FE351:[32.536531,128.758892],NENCH:[32.590703,128.789747],FE352:[32.638589,128.817025],
+      FE150:[32.774186,128.971314],FE151:[32.79965,128.909014],TATAR:[32.739464,128.874594],FE152:[32.693953,128.848603]},
+    mah:{'LOC RWY03':'FUE','VOR RWY03':'FUE','LOC Z RWY21':'FUE','LOC Y RWY21':'FUE','VOR RWY21':'FUE','RNP RWY03':'CARCO','RNP RWY21':'CARCO'},iac:{
+    'LOC RWY03':[{at:'FUE'},{to:{rd:[229,10]}},{to:'TOMIE'},{thr:'03'}],
+    'VOR RWY03':[{at:'FUE'},{to:{rd:[220,10]}},{to:'BAHAN'},{mapt:{rd:[202,1.7]}}],
+    'LOC Z RWY21':[{at:'CARCO'},{arc:11.5,to:37,dir:'L'},{to:'KONGO'},{thr:'21'}],
+    'LOC Y RWY21':[{at:'FUE'},{to:{rd:[54,11]}},{to:'KONGO'},{thr:'21'}],
+    'VOR RWY21':[{at:'FUE'},{to:{rd:[61,11]}},{to:'HISAK'},{mapt:{rd:[44,1.7]}}],
+    'RNP RWY03':[{at:'CARCO'},{to:'FE350'},{to:'FE351'},{to:'NENCH'},{mapt:'FE352'}],
+    'RNP RWY21':[{at:'CARCO'},{to:'FE150'},{to:'FE151'},{to:'TATAR'},{mapt:'FE152'}]}},
+  // 種子島(IAC-1〜5・7 2023-12-28 / 2024-05-16)。ILS Z / LOC は TGE の待機から R149 → D8.0 以内で旋回 → IPNEX(FAF)、
+  //   ILS Y は TEPPO(IAF)→ FG152(IF)→ FG153 → IPNEX(図の EQPT に "RNP1 RF required" → GNSS)、VOR RWY13 は TGE → R293 → LUGNO(R316 D4.6)→ MAPt(D0.6)、
+  //   RNP RWY13 は KAGYA → ASERO(IF)→ SEMDA、RNP RWY31 は KAGYA / TEPPO → MABIT → ATSOP(IF)→ AROSI
+  RJFG:(()=>{const r31=[{to:'MABIT'},{to:'ATSOP'},{to:'AROSI'},{thr:'31'}];
+    return {nav:{TGE:{lat:30.60216,lng:130.99153,var:7}},navId:'TGE',thr:{'13':[30.609981,130.982828],'31':[30.600181,131.000342]},
+    pts:{FG152:[30.585425,131.115828],FG153:[30.550236,131.089458],ASERO:[30.688083,130.843014],SEMDA:[30.643389,130.923083],MABIT:[30.592233,131.174253],ATSOP:[30.529183,131.126967],AROSI:[30.569161,131.055711]},
+    mah:{'ILS Z or LOC RWY 31':'TGE','ILS Y RWY 31':'TGE','VOR RWY 13':'TGE','RNP RWY 13':'KAGYA','RNP RWY 31':'KAGYA'},req:{'ILS Y RWY 31':'GNSS'},iac:{
+    'ILS Z or LOC RWY 31':[{at:'TGE'},{to:{rd:[149,8]}},{to:'IPNEX'},{thr:'31'}],
+    'ILS Y RWY 31':[{at:'TEPPO'},{to:'FG152'},{to:'FG153'},{to:'IPNEX'},{thr:'31'}],
+    'VOR RWY 13':[{at:'TGE'},{to:{rd:[293,8]}},{to:'LUGNO'},{mapt:{rd:[316,0.6]}}],
+    'RNP RWY 13':[{at:'KAGYA'},{to:'ASERO'},{to:'SEMDA'},{thr:'13'}],
+    'RNP RWY 31':{KAGYA:[{at:'KAGYA'}].concat(r31),TEPPO:[{at:'TEPPO'}].concat(r31)}}};})(),
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
