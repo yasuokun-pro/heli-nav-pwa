@@ -587,3 +587,17 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - **SBAS(LP/LPV)のみの進入を外す**(`procOk`): 名前に "LP ONLY" がある図(天草 RNP X)と、`IAC_DEF.req` が 'SBAS' の図(鹿児島 RNP RWY34 は図の名前に "(LPV only)")。
   装備欄に SBAS が無いため。必要なら装備に SBAS を足す(未対応)
 - 確認: 形のある 77 飛行場・進入 327 本の終点が飛行場から 3NM 以内(例外は MAPt が遠い三宅島 VOR A/B・八丈島 VOR A/B だけ・公示どおり)
+
+## v6-286 長崎・大村・鹿屋の SID・進入の形、同じ終点の SID は短い方
+- 長崎 RJFU: NORTH ONE(R331 → PEARL・FUKUOKA / IKI TRANSITION)・WEST SEVEN(R247 → SUMOU・OMURA / CARCO TRANSITION)・NAGASAKI REVERSAL・
+  AKNAG ONE / CARCO / KAZSA / CHIKUGO FIVE(GOROH FL170・OOITA TRANSITION FL190)(RNAV)。FU200 などの点は図の座標(`SID_DEF.pts`・ENR 4.3 に無い)。
+  ILS Y(OLE → R160 → CHARA)・VOR RWY32(OLE → R148 → INASA)・VOR RWY14(OLE → R317 → HARIO)・RNP RWY14(SARUK / IORIE / KOHNO → TENBO)・RNP RWY32(NOBAK / MEKOK → FUBKI)。
+  ILS Z は IF(FUBKI)に待機が無いので書かない。⚠ 索引の IAF が VOR RWY32 と RNP RWY14 で入れ違っている → 入口をキーにした形で上書き
+- RNAV 進入の IAF で ENR 4.3 に無い点(長崎 SARUK など)は `IAC_DEF.wpt` で FIX に足す(評定なし = RNAV 専用。GNSS/RNAV 装置のある機体だけ繋がる)
+- 大村 RJDU(長崎の OLE 基準): OMURA NORTH THREE・WEST TWO・SOUTH THREE(KAZSA)・REVERSAL THREE。索引名 "TRANSITION" の図は各 SID の TRANSITION の鍵に RegExp で当てた。
+  TACAN RWY18(IVSAT → D13.6 アーク → RUVKA → BURKO)・LOC C / VOR D / VOR E(長崎の ILS Y・VOR RWY32/14 と同じ飛び方で周回進入)
+- 鹿屋 RJFY(TACAN のみ・tac:1): EAST / WEST REVERSAL TWO・EKORU ONE・MAKRA THREE・QUEEN FOUR(HKC R127)。
+  TACAN Z / Y RWY26L(DAGRI / AIRAH → D16 アーク)・TACAN RWY08R(TILAN)・ILS Y / X(LOC 上の点は 26L の延長線上に図の距離で置いた)。ILS Z は IAF が無いので書かない
+- **同じ終点の SID が複数あるときは短い方の辺にする**(`ifrLinkAp`)。以前は先に来た方だけ残り、長崎→鹿児島が WEST → SUMOU → OLE と西へ回っていた(今は NAGASAKI REVERSAL)。
+  他の 24 経路(九州・中国・四国・東北・関東・中部・近畿)で変化なしを確認
+- 既知: TACAN の無い機体で鹿屋・築城を出発すると、使える SID が無いので最寄りの点への「(仮)」の直線になる(前からの動き)
