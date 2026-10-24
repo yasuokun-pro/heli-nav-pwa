@@ -857,6 +857,7 @@
       <button class="mtHead">管制<i>▾</i></button>
       <div class="mtSub">
         <button id="btnAsp" title="管制圏・情報圏・特別管制区(AIP AD 2.17 / 特別管制区チャート)">管制圏</button>
+        <button id="btnAcc" title="ACC セクター(FL335 未満・AIP ENR 2.1 ATTACHMENT-2)。タップでその地点のセクターと呼出名・周波数">ACC</button>
         <div class="mtGrp mtFly" data-grp="aca">
           <button class="mtHead" title="進入管制区(AIP AD 2.17添付図)。Class E。空域ごとに出し分ける">ACA<i>▾</i></button>
           <div class="mtSub" id="subAca"></div>
@@ -874,6 +875,8 @@
         <button id="btnTra" title="自衛隊低高度訓練/試験空域(AIP ENR 5.2.1)。SFCから上限まで・2200-1200UTC">低訓</button>
         <button id="btnHat" title="自衛隊の高高度訓練/試験空域・回廊・超音速飛行区域(SWIM AIP データ配信)。高高度でも SFC からの区画がある">高訓・回廊</button>
         <button id="btnCiv" title="民間訓練試験空域(AIP ENR 5.3.1)。使用にはATMセンターへの訓練計画提出が必要">民訓</button>
+        <button id="btnAdiz" title="防空識別圏(ADIZ)。外側線と内側線の間">ADIZ</button>
+        <button id="btnFir" title="飛行情報区(FIR)の境界と QNH 適用区域の境界">FIR/QNH</button>
         <button id="btnSup">臨時</button>
         <button id="btnNuke">原子力</button>
         <button id="btnDid" title="人口集中地区(2020年国勢調査)。最低安全高度=600m以内の最高障害物+300m">DID</button>
@@ -907,6 +910,7 @@
         <button id="btnFixR" title="RNAV専用の重要地点(navaidでの評定なし。GNSS/RNAV装置が要る)">RNAV点</button>
         <button id="btnVrep" title="VFR の目視位置通報点(AIP AD 2.24 Visual REP)。ARP からの真方位・距離の表から計算した位置">通報点</button>
         <button id="btnAwy" title="航空路(AIP ENR 3.1 下層ATSルート / ENR 3.3 RNAV経路)">航空路</button>
+        <button id="btnHold" title="エンルート待機経路(AIP ENR 3.6)。形は目安。破線=RNAV 待機">待機</button>
         <button id="btnIls" title="ILS の最終進入経路(AIP AD 2.19)。滑走路末端から10NM、1NMごとに GP 上の高さの目安">ILS</button>
         <button id="btnHp" title="地点略号の無いヘリポート・飛行場(AIP AD 1.4)と滑空場(ENR 5.5.1)">ヘリポート</button>
         <button id="btnHrt" title="回転翼機の経路(ヘリの特別有視界飛行経路・ヘリポートの到着/出発経路)。AIP の本文・図から起こした目安">ヘリ経路</button>
@@ -1235,8 +1239,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-284';
-const BUILD='2026-10-22';
+const VER_TAG='v6-285';
+const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -3049,6 +3053,83 @@ document.getElementById('btnHat').onclick=async function(){
   restackOverlays();
 };
 
+/* ── ACC セクター・ADIZ・FIR/QNH・エンルート待機経路(v6-285) ──
+   出典は航空情報センターの「AIP に関する地図表示用データ」(geo.json ← tools/gen_geo.py)。
+   ACC は FL335 未満のセクター(ENR 2.1 ATTACHMENT-2)。同じ平面に高度帯違いの区画が重なっているので、
+   タップした点を含む区画を全部並べる。待機経路は点と INBD(磁方位)・旋回方向しか無いので、形は目安で描く */
+let GEO=null,accOn=false,adizOn=false,firOn=false,holdOn=false;
+const accLayer=L.layerGroup(),adizLayer=L.layerGroup(),firLayer=L.layerGroup(),holdLayer=L.layerGroup(),
+  ACC_COL='#4fc3f7',ADIZ_COL='#ff5c8a',FIR_COL='#e0e0e0',QNH_COL='#ffd54f',HOLD_COL='#00a693';
+const geoEff=()=>GEO&&GEO.eff?GEO.eff.replace(/^(\d{4})(\d\d)(\d\d)$/,'$1-$2-$3'):'';
+let geoP=null;
+// ⚠ 4つのボタンが同じ geo.json を使うので、読み込み中に別のボタンを押しても二重に描かないよう Promise を共有する
+function loadGeo(){return geoP||(geoP=loadGeo1())}
+async function loadGeo1(){
+  try{const r=await fetch('geo.json?v='+VER_TAG);GEO=await r.json()}catch(e){GEO={acc:[],adiz:{out:[],in:[]},fir:[],qnh:[],hold:[]}}
+  GEO.acc.forEach(f=>Object.assign(L.polygon(f.pts,{renderer:ovRenderer,color:ACC_COL,weight:1.2,dashArray:'6 6',
+    fillColor:ACC_COL,fillOpacity:.02}),{_acc:f}).on('click',e=>accPopAt(e.latlng)).addTo(accLayer));
+  // ADIZ は外側線と内側線の間。内側線を穴にした1枚の面にする
+  if(GEO.adiz.out.length)L.polygon([...GEO.adiz.out,...GEO.adiz.in],{renderer:ovRenderer,color:ADIZ_COL,weight:1.5,
+    dashArray:'12 4 2 4',fillColor:ADIZ_COL,fillOpacity:.04}).bindPopup(()=>{
+      const el=document.createElement('div');el.className='apPop';
+      el.innerHTML=`<h5 style="color:${ADIZ_COL}">防空識別圏(ADIZ)</h5>`+
+        `<div class="note">外側線と内側線の間が ADIZ。通過・区域内での飛行には飛行計画・位置通報などの手続きがある。`+
+        `手続きの内容は AIP で確認。地図表示用データ ${geoEff()}版</div>`;
+      return el;
+    }).addTo(adizLayer);
+  GEO.fir.forEach(p=>L.polyline(p,{renderer:ovRenderer,color:FIR_COL,weight:2,dashArray:'14 6',interactive:false}).addTo(firLayer));
+  GEO.qnh.forEach(p=>L.polyline(p,{renderer:ovRenderer,color:QNH_COL,weight:1.5,dashArray:'4 6'}).bindPopup(()=>{
+    const el=document.createElement('div');el.className='apPop';
+    el.innerHTML=`<h5 style="color:${QNH_COL}">QNH 適用区域の境界</h5>`+
+      `<div class="note">白い破線は福岡 FIR の境界。区域外(洋上)では QNE(29.92)を使う。詳細は AIP ENR 1.7。地図表示用データ ${geoEff()}版</div>`;
+    return el;
+  }).addTo(firLayer));
+  GEO.hold.forEach(h=>{
+    L.polyline(holdShape(h),{renderer:ovRenderer,color:HOLD_COL,weight:2.5,dashArray:h.rnav?'5 4':null})
+      .bindPopup(()=>{
+        const el=document.createElement('div');el.className='apPop';
+        el.innerHTML=`<h5 style="color:${HOLD_COL}">エンルート待機 ${h.n}</h5>`+
+          `<dl><dt>INBD</dt><dd>${String(h.ib).padStart(3,'0')}°M</dd><dt>旋回</dt><dd>${h.t==='L'?'左':'右'}旋回</dd>`+
+          `<dt>種別</dt><dd>${h.rnav?'RNAV 待機(GNSS/RNAV 装置が要る)':'従来型'}</dd></dl>`+
+          `<div class="note">AIP ENR 3.6。描いた形は 1分・標準旋回の目安で、待機高度・速度・レグ長は AIP で確認。地図表示用データ ${geoEff()}版</div>`;
+        return el;
+      }).addTo(holdLayer);
+  });
+  return GEO;
+}
+// 待機経路の目安の形: INBD 3NM・旋回直径 1.5NM。fix で INBD の向きに抜けて、旋回側へ回る
+function holdShape(h){
+  const t=((h.ib-magVarAt(h.lat,h.lng))%360+360)%360,Ln=3,D=1.5,sd=h.t==='L'?-1:1,pts=[];
+  const semi=(cLat,cLng,from)=>{for(let i=0;i<=12;i++){const p=destLL(cLat,cLng,from+sd*15*i,D/2);pts.push([p.lat,p.lng])}};
+  const c1=destLL(h.lat,h.lng,t+90*sd,D/2),b=destLL(h.lat,h.lng,t+180,Ln),c2=destLL(b.lat,b.lng,t+90*sd,D/2);
+  semi(c1.lat,c1.lng,t-90*sd);        // fix から旋回して出航側へ
+  semi(c2.lat,c2.lng,t+90*sd);        // 出航の端で旋回して入航側へ
+  pts.push([h.lat,h.lng]);
+  return pts;
+}
+function accPopAt(ll){
+  const hits=accLayer.getLayers().filter(l=>l._acc&&l._acc.pts.some(r=>inArea(ll.lat,ll.lng,r))).map(l=>l._acc);
+  if(!hits.length)return;
+  const el=document.createElement('div');el.className='apPop';
+  el.innerHTML=`<h5 style="color:${ACC_COL}">ACC セクター(FL335 未満)</h5>`+
+    `<table class="awyTbl acaTbl"><tr><th>セクター</th><th>呼出名・周波数</th></tr>`+
+    hits.map(f=>`<tr><td>${f.n}${f.rmk?`<br><small style="color:var(--dim)">${f.rmk}</small>`:''}</td>`+
+      `<td>${f.cs}${f.f.length?'<br>'+f.f.join(' / '):''}`+
+      (f.f2.length?`<br><small style="color:var(--dim)">予備 ${f.f2.join(' / ')}</small>`:'')+
+      (f.hf?`<br><small style="color:var(--dim)">Tokyo Radio は HF(ENR 2.1)</small>`:'')+`</td></tr>`).join('')+`</table>`+
+    `<div class="note">AIP ENR 2.1 ATTACHMENT-2。非常用 121.5 / 243.0。地図表示用データ ${geoEff()}版</div>`;
+  const pop=L.popup({...ntmPopOpt(),maxWidth:Math.min(280,innerWidth-170)}).setLatLng(ll).setContent(el).openOn(map);
+  ntmPopFit({popup:pop});
+}
+[['btnAcc',()=>accOn=!accOn,accLayer],['btnAdiz',()=>adizOn=!adizOn,adizLayer],
+ ['btnFir',()=>firOn=!firOn,firLayer],['btnHold',()=>holdOn=!holdOn,holdLayer]].forEach(([id,tg,ly])=>{
+  document.getElementById(id).onclick=async function(){
+    const on=tg();this.classList.toggle('on',on);
+    if(on){await loadGeo();ly.addTo(map)}else map.removeLayer(ly);
+    restackOverlays();
+  };
+});
+
 let TRA=null,traOn=false;
 const traLayer=L.layerGroup(),traRenderer=ovRenderer,TRA_COL='#ff8c42';
 async function loadTra(){
@@ -3497,6 +3578,9 @@ function restackOverlays(){
     resLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
   if(typeof aspLayer!=='undefined'&&map.hasLayer(aspLayer))
     aspLayer.eachLayer(l=>l.bringToBack&&l.bringToBack());
+  // ACC セクター・ADIZ はもっと大きいので、最後に後ろへ送って最背面にする
+  [typeof adizLayer!=='undefined'&&adizLayer,typeof accLayer!=='undefined'&&accLayer].forEach(ly=>{
+    if(ly&&map.hasLayer(ly))ly.eachLayer(l=>l.bringToBack&&l.bringToBack())});
   if(typeof jsdfLayer!=='undefined'&&map.hasLayer(jsdfLayer))
     jsdfLayer.eachLayer(l=>l.bringToFront&&l.bringToFront());
   if(typeof nukeLayer!=='undefined'&&map.hasLayer(nukeLayer))
@@ -11341,7 +11425,7 @@ function fixLogHead(){
 /* ── レイヤーボタンの状態を覚える(v6-211・ユーザー要望) ──
    開き直すと ACA/TCA(hnav.aca)以外のボタンが全部オフに戻っていた。地図右のレイヤーの ON/OFF を hnav.layers に保存し、
    起動時にボタンを押して戻す。⚠ 「敵を置く」(操作)と「TRK UP」(T/O で自動)は対象外。GPS・ベース地図は別に扱っている */
-const LAYER_KEEP=['btnAsp','btnRes','btnTra','btnHat','btnCiv','btnSup','btnNuke','btnDid','btnThr','btnThrComp','btnThrRte',
+const LAYER_KEEP=['btnAsp','btnAcc','btnAdiz','btnFir','btnHold','btnRes','btnTra','btnHat','btnCiv','btnSup','btnNuke','btnDid','btnThr','btnThrComp','btnThrRte',
   'btnRing','btnLos','btnShade','btnEmerRte','btnAp','btnNav','btnFix','btnFixR','btnAwy','btnVrep','btnIls','btnHp','btnHrt','btnHpad','btnObst',
   'btnPwln','btnJsdf','btnTfc2','btnRain','btnNtmMap','btnDips'];
 function layerSave(){
