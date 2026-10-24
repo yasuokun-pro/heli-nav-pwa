@@ -648,3 +648,13 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   VOR RWY26(WKE → R012 → D10 アーク → IKURA → UNIEY)・VOR A(WKE → R012 → LUIBE)。RNP(AR)は書かない。
   ⚠ 10/29 の改正(ILS・VOR RWY08/26)は周回進入の制限と TALBA の高度制限だけで、形は 10/01 と同じ
 - 確認: 形のある飛行場の SID・進入(422本)の終点、24 経路で変化なし
+
+## v6-291 奄美・喜界・徳之島の SID・進入の形
+- 奄美 RJKA: KASARI REVERSAL THREE(AME・3000)・PINNE SIX(R228 → PINNE 6000)・MUCHA / RURIK / USAGI EAST / YUWAN(PINNE・ERABU TRANSITION)/ IKEJI(RNAV・KAxxx は図の座標)。
+  ILS Z(AME → R227 → LEDUM)・ILS Y(SUKOM / YUWAN / IKYUN → SAMAX → LEDUM。初期進入は RNP1 → GNSS)・VOR RWY03 / 21・RNP Z RWY03 / 21。RNP Y(AR)は書かない
+- 喜界 RJKI(進入端の座標が Nil → RNP RWY07 の RW07 と滑走路長から): KASARI TWO(AME・3000)・POMAS TWO / BOROS ONE / IKYUN ONE(RNAV)。
+  VOR A(AME → R132 → SGIRA)・RNP RWY07(RYUZE / IKEJI / KADON → KI770 → MELUL)・RNP Z RWY25(POMAS / MUCHA / BANTA → KI550 → UNUTU)。RNP Y は "(LPV only)" で外す
+- 徳之島 RJKN(進入端は RNP の RW01 と滑走路長から): TOKUNOSHIMA FIVE(TKE・3000。KUNIG / MEKAX(11000)/ KASARI(PINNE 6000 → AME)TRANSITION)・ANOXA TWO(12000)/ YUWAN TWO(RNAV)。
+  LOC Z(TOROS / SOTEZ / KBIRI → KN950 → MSIRO。初期進入は RNP1 → GNSS)・LOC Y(TKE → R352 → MSIRO)・VOR RWY01(TKE → R224 → KIBIZ)・RNP Z RWY01(SHODA / ISENN → HORAI)
+- 図の「点名 + 座標」を pdftotext -bbox の位置の近さで組にする道具を作業用に作った(RNAV SID の表が文字化けして名前と座標が離れて出るため)
+- 確認: 形のある飛行場の SID・進入(448本)の終点、24 経路で変化なし
