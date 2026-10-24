@@ -578,3 +578,12 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
 - 佐賀 RJFS: SAGA REVERSAL TWO・ARIAKE REVERSAL TWO・KIKYU FIVE(MUSASHI TRANSITION FL170)・BALLOON TWO / SOIGI TWO(RNAV・途中の点を省いた近似)。
   ILS or LOC / VOR RWY29・VOR RWY11(SGE の待機から)・VOR A / B(MILEP)・VOR C(SGE → R194)
 - 既知: 目達原を出発地とする代替(目達原→佐賀)は、進入復行の待機点 REPOG から佐賀へ繋がる公示の経路が無く「代替までの経路が見つからない」になる
+
+## v6-284 壱岐・天草・鹿児島の SID・進入の形、SBAS(LP/LPV)のみの進入を外す
+- 壱岐 RJDB: FUKUOKA FIVE(IKE R106 → DGC)・IKI REVERSAL THREE・AKNAG TWO(RNAV・DB200 は図に座標が無いので省く)。VOR RWY02/20(IKE の待機から)・RNP RWY02/20(IKE → ARUTU / EMREK)
+- 天草 RJDA: AMAKUSA REVERSAL THREE(AKE R096)・HABOH FOUR(RNAV・NORTH / EAST TRANSITION)。VOR RWY31(AKE の待機から)・RNP Z RWY13(TSUJI)/ RWY31(IRUKA)
+- 鹿児島 RJFK: OVSID ONE(KGE R348・KAJIKI / SASIK / KAGOSHIMA TRANSITION)。ATRUK / MIDAI / MIZOBE(RNAV)は "RADAR service required"(radar:1)。
+  ILS Z(ZAIHO → SIMAZ)・ILS Y(KGE → R141 D11)・VOR RWY34(KGE → R145)・VOR A(HKC → TESAB)・RNP RWY16(YUKSA / OIDON / OGOJO → WAZZE)
+- **SBAS(LP/LPV)のみの進入を外す**(`procOk`): 名前に "LP ONLY" がある図(天草 RNP X)と、`IAC_DEF.req` が 'SBAS' の図(鹿児島 RNP RWY34 は図の名前に "(LPV only)")。
+  装備欄に SBAS が無いため。必要なら装備に SBAS を足す(未対応)
+- 確認: 形のある 77 飛行場・進入 327 本の終点が飛行場から 3NM 以内(例外は MAPt が遠い三宅島 VOR A/B・八丈島 VOR A/B だけ・公示どおり)
