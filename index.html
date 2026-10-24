@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-291';
+const VER_TAG='v6-292';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -10641,6 +10641,56 @@ const SID_DEF={
         YUWAN:{fix:'YUWAN',nav:'TKE',name:'YUWAN TWO',alt:4000,grad:{'01':{pct:6.1,to:800}},'01':[{climbTo:800},{to:'KN101'},{to:'KINEN'},{to:'YUWAN'}],'19':[{climbTo:500},{to:'KN901',turn:'R'},{to:'KN902'},{to:'KINEN'},{to:'YUWAN'}]},
       }};
   })(),
+  /* 沖永良部(RJKB AD2.24-SID-1〜3)。滑走路は AD 2.12(034.15°/214.15°T)。ONC(ERABU)は VORTAC・VAR 6°W。22 は 5.0%(600FT)
+     ERABU REVERSAL TWO: 04 は 500FT → 右旋回で R090 / 22 は 600FT → 左 HDG087° で R132 → D12.0 → 旋回して R110 → ONC(高度は指定)
+     RNAV(GNSS・索引名 "NEORI, AZEFU, SONNA, YUNTA" の1枚): NEORI TWO(MEKAX TRANSITION)・AZEFU FOUR(INOBE・MEKAX)・SONNA TWO(YUWAN)・YUNTA TWO(ASATO)。HORAI(KB200) */
+  RJKB:(()=>{
+    const g={'22':{pct:5,to:600}};
+    const sd=(n,name,r04,r22,o)=>Object.assign({fix:n,nav:'ONC',name,grad:g,'04':[{climbTo:500}].concat(r04),'22':[{climbTo:600}].concat(r22)},o);
+    const ne=sd('NEORI','NEORI TWO',[{to:'NEORI',turn:'L'}],[{to:'NEORI',turn:'L'}]);
+    const az=sd('INOBE','AZEFU FOUR',[{to:'AZEFU',turn:'L'},{to:'INOBE'}],[{to:'AZEFU',turn:'L'},{to:'INOBE'}]);
+    const so=sd('SONNA','SONNA TWO',[{to:'SONNA'}],[{to:'SONNA',turn:'L'}]);
+    const ex=(b,x,o)=>Object.assign({},b,{'04':b['04'].concat(x),'22':b['22'].concat(x)},o);
+    return {
+      rwy:{'04':{end:[27.436661,128.709372],brgT:34.15,elev:79},'22':{end:[27.426583,128.7017],brgT:214.15,elev:99}},
+      nav:{ONC:{lat:27.43288,lng:128.69896,var:6}},
+      pts:{KB200:[27.375556,128.799111]},
+      sids:{
+        'ERABU REVERSAL':{fix:'ONC',nav:'ONC',name:'ERABU REVERSAL TWO',grad:g,'04':[{climbTo:500},{intercept:90},{dme:12},{to:'ONC',turn:'R'}],'22':[{climbTo:600},{turn:'L',hdg:87},{intercept:132},{dme:12},{to:'ONC',turn:'L'}]},
+        NEORI:ne,'NEORI MEKAX':ex(ne,[{to:'MEKAX'}],{m:'NEORI',fix:'MEKAX',name:'NEORI TWO・MEKAX TRANSITION'}),
+        AZEFU:az,'AZEFU MEKAX':ex(az,[{to:'MEKAX'}],{m:'AZEFU',fix:'MEKAX',name:'AZEFU FOUR・INOBE TRANSITION'}),
+        SONNA:so,'SONNA YUWAN':ex(so,[{to:'YUWAN'}],{m:'SONNA',fix:'YUWAN',name:'SONNA TWO・YUWAN TRANSITION'}),
+        YUNTA:sd('ASATO','YUNTA TWO',[{to:'ASATO',turn:'R'}],[{to:'ASATO'}]),
+        HORAI:sd('HORAI','HORAI (RNAV)',[{to:'HORAI'}],[{to:'KB200',turn:'L'},{to:'HORAI'}]),
+      }};
+  })(),
+  /* 与論(RORY AD2.24-SID-1〜4)。滑走路は AD 2.12(138.03°/318.03°T)。YRE は VOR/DME・VAR 6°W。14 は 5.0%(700FT)
+     YORON REVERSAL FOUR: 14 は R143 D8.8 / 32 は R325 D9.0 で旋回して YRE
+     RNAV(GNSS): ERABU ONE(MARIX → ONC)・MEKAX ONE(RY400 / MIDIP(5000 以下)→ MEKAX)・TOMORI ONE(TONOD → OKUMA) */
+  RORY:{
+    rwy:{'14':{end:[27.039858,128.405708],brgT:138.03,elev:52},'32':{end:[27.047911,128.397622],brgT:318.03,elev:35}},
+    nav:{YRE:{lat:27.044375,lng:128.398025,var:6},ONC:{lat:27.43288,lng:128.69896,var:6}},
+    pts:{RY400:[27.040389,128.314389]},
+    sids:{
+      'YORON REVERSAL':{fix:'YRE',nav:'YRE',name:'YORON REVERSAL FOUR',grad:{'14':{pct:5,to:700}},'14':[{climbTo:700},{dme:8.8},{to:'YRE',turn:'L'}],'32':[{climbTo:500},{dme:9},{to:'YRE',turn:'R'}]},
+      ERABU:{fix:'ONC',nav:'YRE',name:'ERABU ONE',grad:{'14':{pct:5,to:700}},'14':[{climbTo:700},{to:'MARIX',turn:'L'},{to:'ONC'}],'32':[{climbTo:500},{to:'MARIX',turn:'R'},{to:'ONC'}]},
+      MEKAX:{fix:'MEKAX',nav:'YRE',name:'MEKAX ONE',grad:{'14':{pct:5,to:700}},'14':[{climbTo:700},{to:'RY400',turn:'R'},{to:'MIDIP'},{to:'MEKAX'}],'32':[{climbTo:500},{to:'MIDIP',turn:'R'},{to:'MEKAX'}]},
+      TOMORI:{fix:'OKUMA',nav:'YRE',name:'TOMORI ONE',grad:{'14':{pct:5,to:700}},'14':[{climbTo:700},{to:'TONOD',turn:'R'},{to:'OKUMA'}],'32':[{climbTo:500},{to:'TONOD',turn:'L'},{to:'OKUMA'}]},
+    }
+  },
+  /* 久米島(ROKJ AD2.24-SID-1〜2)。滑走路は AD 2.12(021.17°/201.17°T)。KXC は VORTAC・VAR 6°W。03 は 5.0%(500FT)
+     SOUTH FIVE: 03 は 500FT → 左 HDG145° / 21 は 500FT → 左旋回で KXC R190 → DORIS(3000)
+     DORIS ONE / DUFFY ONE(RNAV・図に "GNSS required" だが索引に RNAV の印が無い → gnss:1): 03 は KJ300(4000 以下)→ DORIS(3000)/ DUFFY(4000) */
+  ROKJ:{
+    rwy:{'03':{end:[26.371922,126.717425],brgT:21.17,elev:19},'21':{end:[26.355089,126.710186],brgT:201.17,elev:22}},
+    nav:{KXC:{lat:26.37187,lng:126.72206,var:6}},
+    pts:{KJ300:[26.389333,126.611889]},
+    sids:{
+      SOUTH:{fix:'DORIS',nav:'KXC',name:'SOUTH FIVE',alt:3000,grad:{'03':{pct:5,to:500}},'03':[{climbTo:500},{turn:'L',hdg:145},{intercept:190}],'21':[{climbTo:500},{intercept:190}]},
+      DORIS:{fix:'DORIS',nav:'KXC',name:'DORIS ONE',gnss:1,alt:3000,grad:{'03':{pct:5,to:500}},'03':[{climbTo:500},{to:'KJ300',turn:'L'},{to:'DORIS'}],'21':[{climbTo:500},{to:'DORIS',turn:'L'}]},
+      DUFFY:{fix:'DUFFY',nav:'KXC',name:'DUFFY ONE',gnss:1,alt:4000,grad:{'03':{pct:5,to:500}},'03':[{climbTo:500},{to:'KJ300',turn:'L'},{to:'DUFFY'}],'21':[{climbTo:500},{to:'DUFFY',turn:'R'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -11645,6 +11695,36 @@ const IAC_DEF={
     'LOC Y RWY 19':[{at:'TKE'},{to:{rd:[352,11]}},{to:'MSIRO'},{thr:'19'}],
     'VOR RWY 01':[{at:'TKE'},{to:{rd:[224,8]}},{to:'KIBIZ'},{mapt:{rd:[201,1]}}],
     'RNP Z RWY 01':{SHODA:[{at:'SHODA'}].concat(rz),ISENN:[{at:'ISENN'}].concat(rz)}}};})(),
+  // 沖永良部(IAC-1・2・4・5 2024-08-08)。VOR RWY04 は ONC の待機から R227 → D8.0 以内で旋回 → ADPAB(FAF)→ MAPt(D1.3)、
+  //   VOR RWY22 は KUNIG(IAF・R028 D9.0)→ D9.0 アーク → FUCHA(IF)→ EMIKO(FAF)→ MAPt(D0.8)、RNP RWY04 は UJIJI / KEVUB / GOMES → KB452(IF)→ REKIT、
+  //   RNP RWY22 は WANJO / LILLY / PAULO → KB252(IF)→ URKEG
+  RJKB:(()=>{const r04=[{to:'KB452'},{to:'REKIT'},{thr:'04'}],r22=[{to:'KB252'},{to:'URKEG'},{thr:'22'}];
+    return {nav:{ONC:{lat:27.43288,lng:128.69896,var:6}},navId:'ONC',thr:{'04':[27.426583,128.7017],'22':[27.436661,128.709372]},
+    pts:{KB452:[27.318967,128.619917],KB252:[27.540781,128.7887]},
+    mah:{'VOR RWY04':'ONC','VOR RWY22':'ONC','RNP RWY04':'GOMES','RNP RWY22':'PAULO'},iac:{
+    'VOR RWY04':[{at:'ONC'},{to:{rd:[227,8]}},{to:'ADPAB'},{mapt:{rd:[205,1.3]}}],
+    'VOR RWY22':{KUNIG:[{at:'KUNIG'},{arc:9,to:51,dir:'R'},{to:'EMIKO'},{mapt:{rd:[51,0.8]}}]},
+    'RNP RWY04':{UJIJI:[{at:'UJIJI'}].concat(r04),KEVUB:[{at:'KEVUB'}].concat(r04),GOMES:[{at:'GOMES'}].concat(r04)},
+    'RNP RWY22':{WANJO:[{at:'WANJO'}].concat(r22),LILLY:[{at:'LILLY'}].concat(r22),PAULO:[{at:'PAULO'}].concat(r22)}}};})(),
+  // 与論(IAC-1〜3・5 2026-04-16)。VOR RWY14 は YRE の待機から R304 → D8.0 以内で旋回 → ELBIP(FAF)→ MAPt(D0.8)、VOR RWY32 は YRE → R164 → NUPDA(FAF)→ MAPt(YRE)、
+  //   RNP RWY14 は ASATO / YORON(YRE)→ UPNAX → OVNON → VEMBU(IF)→ GUMRI → RY453、RNP RWY32 は ASATO / YORON → RULUG → OLMAN → KAGIM(IF)→ SUBDO
+  RORY:(()=>{const r14=[{to:'OVNON'},{to:'VEMBU'},{to:'GUMRI'},{mapt:'RY453'}],r32=[{to:'OLMAN'},{to:'KAGIM'},{to:'SUBDO'},{thr:'32'}];
+    return {nav:{YRE:{lat:27.044375,lng:128.398025,var:6}},navId:'YRE',thr:{'14':[27.047911,128.397622],'32':[27.039858,128.405708]},
+    pts:{UPNAX:[27.122747,128.415447],OVNON:[27.182161,128.355714],VEMBU:[27.140753,128.304283],GUMRI:[27.091439,128.353889],RY453:[27.054144,128.391361],
+      RULUG:[27.051869,128.486319],OLMAN:[26.992767,128.545542],KAGIM:[26.951547,128.494275],SUBDO:[27.000875,128.444831]},
+    mah:{'VOR RWY14':'YRE','VOR RWY32':'YRE','RNP RWY14':'YORON','RNP RWY32':'YORON'},iac:{
+    'VOR RWY14':[{at:'YRE'},{to:{rd:[304,8]}},{to:'ELBIP'},{mapt:{rd:[327,0.8]}}],
+    'VOR RWY32':[{at:'YRE'},{to:{rd:[164,8]}},{to:'NUPDA'},{mapt:'YRE'}],
+    'RNP RWY14':{ASATO:[{at:'ASATO'}].concat(r14),YORON:[{at:'YORON'},{to:'UPNAX'}].concat(r14)},
+    'RNP RWY32':{ASATO:[{at:'ASATO'}].concat(r32),YORON:[{at:'YORON'},{to:'RULUG'}].concat(r32)}}};})(),
+  // 久米島(IAC-1・2 2026-04-01)。LOC RWY03 は DUFFY(R225 D17.9)/ DORIS(R190 D17.9)→ D17.9 アーク → KOEBI(IF・R207)→ MEEFU(FAF)、
+  //   RNP RWY03 は DUFFY / DORIS / DECKS → KJ350(IF)→ KJ351 → KJ352(MAPt)。RNP RWY21(AR)は書かない
+  ROKJ:(()=>{const r03=[{to:'KJ350'},{to:'KJ351'},{mapt:'KJ352'}],l03=[{to:'MEEFU'},{thr:'03'}];
+    return {nav:{KXC:{lat:26.37187,lng:126.72206,var:6}},navId:'KXC',thr:{'03':[26.355089,126.710186],'21':[26.371922,126.717425]},
+    pts:{KJ350:[26.241933,126.661583],KJ351:[26.294922,126.684331],KJ352:[26.343881,126.705367]},
+    mah:{'LOC RWY03':'DORIS','RNP RWY03':'DORIS'},iac:{
+    'LOC RWY03':{DUFFY:[{at:'DUFFY'},{arc:17.9,to:207,dir:'L'}].concat(l03),DORIS:[{at:'DORIS'},{arc:17.9,to:207,dir:'R'}].concat(l03)},
+    'RNP RWY03':{DUFFY:[{at:'DUFFY'}].concat(r03),DORIS:[{at:'DORIS'}].concat(r03),DECKS:[{at:'DECKS'}].concat(r03)}}};})(),
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
