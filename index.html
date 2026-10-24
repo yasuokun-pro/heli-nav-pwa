@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-290';
+const VER_TAG='v6-291';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -10587,6 +10587,60 @@ const SID_DEF={
         YOROI:{fix:'YOROI',nav:'WKE',name:'YOROI ONE',alt:9000,grad:{'08':{pct:6,to:900},'26':{pct:5,to:700}},'08':[{climbTo:900},{to:'WAPPY',turn:'R'},{to:'YOROI'}],'26':[{climbTo:700},{to:'WAPPY',turn:'L'},{to:'YOROI'}]},
       }};
   })(),
+  /* 奄美(RJKA AD2.24-SID-1〜10)。滑走路は AD 2.12(025.75°/205.75°T)。AME(KASARI)は VOR/DME・VAR 6°W。
+     KASARI REVERSAL THREE: 1000FT → 旋回して AME(3000)/ PINNE SIX: 03 は 700FT → 右 HDG273° / 21 は 3.0DME → 右旋回で R228 → PINNE(6000)
+     RNAV(GNSS): MUCHA TWO(3000)・RURIK THREE(7000)・USAGI EAST THREE(POMAS 6000)・YUWAN FOUR(4000・PINNE / ERABU TRANSITION)・IKEJI ONE(3000)。KAxxx は図の座標 */
+  RJKA:(()=>{
+    const yu={fix:'YUWAN',nav:'AME',name:'YUWAN FOUR',alt:4000,grad:{'03':{pct:3.5,to:700}},'03':[{climbTo:700},{to:'KA301',turn:'R'},{to:'YUWAN'}],'21':[{climbTo:500},{to:'KA101'},{to:'YUWAN'}]};
+    const ex=(x,o)=>Object.assign({},yu,{'03':yu['03'].concat(x),'21':yu['21'].concat(x)},o);
+    return {
+      rwy:{'03':{end:[28.438781,129.717017],brgT:25.75,elev:14},'21':{end:[28.42255,129.708086],brgT:205.75,elev:27}},
+      nav:{AME:{lat:28.43472,lng:129.71141,var:6},ONC:{lat:27.43288,lng:128.69896,var:6}},
+      pts:{KA101:[28.353389,129.670306],KA102:[28.479361,129.83025],KA103:[28.495944,130.0395],KA104:[28.387972,129.689222],KA301:[28.342194,129.679639],KA302:[28.501694,130.017667],KA303:[28.344333,129.724972]},
+      sids:{
+        'KASARI REVERSAL':{fix:'AME',nav:'AME',name:'KASARI REVERSAL THREE',alt:3000,grad:{'03':{pct:3.5,to:1000}},'03':[{climbTo:1000},{to:'AME',turn:'R'}],'21':[{climbTo:1000},{to:'AME',turn:'L'}]},
+        PINNE:{fix:'PINNE',nav:'AME',name:'PINNE SIX',alt:6000,grad:{'03':{pct:3.5,to:700}},'03':[{climbTo:700},{turn:'R',hdg:273},{intercept:228}],'21':[{dme:3},{intercept:228}]},
+        MUCHA:{fix:'MUCHA',nav:'AME',name:'MUCHA TWO',alt:3000,grad:{'03':{pct:3.5,to:500}},'03':[{climbTo:500},{to:'MUCHA',turn:'R'}],'21':[{climbTo:500},{to:'MUCHA',turn:'L'}]},
+        RURIK:{fix:'RURIK',nav:'AME',name:'RURIK THREE',alt:7000,grad:{'03':{pct:3.5,to:500},'21':{pct:5,to:500}},'03':[{climbTo:500},{to:'RURIK'}],'21':[{climbTo:500},{to:'KA102',turn:'L'},{to:'RURIK'}]},
+        'USAGI EAST':{fix:'POMAS',nav:'AME',name:'USAGI EAST THREE',alt:6000,grad:{'03':{pct:3.5,to:500},'21':{pct:5,to:500}},'03':[{climbTo:500},{to:'KA302',turn:'R'},{to:'POMAS'}],'21':[{climbTo:500},{to:'KA102',turn:'L'},{to:'KA103'},{to:'POMAS'}]},
+        YUWAN:yu,
+        'YUWAN PINNE':ex([{to:'PINNE'}],{m:'YUWAN',fix:'PINNE',name:'YUWAN FOUR・PINNE TRANSITION'}),
+        'YUWAN ONC':ex([{to:'ONC'}],{m:'YUWAN',fix:'ONC',name:'YUWAN FOUR・ERABU TRANSITION'}),
+        IKEJI:{fix:'IKEJI',nav:'AME',name:'IKEJI ONE',alt:3000,grad:{'03':{pct:5,to:500},'21':{pct:5,to:500}},'03':[{climbTo:500},{to:'KA303',turn:'R'},{to:'IKEJI'}],'21':[{climbTo:500},{to:'KA104'},{to:'IKEJI',turn:'L'}]},
+      }};
+  })(),
+  /* 喜界(RJKI AD2.24-SID-1〜4)。滑走路は AD 2.12(063.17°/243.17°T。進入端の座標は Nil → RNP RWY07 の RW07 と滑走路長 1200m から)。奄美の AME 基準・VAR 6°W。
+     KASARI TWO: 旋回して AME(3000)。RNAV(GNSS): POMAS TWO(KI700 / KI500 → KI701 5000 → POMAS)・BOROS ONE / IKYUN ONE(3000) */
+  RJKI:{
+    rwy:{'07':{end:[28.324237,129.933223],brgT:63.17,elev:18},'25':{end:[28.319367,129.922283],brgT:243.17,elev:21}},
+    nav:{AME:{lat:28.43472,lng:129.71141,var:6}},
+    pts:{KI700:[28.366306,130.040361],KI701:[28.444528,130.09925],KI500:[28.276917,129.973194],KI773:[28.354611,130.010972]},
+    sids:{
+      KASARI:{fix:'AME',nav:'AME',name:'KASARI TWO',alt:3000,grad:{'07':{pct:5,to:700}},'07':[{climbTo:700},{to:'AME',turn:'L'}],'25':[{climbTo:500},{to:'AME',turn:'R'}]},
+      POMAS:{fix:'POMAS',nav:'AME',name:'POMAS TWO',alt:5000,grad:{'07':{pct:5,to:600},'25':{pct:5,to:600}},'07':[{climbTo:600},{to:'KI700'},{to:'KI701'},{to:'POMAS'}],'25':[{climbTo:600},{to:'KI500',turn:'L'},{to:'KI701'},{to:'POMAS'}]},
+      BOROS:{fix:'BOROS',nav:'AME',name:'BOROS ONE',alt:3000,grad:{'07':{pct:5,to:600}},'07':[{climbTo:600},{to:'KI773'},{to:'BOROS',turn:'L'}],'25':[{climbTo:500},{to:'BOROS',turn:'R'}]},
+      IKYUN:{fix:'IKYUN',nav:'AME',name:'IKYUN ONE',alt:3000,grad:{'07':{pct:5,to:600}},'07':[{climbTo:600},{to:'KI773'},{to:'IKYUN',turn:'L'}],'25':[{climbTo:500},{to:'IKYUN'}]},
+    }
+  },
+  /* 徳之島(RJKN AD2.24-SID-1〜3)。滑走路は AD 2.12(006.12°/186.12°T。進入端は Nil → RNP の RW01 と滑走路長 2000m から)。TKE は VOR/DME・VAR 6°W。
+     TOKUNOSHIMA FIVE: 01 は R359 D5.0 / 19 は 700FT → 旋回して TKE(3000)。KUNIG(R209)・MEKAX(R025 D15 → MEKAX 11000)・KASARI(R097 → PINNE 6000 → AME)TRANSITION
+     RNAV(GNSS): ANOXA TWO(12000)・YUWAN TWO(4000) */
+  RJKN:(()=>{
+    const tk={fix:'TKE',nav:'TKE',name:'TOKUNOSHIMA FIVE',alt:3000,grad:{'01':{pct:4.9,to:1600}},'01':[{dme:5},{to:'TKE',turn:'L'}],'19':[{climbTo:700},{to:'TKE',turn:'R'}]};
+    const ex=(x,o)=>Object.assign({},tk,{'01':tk['01'].concat(x),'19':tk['19'].concat(x)},o);
+    return {
+      rwy:{'01':{end:[27.845303,128.882597],brgT:6.12,elev:14},'19':{end:[27.827419,128.880428],brgT:186.12,elev:17}},
+      nav:{TKE:{lat:27.824778,lng:128.882217,var:6},AME:{lat:28.43472,lng:129.71141,var:6}},
+      pts:{KN101:[27.920306,128.889889],KN901:[27.905611,128.7975],KN902:[27.958417,128.848806]},
+      sids:{
+        TOKUNOSHIMA:tk,
+        'TOKUNOSHIMA KUNIG':ex([{to:'KUNIG'}],{m:'TOKUNOSHIMA',fix:'KUNIG',name:'TOKUNOSHIMA FIVE・KUNIG TRANSITION'}),
+        'TOKUNOSHIMA MEKAX':ex([{to:{rad:25,dme:15}},{to:'MEKAX'}],{m:'TOKUNOSHIMA',fix:'MEKAX',name:'TOKUNOSHIMA FIVE・MEKAX TRANSITION',alt:11000}),
+        'TOKUNOSHIMA AME':ex([{to:'PINNE'},{to:'AME'}],{m:'TOKUNOSHIMA',fix:'AME',name:'TOKUNOSHIMA FIVE・KASARI TRANSITION',alt:6000}),
+        ANOXA:{fix:'ANOXA',nav:'TKE',name:'ANOXA TWO',alt:12000,grad:{'01':{pct:6.1,to:800}},'01':[{climbTo:800},{to:'KOKTO',turn:'L'},{to:'SATOH'},{to:'ANOXA'}],'19':[{climbTo:500},{to:'KN901',turn:'R'},{to:'KOKTO'},{to:'SATOH'},{to:'ANOXA'}]},
+        YUWAN:{fix:'YUWAN',nav:'TKE',name:'YUWAN TWO',alt:4000,grad:{'01':{pct:6.1,to:800}},'01':[{climbTo:800},{to:'KN101'},{to:'KINEN'},{to:'YUWAN'}],'19':[{climbTo:500},{to:'KN901',turn:'R'},{to:'KN902'},{to:'KINEN'},{to:'YUWAN'}]},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -11557,6 +11611,40 @@ const IAC_DEF={
     'VOR RWY08':[{at:'WKE'},{to:{rd:[273,10]}},{to:'TALBA'},{mapt:{rd:[255,0.8]}}],
     'VOR RWY26':[{at:'WKE'},{to:{rd:[12,10]}},{arc:10,to:84,dir:'R'},{to:'UNIEY'},{mapt:{rd:[84,0.4]}}],
     'VOR A':[{at:'WKE'},{to:{rd:[12,11]}},{to:'LUIBE'},{mapt:'WKE'}]}},
+  // 奄美(IAC-1〜5・9 2026-04-01)。ILS Z / LOC Z は AME の待機から R227 → D11.0 以内で旋回 → LEDUM(FAF)、ILS Y / LOC Y は SUKOM → KA359 / YUWAN → KA360 / IKYUN → SAMAX(IF)→ LEDUM
+  //   (初期進入は RNP1 → GNSS)、VOR RWY03 は AME → R225 → MALKI → MAPt(D2.0)、VOR RWY21 は AME → R052 → TECHI → MAPt(D0.7)、
+  //   RNP Z RWY03 は ILS Y と同じ入口 → SAMAX → ASABI → KA361、RNP Z RWY21 は TUMGI / BOROS / KYORA → ANBOL(IF)→ OLTIB → KA152。RNP Y(AR)は書かない
+  RJKA:(()=>{const y=[{to:'SAMAX'},{to:'LEDUM'},{thr:'03'}],z=[{to:'SAMAX'},{to:'ASABI'},{mapt:'KA361'}],z21=[{to:'ANBOL'},{to:'OLTIB'},{mapt:'KA152'}];
+    const ent=e=>({SUKOM:[{at:'SUKOM'},{to:'KA359'}].concat(e),YUWAN:[{at:'YUWAN'},{to:'KA360'}].concat(e),IKYUN:[{at:'IKYUN'}].concat(e)});
+    return {nav:{AME:{lat:28.43472,lng:129.71141,var:6}},navId:'AME',thr:{'03':[28.42255,129.708086],'21':[28.438781,129.717017]},
+    pts:{KA359:[28.319514,129.567839],KA360:[28.216264,129.510114],KA361:[28.419544,129.706431],KA152:[28.449364,129.722839]},
+    mah:{'ILS Z or LOC Z RWY03':'AME','ILS Y or LOC Y RWY03':'AME','VOR RWY03':'AME','VOR RWY21':'AME','RNP Z RWY03':'AME','RNP Z RWY21':'KYORA'},req:{'ILS Y or LOC Y RWY03':'GNSS'},iac:{
+    'ILS Z or LOC Z RWY03':[{at:'AME'},{to:{rd:[227,11]}},{to:'LEDUM'},{thr:'03'}],
+    'ILS Y or LOC Y RWY03':ent(y),
+    'VOR RWY03':[{at:'AME'},{to:{rd:[225,11]}},{to:'MALKI'},{mapt:{rd:[208,2]}}],
+    'VOR RWY21':[{at:'AME'},{to:{rd:[52,11]}},{to:'TECHI'},{mapt:{rd:[36,0.7]}}],
+    'RNP Z RWY03':ent(z),
+    'RNP Z RWY21':{TUMGI:[{at:'TUMGI'}].concat(z21),BOROS:[{at:'BOROS'}].concat(z21),KYORA:[{at:'KYORA'}].concat(z21)}}};})(),
+  // 喜界(IAC-1・2・4 2024-07-11)。VOR A は AME(IF・待機)→ R132 → SGIRA(FAF)→ MAPt(D12.3)、RNP RWY07 は RYUZE / IKEJI / KADON → KI770(IF)→ MELUL、
+  //   RNP Z RWY25 は POMAS / MUCHA / BANTA → KI550(IF)→ UNUTU → KI551 → KI552(MAPt)。RNP Y は "(LPV only)" で外す
+  RJKI:(()=>{const r07=[{to:'KI770'},{to:'MELUL'},{thr:'07'}],r25=[{to:'KI550'},{to:'UNUTU'},{to:'KI551'},{mapt:'KI552'}];
+    return {nav:{AME:{lat:28.43472,lng:129.71141,var:6}},navId:'AME',thr:{'07':[28.319367,129.922283],'25':[28.324237,129.933223]},
+    pts:{KI770:[28.268047,129.793558],KI550:[28.410761,130.059911],KI551:[28.344836,129.968431],KI552:[28.328989,129.946469]},
+    mah:{'VOR A':'AME','RNP RWY07':'KADON','RNP Z RWY25':'BANTA'},iac:{
+    'VOR A':[{at:'AME'},{to:'SGIRA'},{mapt:{rd:[132,12.3]}}],
+    'RNP RWY07':{RYUZE:[{at:'RYUZE'}].concat(r07),IKEJI:[{at:'IKEJI'}].concat(r07),KADON:[{at:'KADON'}].concat(r07)},
+    'RNP Z RWY25':{POMAS:[{at:'POMAS'}].concat(r25),MUCHA:[{at:'MUCHA'}].concat(r25),BANTA:[{at:'BANTA'}].concat(r25)}}};})(),
+  // 徳之島(IAC-1〜4 2024-02-22 / 05-16)。LOC Z RWY19 は TOROS / SOTEZ / KBIRI → KN950(IF)→ MSIRO(FAF)(初期進入は RNP1 → GNSS)、
+  //   LOC Y RWY19 は TKE の待機から R352 → D11.0 以内で旋回 → MSIRO、VOR RWY01 は TKE → R224 → D8.0 以内で旋回 → KIBIZ → MAPt(D1.0)、
+  //   RNP Z RWY01 は SHODA / ISENN → HORAI(IF)→ ITABU → KN150 → KN151(MAPt)。RNP Y(AR)は書かない
+  RJKN:(()=>{const lz=[{to:'KN950'},{to:'MSIRO'},{thr:'19'}],rz=[{to:'HORAI'},{to:'ITABU'},{to:'KN150'},{mapt:'KN151'}];
+    return {nav:{TKE:{lat:27.824778,lng:128.882217,var:6}},navId:'TKE',thr:{'01':[27.827419,128.880428],'19':[27.845303,128.882597]},
+    pts:{KN950:[27.998972,128.889639],KN150:[27.746069,128.872153],KN151:[27.807439,128.878392]},
+    mah:{'LOC Z RWY 19':'TKE','LOC Y RWY 19':'TKE','VOR RWY 01':'TKE','RNP Z RWY 01':'SHODA'},req:{'LOC Z RWY 19':'GNSS'},iac:{
+    'LOC Z RWY 19':{TOROS:[{at:'TOROS'}].concat(lz),SOTEZ:[{at:'SOTEZ'}].concat(lz),KBIRI:[{at:'KBIRI'}].concat(lz)},
+    'LOC Y RWY 19':[{at:'TKE'},{to:{rd:[352,11]}},{to:'MSIRO'},{thr:'19'}],
+    'VOR RWY 01':[{at:'TKE'},{to:{rd:[224,8]}},{to:'KIBIZ'},{mapt:{rd:[201,1]}}],
+    'RNP Z RWY 01':{SHODA:[{at:'SHODA'}].concat(rz),ISENN:[{at:'ISENN'}].concat(rz)}}};})(),
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
