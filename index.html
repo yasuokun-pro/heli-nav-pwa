@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-285';
+const VER_TAG='v6-286';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8309,13 +8309,17 @@ function ifrLinkAp(G,ap,tag,procs,ac,iacs){
     if(!join(t,tag+'→航空路(仮)'))return;
     // ⚠ 重複の判定は同じ種類の辺だけ。出発地=代替(仙台→松島→仙台)だと SID の辺が先にあって IAF・STAR の辺が張られず、
     //   最寄りの点への「(仮)」の直線で着陸していた(v6-271)
-    if(G.nodes[t].ap||!usable(t)||G.adj[k].some(e=>e.to===t&&e.tag===tag))return;
+    if(G.nodes[t].ap||!usable(t))return;
     // SID の形がある方式は、その経路長を辺の長さにする(直線だと反転 SID が 0.4NM で「ただ」に見える)
     const sl=x.p.k==='SID'&&ap.icao?sidLenMin(ap.icao,x.p.n,t):0;
     // 図の "Cross ◯◯ at or above"(SID_DEF の alt)はその SID の区間の最低高度として持つ → 巡航高度に入る(熊本 RINDO の MIYAZAKI TRANSITION 8000)
     const SA=x.p.k==='SID'&&SID_DEF[ap.icao],ka=SA?Object.keys(SA.sids).filter(q=>sidHit(SA.sids[q],q,x.p.n.toUpperCase())&&sidEndOf(SA,q)===t&&SA.sids[q].alt):[];
     const sa=ka.length?Math.min(...ka.map(q=>SA.sids[q].alt)):null;
-    add(k,t,{d:sl||distNM(ap,G.nodes[t]),tr:1,tag,proc:x,mea:sa});linked++;
+    // 同じ終点の SID が複数(長崎の OLE: WEST の OMURA TRANSITION 42NM と NAGASAKI REVERSAL 13NM)なら短い方。
+    //   ⚠ 以前は先に来た方の辺だけ残り、WEST → SUMOU → OLE と西へ回っていた(v6-286)
+    const d=sl||distNM(ap,G.nodes[t]),ex=G.adj[k].find(e=>e.to===t&&e.tag===tag);
+    if(ex){if(d<ex.d)[ex,(G.adj[t]||[]).find(e=>e.to===k&&e.tag===tag)].forEach(e=>e&&Object.assign(e,{d,proc:x,mea:sa}));return}
+    add(k,t,{d,tr:1,tag,proc:x,mea:sa});linked++;
   }));
   // 進入方式の IAF(進入図の "TOHNE(IAF)" から拾ったもの)。STAR が無い飛行場でも IAF へ向かう経路になる
   // 同じ IAF から入る方式が複数あれば、種類の優先順(ILS>RNP>LOC>VOR>TACAN>NDB)で上の方式をその IAF の辺にする
@@ -10319,6 +10323,94 @@ const SID_DEF={
         MIDAI:{fix:'SMIKO',nav:'KGE',name:'MIDAI (RNAV)',radar:1},ATRUK:{fix:'ATRUK',nav:'KGE',name:'ATRUK (RNAV)',radar:1},MIZOBE:{fix:'OVSID',nav:'KGE',name:'MIZOBE (RNAV)',radar:1},
       }};
   })(),
+  /* 長崎(RJFU AD2.24-SID-1〜8)。滑走路は AD 2.12(138°/318°T)。OLE は VOR/DME・VAR 8°W。
+     NORTH ONE: 14 は 500FT → R144 D6.0 → 右 HDG324°(R258 を越えるまで)→ 右 HDG016° で R331 / 32 は R331 → PEARL(6000・FUKUOKA TRANSITION は 8000)
+       FUKUOKA(DGC R244)・IKI(IKE R203)TRANSITION
+     WEST SEVEN: 14 は R144 で 1800FT → 右 HDG292° / 32 は 1500FT → 左 HDG202° で R247 → SUMOU(4000)。OMURA(R279 → OLE・D13 で 9000)・CARCO(R263)TRANSITION
+     NAGASAKI REVERSAL: 14 は R144 D6.0 / 32 は R331 D6.3 で旋回して OLE(5000)
+     RNAV(GNSS): AKNAG ONE(7000)・CARCO・KAZSA・CHIKUGO FIVE(GOROH FL170・OOITA TRANSITION FL190)。FU2xx/FU4xx は図の座標(ENR 4.3 に無い) */
+  RJFU:(()=>{
+    const no={fix:'PEARL',nav:'OLE',name:'NORTH ONE',alt:6000,grad:{'14':{pct:5,to:1200}},
+      '14':[{climbTo:500},{dme:6},{turn:'R',hdg:324},{to:{rad:258,dme:2},assumed:1},{turn:'R',hdg:16},{intercept:331}],'32':[{to:{rad:331,dme:3}}]};
+    const we={fix:'SUMOU',nav:'OLE',name:'WEST SEVEN',alt:4000,grad:{'14':{pct:5,to:1800},'32':{pct:5,to:1500}},
+      '14':[{climbTo:500},{climbTo:1800},{turn:'R',hdg:292},{intercept:247}],'32':[{climbTo:1500},{turn:'L',hdg:202},{intercept:247}]};
+    const ck={fix:'GOROH',nav:'OLE',name:'CHIKUGO FIVE',alt:17000,grad:{'14':{pct:5,to:4700},'32':{pct:5,to:500}},
+      '14':[{climbTo:500},{to:'FU401'},{to:'UNZEN'},{to:'WARAS'},{to:'GOROH'}],'32':[{climbTo:500},{to:'FU200'},{to:'TOHKI'},{to:'HIZEN'},{to:'MUTUU'},{to:'GOROH'}]};
+    const ex=(b,x,o)=>Object.assign({},b,{'14':b['14'].concat(x),'32':b['32'].concat(x)},o);
+    return {
+      rwy:{'14':{end:[32.906919,129.924178],brgT:138,elev:15},'32':{end:[32.927022,129.902714],brgT:318,elev:14}},
+      nav:{OLE:{lat:32.90525,lng:129.91798,var:8},DGC:{lat:33.67621,lng:130.38963,var:8},IKE:{lat:33.74751,lng:129.77685,var:8},FUE:{lat:32.66861,lng:128.82674,var:8}},
+      pts:{FU200:[33.026278,129.796556],FU201:[32.958611,129.868944],FU202:[32.855167,129.846528],FU400:[32.851583,129.983222],FU401:[32.655194,130.191806]},
+      sids:{
+        NORTH:no,
+        'NORTH DGC':ex(no,[{to:'PEARL'},{to:'DGC'}],{m:'NORTH',fix:'DGC',name:'NORTH ONE・FUKUOKA TRANSITION',alt:8000}),
+        'NORTH IKE':ex(no,[{to:'PEARL'},{to:'IKE'}],{m:'NORTH',fix:'IKE',name:'NORTH ONE・IKI TRANSITION'}),
+        WEST:we,
+        'WEST OLE':ex(we,[{to:'SUMOU'},{to:{rad:279,dme:13},turn:'R'},{to:'OLE'}],{m:'WEST',fix:'OLE',name:'WEST SEVEN・OMURA TRANSITION',alt:9000}),
+        'WEST CARCO':ex(we,[{to:'SUMOU'},{to:{rad:263,dme:25},turn:'R'},{to:'CARCO'}],{m:'WEST',fix:'CARCO',name:'WEST SEVEN・CARCO TRANSITION'}),
+        'NAGASAKI REVERSAL':{fix:'OLE',nav:'OLE',name:'NAGASAKI REVERSAL',alt:5000,grad:{'14':{pct:5,to:1800},'32':{pct:5,to:1600}},
+          '14':[{climbTo:500},{dme:6},{to:'OLE',turn:'R'}],'32':[{dme:6.3},{to:'OLE',turn:'L'}]},
+        AKNAG:{fix:'AKNAG',nav:'OLE',name:'AKNAG ONE',alt:7000,grad:{'14':{pct:5,to:1800},'32':{pct:5,to:1200}},
+          '14':[{climbTo:500},{to:'FU400'},{to:'MIGAP',turn:'R'},{to:'AKNAG'}],'32':[{climbTo:500},{to:'AKNAG',turn:'R'}]},
+        CARCO:{fix:'CARCO',nav:'OLE',name:'CARCO (RNAV)',grad:{'14':{pct:5,to:1800},'32':{pct:5,to:1500}},
+          '14':[{climbTo:500},{to:'FU400'},{to:'AKMEP',turn:'R'},{to:'CARCO'}],'32':[{climbTo:1500},{to:'AKMEP',turn:'L'},{to:'CARCO'}]},
+        KAZSA:{fix:'KAZSA',nav:'OLE',name:'KAZSA (RNAV)',grad:{'14':{pct:5,to:1200},'32':{pct:5,to:1900}},
+          '14':[{climbTo:1200},{to:'KAZSA'}],'32':[{climbTo:500},{to:'FU201'},{to:'FU202',turn:'L'},{to:'KAZSA'}]},
+        CHIKUGO:ck,
+        'CHIKUGO OOITA':ex(ck,[{to:'KROKI'},{to:'OOITA'}],{m:'CHIKUGO',fix:'OOITA',name:'CHIKUGO FIVE・OOITA TRANSITION',alt:19000}),
+      }};
+  })(),
+  /* 大村(RJDU AD2.24-SID-1〜7)。滑走路は AD 2.12(175.35°/355.35°T)。OLE(長崎 VOR/DME)基準。
+     OMURA NORTH THREE: 18 は 700FT → 右 HDG016° / 36 は 500FT → 左 HDG286° で R331 → PEARL(6000・FUKUOKA は 8000)
+     OMURA WEST TWO: 18 は 700FT → 右旋回で R247 / 36 は 1500FT → 左 HDG202° で R247 → SUMOU(4000)
+     OMURA SOUTH THREE: 18 は 700FT → 左旋回で R144 D9.0 / 36 は 1500FT → 左旋回で OLE → R144 D9.0 → 右旋回で R147 → KAZSA
+     OMURA REVERSAL THREE: 18 は R144 D6.0 / 36 は R331 D8.0 で旋回して OLE(5000)
+     TRANSITION(別の図・索引名 "TRANSITION"): FUKUOKA / IKI(PEARL から)・FUKUE / OMURA(SUMOU から)・SASIK / KAGOSHIMA(KAZSA から) */
+  RJDU:(()=>{
+    const no={fix:'PEARL',nav:'OLE',name:'OMURA NORTH THREE',alt:6000,grad:{'18':{pct:7,to:2000},'36':{pct:5,to:500}},
+      '18':[{climbTo:700},{turn:'R',hdg:16},{intercept:331}],'36':[{climbTo:500},{turn:'L',hdg:286},{intercept:331}]};
+    const we={fix:'SUMOU',nav:'OLE',name:'OMURA WEST TWO',alt:4000,grad:{'18':{pct:7,to:2000},'36':{pct:5,to:1500}},
+      '18':[{climbTo:700},{to:{rad:247,dme:3},turn:'R'}],'36':[{climbTo:1500},{turn:'L',hdg:202},{intercept:247}]};
+    const so={fix:'KAZSA',nav:'OLE',name:'OMURA SOUTH THREE',grad:{'18':{pct:5,to:1500},'36':{pct:5,to:1500}},
+      '18':[{climbTo:700},{intercept:144},{dme:9}],'36':[{climbTo:1500},{to:'OLE',turn:'L'},{to:{rad:144,dme:9}}]};
+    const ex=(b,x,o)=>Object.assign({},b,{'18':b['18'].concat(x),'36':b['36'].concat(x)},o);
+    return {
+      rwy:{'18':{end:[32.922681,129.934747],brgT:175.35,elev:9},'36':{end:[32.933464,129.933703],brgT:355.35,elev:19}},
+      nav:{OLE:{lat:32.90525,lng:129.91798,var:8},DGC:{lat:33.67621,lng:130.38963,var:8},IKE:{lat:33.74751,lng:129.77685,var:8},
+        FUE:{lat:32.66861,lng:128.82674,var:8},HKC:{lat:31.69722,lng:130.58294,var:7}},
+      sids:{
+        NORTH:no,
+        'NORTH DGC':ex(no,[{to:'PEARL'},{to:'DGC'}],{m:/^(OMURA )?(NORTH|TRANSITION)/,fix:'DGC',name:'OMURA NORTH THREE・FUKUOKA TRANSITION',alt:8000}),
+        'NORTH IKE':ex(no,[{to:'PEARL'},{to:'IKE'}],{m:/^(OMURA )?(NORTH|TRANSITION)/,fix:'IKE',name:'OMURA NORTH THREE・IKI TRANSITION'}),
+        WEST:we,
+        'WEST FUE':ex(we,[{to:'SUMOU'},{to:{rad:263,dme:25},turn:'R'},{to:'FUE'}],{m:/^(OMURA )?(WEST|TRANSITION)/,fix:'FUE',name:'OMURA WEST TWO・FUKUE TRANSITION'}),
+        'WEST OLE':ex(we,[{to:'SUMOU'},{to:{rad:279,dme:13},turn:'R'},{to:'OLE'}],{m:/^(OMURA )?(WEST|TRANSITION)/,fix:'OLE',name:'OMURA WEST TWO・OMURA TRANSITION',alt:9000}),
+        SOUTH:so,
+        'SOUTH SASIK':ex(so,[{to:'KAZSA'},{to:'SASIK'}],{m:/^(OMURA )?(SOUTH|TRANSITION)/,fix:'SASIK',name:'OMURA SOUTH THREE・SASIK TRANSITION'}),
+        'SOUTH HKC':ex(so,[{to:'KAZSA'},{to:'HKC'}],{m:/^(OMURA )?(SOUTH|TRANSITION)/,fix:'HKC',name:'OMURA SOUTH THREE・KAGOSHIMA TRANSITION'}),
+        REVERSAL:{fix:'OLE',nav:'OLE',name:'OMURA REVERSAL THREE',alt:5000,grad:{'18':{pct:5,to:1500},'36':{pct:5,to:1500}},
+          '18':[{climbTo:700},{intercept:144},{dme:6},{to:'OLE',turn:'R'}],'36':[{climbTo:500},{turn:'L',hdg:286},{intercept:331},{dme:8},{to:'OLE',turn:'L'}]},
+      }};
+  })(),
+  /* 鹿屋(RJFY AD2.24-SID-1〜5)。滑走路は AD 2.12(079.34°/259.35°T)。JAT は TACAN・図の VAR 6°W(2019)。全部 TACAN の方式(tac:1)
+     EAST REVERSAL TWO(08R のみ): R083 で 13NM 以内に 4000FT → 右旋回で JAT / WEST REVERSAL TWO(26L のみ): R270 で 4000FT → 左旋回で JAT
+     EKORU ONE: 08R は R084 → EKORU / 26L は 3.6DME・1000FT → 左旋回で JAT → R084
+     MAKRA THREE(26L のみ): 1.0DME → R263 → MAKRA / QUEEN FOUR: R083 → HKC R127 に会合して QUEEN(26L は JAT に戻ってから) */
+  RJFY:(()=>{
+    const g8={pct:5,to:2000};
+    return {
+      rwy:{'08R':{end:[31.368644,130.850656],brgT:79.34,elev:187},'26L':{end:[31.364892,130.827406],brgT:259.35,elev:222}},
+      nav:{JAT:{lat:31.36278,lng:130.83028,var:6},HKC:{lat:31.69722,lng:130.58294,var:7}},
+      sids:{
+        'EAST REVERSAL':{fix:'JAT',nav:'JAT',name:'EAST REVERSAL TWO',tac:1,alt:4000,grad:{'08R':g8},'08R':[{to:{rad:83,dme:3}},{climbTo:4000},{to:'JAT',turn:'R'}]},
+        'WEST REVERSAL':{fix:'JAT',nav:'JAT',name:'WEST REVERSAL TWO',tac:1,alt:4000,grad:{'26L':{pct:5,to:600}},'26L':[{to:{rad:270,dme:2}},{climbTo:4000},{to:'JAT',turn:'L'}]},
+        EKORU:{fix:'EKORU',nav:'JAT',name:'EKORU ONE',tac:1,grad:{'08R':g8,'26L':{pct:5,to:1600}},
+          '08R':[{to:{rad:84,dme:3}}],'26L':[{dme:3.6},{climbTo:1000},{to:'JAT',turn:'L'},{to:{rad:84,dme:3}}]},
+        MAKRA:{fix:'MAKRA',nav:'JAT',name:'MAKRA THREE',tac:1,grad:{'26L':{pct:5,to:600}},'26L':[{dme:1},{to:{rad:263,dme:3}}]},
+        QUEEN:{fix:'QUEEN',nav:'HKC',name:'QUEEN FOUR',tac:1,grad:{'08R':g8,'26L':{pct:5,to:3000}},
+          '08R':[{to:{rad:83,dme:3,nav:'JAT'}},{intercept:127}],'26L':[{dme:3.6,nav:'JAT'},{climbTo:1000},{to:'JAT',turn:'L'},{to:{rad:83,dme:3,nav:'JAT'}},{intercept:127}]},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -11121,6 +11213,41 @@ const IAC_DEF={
     'VOR RWY34':[{at:'KGE'},{to:{rd:[145,12]}},{to:{rd:[160,8]}},{to:{rd:[160,6.5]}},{mapt:'KGE'}],
     'VOR A':[{at:'HKC'},{to:'TESAB'},{mapt:'KGE'}],
     'RNP RWY16':{YUKSA:[{at:'YUKSA'}].concat(r16),OIDON:[{at:'OIDON'}].concat(r16),OGOJO:[{at:'OGOJO'}].concat(r16)}}};})(),
+  // 長崎(IAC-1〜3・5・7・8 2025-12-01)。ILS Y / LOC Y は OLE の待機から R160 → D11.0 以内で旋回 → CHARA(FAF)、
+  //   VOR RWY32 は OLE → R148 → D11.0 以内で旋回 → INASA(R132 D6.0)→ MAPt(D1.0)、VOR RWY14 は OLE → R317 → D11.0 以内で旋回 → HARIO(R333 D7.3)→ MAPt(D2.3)、
+  //   RNP RWY14 は SARUK / IORIE / KOHNO → TENBO(IF)、RNP RWY32 は NOBAK / MEKOK → FUBKI(IF)。ILS Z は IF(FUBKI)に待機が無い(レーダー誘導前提)ので書かない。
+  //   ⚠ 索引(gen_proc)の IAF が VOR RWY32 と RNP RWY14 で入れ違っている → 入口をキーにした形にして形の側を正とする。RNAV の IAF は ENR 4.3 に無いので wpt で足す
+  RJFU:(()=>{const p14=[{to:'TENBO'},{to:'NODEP'},{mapt:'FU450'}],p32=[{to:'FUBKI'},{to:'TEKIK'},{to:'FU250'},{thr:'32'}];
+    return {nav:{OLE:{lat:32.90525,lng:129.91798,var:8}},navId:'OLE',thr:{'14':[32.927022,129.902714],'32':[32.906919,129.924178]},
+    pts:{TENBO:[33.041486,129.780292],NODEP:[32.982992,129.842883],FU450:[32.93125,129.8982],TEKIK:[32.835503,130.000319],FU250:[32.874639,129.958617]},
+    wpt:{SARUK:[33.097414,129.853967],IORIE:[33.109264,129.7076],KOHNO:[32.988875,129.711122],NOBAK:[32.841317,130.127131],MEKOK:[32.739061,129.9924]},
+    mah:{'ILS Y or LOC Y RWY 32':'OLE','VOR RWY 32':'OLE','VOR RWY 14':'OLE','RNP RWY 14':'KOHNO','RNP RWY 32':'OLE'},iac:{
+    'ILS Y or LOC Y RWY 32':[{at:'OLE'},{to:{rd:[160,11]}},{to:'CHARA'},{thr:'32'}],
+    'VOR RWY 32':{OLE:[{at:'OLE'},{to:{rd:[148,11]}},{to:'INASA'},{mapt:{rd:[132,1]}}]},
+    'VOR RWY 14':[{at:'OLE'},{to:{rd:[317,11]}},{to:'HARIO'},{mapt:{rd:[333,2.3]}}],
+    'RNP RWY 14':{SARUK:[{at:'SARUK'}].concat(p14),IORIE:[{at:'IORIE'}].concat(p14),KOHNO:[{at:'KOHNO'}].concat(p14)},
+    'RNP RWY 32':{NOBAK:[{at:'NOBAK'}].concat(p32),MEKOK:[{at:'MEKOK'}].concat(p32)}}};})(),
+  // 大村(IAC-1〜4 2025-12-01)。TACAN RWY18 は IVSAT(IAF・R291 D13.6)→ D13.6 アーク(時計回り)→ RUVKA(IF・R004)→ BURKO(FAF)→ MAPt(D0.4)。
+  //   LOC C / VOR D / VOR E は長崎の ILS Y・VOR RWY32・VOR RWY14 と同じ飛び方で大村へ周回進入(MAPt は長崎の滑走路の近く)
+  RJDU:{nav:{JBT:{lat:32.92583,lng:129.93222,var:8},OLE:{lat:32.90525,lng:129.91798,var:8},IOL:{lat:32.928597,lng:129.901031,var:8}},navId:'JBT',thr:{'18':[32.933464,129.933703],'36':[32.922681,129.934747]},
+    pts:{BURKO:[33.018886,129.925808]},
+    mah:{'TACAN RWY18':'IVSAT','LOC C':'OLE','VOR D':'OLE','VOR E':'OLE'},iac:{
+    'TACAN RWY18':[{at:'IVSAT'},{arc:13.6,to:4,dir:'R'},{to:'BURKO'},{mapt:{rd:[4,0.4]}}],
+    'LOC C':[{at:'OLE'},{to:{rd:[160,11,'OLE']}},{to:'CHARA'},{mapt:{rd:[145,0.6,'IOL']}}],
+    'VOR D':[{at:'OLE'},{to:{rd:[148,11,'OLE']}},{to:'INASA'},{mapt:{rd:[132,1,'OLE']}}],
+    'VOR E':[{at:'OLE'},{to:{rd:[317,11,'OLE']}},{to:'HARIO'},{mapt:{rd:[333,2.3,'OLE']}}]}},
+  // 鹿屋(IAC-1〜6 2023-03-23)。JAT は TACAN・図の VAR 6°W。TACAN Z RWY26L は DAGRI(R080 D15)→ FAF(D8.0)→ MAPt(D1.0)、
+  //   TACAN Y は AIRAH(R125 D16)→ D16 アーク(反時計回り)→ R080、TACAN RWY08R は TILAN(R272 D18)→ IF(D13)→ FAF(D6)→ MAPt(D1.0)。
+  //   ILS Y は DAGRI → LOC に会合(D10)→ FAF(D7.2)、ILS X は AIRAH → D16 アーク → LOC(D14)。ILS Z は IAF が無い(レーダー誘導前提)ので書かない。
+  //   LOC 上の点は 26L の進入端から延長線上に図の距離(NM to THR)で置いた
+  RJFY:{nav:{JAT:{lat:31.36278,lng:130.83028,var:6}},navId:'JAT',thr:{'26L':[31.368644,130.850656],'08R':[31.364892,130.827406]},
+    pts:{L61:[31.387385,130.967616],L89:[31.395951,131.021318],L129:[31.408151,131.098053]},
+    mah:{'ILS Y or LOC Y RWY 26L':'TILAN','ILS X or LOC X RWY 26L':'TILAN','TACAN Z RWY 26L':'TILAN','TACAN Y RWY 26L':'TILAN','TACAN RWY 08R':'DAGRI'},iac:{
+    'ILS Y or LOC Y RWY 26L':[{at:'DAGRI'},{to:'L89'},{to:'L61'},{thr:'26L'}],
+    'ILS X or LOC X RWY 26L':[{at:'AIRAH'},{arc:16,to:85,dir:'L'},{to:'L129'},{to:'L61'},{thr:'26L'}],
+    'TACAN Z RWY 26L':[{at:'DAGRI'},{to:{rd:[80,8]}},{mapt:{rd:[80,1]}}],
+    'TACAN Y RWY 26L':[{at:'AIRAH'},{arc:16,to:80,dir:'L'},{to:{rd:[80,8]}},{mapt:{rd:[80,1]}}],
+    'TACAN RWY 08R':[{at:'TILAN'},{to:{rd:[272,13]}},{to:{rd:[272,6]}},{mapt:{rd:[272,1]}}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
@@ -11175,11 +11302,14 @@ const IAC_DEF={
 /* 図にだけある点(IAC_DEF の fix)を FIX に足す。評定の文字列(ENR 4.3 と同じ形)も付けるので、経路網・地図・ログの IDENT にそのまま乗る */
 function iacFixInject(){
   if(!FIX||!FIX._ix)return;
-  Object.values(IAC_DEF).forEach(D=>{if(!D.fix)return;const N=D.nav[D.navId];
-    Object.entries(D.fix).forEach(([n,[r,d]])=>{if(FIX._ix[n])return;
+  Object.values(IAC_DEF).forEach(D=>{const N=D.nav[D.navId];
+    if(D.fix)Object.entries(D.fix).forEach(([n,[r,d]])=>{if(FIX._ix[n])return;
       const q=destLL(N.lat,N.lng,(r-N.var+360)%360,d);
       const f={n,lat:+q.lat.toFixed(6),lng:+q.lng.toFixed(6),c:0,brg:`${pad3(r)}°/${d.toFixed(1)}NM ${D.navId}`,iac:1};
       FIX.f.push(f);FIX._ix[n]=f});
+    // wpt: RNAV 進入の IAF で ENR 4.3 に無い点(長崎 SARUK など)。評定は無い(RNAV 専用)ので GNSS/RNAV 装置のある機体だけが繋がる
+    if(D.wpt)Object.entries(D.wpt).forEach(([n,[la,lo]])=>{if(FIX._ix[n])return;
+      const f={n,lat:la,lng:lo,c:0,brg:'',iac:1};FIX.f.push(f);FIX._ix[n]=f});
   });
 }
 /* その進入方式の入口(IAF)。図から拾った IAF が無ければ、IAC_DEF の形の最初の点(IF・待機の点)を入口にする */
@@ -11234,7 +11364,8 @@ function sidTrackOf(icao,sidName,rwy,ac,endFix,only){
   const tru=m=>(m-vr+360)%360;
   // 点の指定: 'FIX名' / 'navの局' / {rad,dme[,nav]}(磁方位のラジアルと DME)
   const ptOf=t=>{
-    if(typeof t==='string'){const f=FIX&&FIX._ix[t],n=A.nav[t];return f?{lat:f.lat,lng:f.lng}:n?{lat:n.lat,lng:n.lng}:null}
+    // A.pts: 図にだけある RNAV の点(長崎 FU400 など・ENR 4.3 に無い)
+    if(typeof t==='string'){const f=FIX&&FIX._ix[t],n=A.nav[t],q=A.pts&&A.pts[t];return f?{lat:f.lat,lng:f.lng}:n?{lat:n.lat,lng:n.lng}:q?{lat:q[0],lng:q[1]}:null}
     const n=A.nav[t.nav||S.nav];return n?destLL(n.lat,n.lng,tru(t.rad),t.dme):null;
   };
   // 相手に向かう: 指定の向き(無ければ近い方)に 10° ずつ旋回し、相手の方位に向いたら直進(標準旋回の半径)
