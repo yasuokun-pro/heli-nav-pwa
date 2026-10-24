@@ -533,6 +533,7 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
    `→ gen_res → gen_nuke → gen_tra → gen_civ → gen_hp → gen_natl_ctr → gen_asp --splice → gen_sup`
    AIXM の差分が VM に届いていれば: scp で `aip/aixm_dist/` へ → `aixm_extract.py` → `--at <発効日>` を付けて
    `gen_aca_aixm --write` / `gen_asp_aixm --splice`(gen_asp の後)/ `gen_civ_aixm --write` / `gen_tra_aixm --write` / `gen_res_aixm --write` / `gen_jsdfa_aixm --write`
+   「AIP に関する地図表示用データ」(Shapefile・AIRAC ごとにメールで案内)を `aip/geo/<日付>/` に展開してあれば `gen_geo`(geo.json)
    ⚠ 今は**初回全件しか無い**。差分(PERMDELTA)を全件に当てる処理は未実装(差分が届いたら作る)。それまでは全件の BASELINE の日付で切り替わる
    ⚠ `gen_proc`/`gen_tomin` は日付フォルダをまたいで glob していて**2サイクル分が混ざった**。最新フォルダだけに直した
    ⚠ `gen_aca`(aca.json)と `gen_tca` は図の読み取り結果を固定で持っているので回さない。
@@ -736,6 +737,12 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
   | 制限空域・警戒区域・RJR(res.json) | `gen_res_aixm.py --write` | **形と上下限だけ**置き換え(名前・調整先・時間は PDF 版)。沖縄の W-179/W-174 などは PDF 版が読み違い。R-521 は AIXM で1つの形 |
   | 自衛隊の高高度訓練/試験空域・回廊・超音速(jsdfa.json・新規) | `gen_jsdfa_aixm.py --write` | 区域グループの「高訓・回廊」(`btnHat`)。⚠ 高高度でも SFC からの区画がある |
   | 原子力施設(nuke.json) | 変更なし | AIXM と座標が一致した |
+- **⭐ 地図表示用データ(v6-285)**: 航空情報センターの「AIP に関する地図表示用データ」(KML/Shapefile・WGS84・AIRAC ごと)。
+  zip は `aip/_downloads/`、展開先 `aip/geo/<日付>/Shapefile_<日付>/`(⚠ zip のファイル名は cp932。`unzip -O cp932` は失敗するので Python の zipfile で cp437→cp932 に直して展開)。
+  KML は属性が HTML の説明文に埋まっているので **.dbf を読む**(`tools/shp_read.py`・pyshp 不要)。
+  `tools/gen_geo.py` → geo.json: ACC セクター(FL335 未満・CS/周波数)・ADIZ(外側線と内側線の間=穴あき面)・FIR・QNH 適用区域・エンルート待機(INBD は磁方位・形は目安)。
+  ボタンは 管制>ACC、区域>ADIZ / FIR/QNH、地物>待機。制限空域・訓練空域・回廊・Visual REP などは AIXM 版が既にあるので取っていない
+  (⚠ Visual REP の位置は AIP の公示値ではないと説明書にある)。TCA/PCA/MVA は今後追加予定とのこと
   - ⚠ AIXM の高度の落とし穴: **下限 0 を `not` で判定すると '0' の文字列になって消える**(aixm_extract 修正済み)。
     **引き算(SUBTR)に高度帯があるときはその帯の中だけ引く**(TH13-2・嘉手納 CTR)。真円は `CircleByCenterPoint`(半径の単位 `[nmi_i]`)
   - 上限・下限の基準が SFC のものは `upAgl`/`loAgl` を付けて「(地表から)」と出す
