@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-292';
+const VER_TAG='v6-293';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -10691,6 +10691,49 @@ const SID_DEF={
       DUFFY:{fix:'DUFFY',nav:'KXC',name:'DUFFY ONE',gnss:1,alt:4000,grad:{'03':{pct:5,to:500}},'03':[{climbTo:500},{to:'KJ300',turn:'L'},{to:'DUFFY'}],'21':[{climbTo:500},{to:'DUFFY',turn:'R'}]},
     }
   },
+  /* 宮古(ROMY AD2.24-SID-1〜5・2026-09-03)。滑走路は AD 2.12(038.31°/218.31°T)。MJC は VORTAC・VAR 5°W。索引名は "NAHA, WEST"(1つの図)
+     NAHA SIX: 04 は 700FT → 右旋回 / 22 は 600FT → 左 HDG015° で MJC R060 → PAYAO / WEST SEVEN: 700FT / 600FT → 右旋回で R253 → SHUJI(3000)
+     RNAV(GNSS): FREED TWO・UMAKI TWO(WAIDO → UMAKI 3000。ELKIV / JOTTO TRANSITION) */
+  ROMY:(()=>{
+    const um={fix:'UMAKI',nav:'MJC',name:'UMAKI TWO',alt:3000,'04':[{climbTo:700},{to:'WAIDO',turn:'R'},{to:'UMAKI'}],'22':[{climbTo:600},{to:'UMAKI',turn:'R'}]};
+    const ex=(x,o)=>Object.assign({},um,{'04':um['04'].concat(x),'22':um['22'].concat(x)},o);
+    return {
+      rwy:{'04':{end:[24.789906,125.301267],brgT:38.31,elev:150},'22':{end:[24.775736,125.289003],brgT:218.31,elev:124}},
+      nav:{MJC:{lat:24.77739,lng:125.29341,var:5}},
+      pts:{WAIDO:[24.692167,125.330139]},
+      sids:{
+        NAHA:{fix:'PAYAO',nav:'MJC',name:'NAHA SIX','04':[{climbTo:700},{intercept:60}],'22':[{climbTo:600},{turn:'L',hdg:15},{intercept:60}]},
+        WEST:{fix:'SHUJI',nav:'MJC',name:'WEST SEVEN',alt:3000,'04':[{climbTo:700},{to:'MJC',turn:'R'},{to:{rad:253,dme:3}}],'22':[{climbTo:600},{intercept:253}]},
+        FREED:{fix:'FREED',nav:'MJC',name:'FREED TWO','04':[{climbTo:700},{to:'FREED',turn:'R'}],'22':[{climbTo:600},{to:'FREED',turn:'L'}]},
+        UMAKI:um,
+        'UMAKI ELKIV':ex([{to:'ELKIV'}],{m:'UMAKI',fix:'ELKIV',name:'UMAKI TWO・ELKIV TRANSITION'}),
+        'UMAKI JOTTO':ex([{to:'YAIMA'},{to:'JOTTO'}],{m:'UMAKI',fix:'JOTTO',name:'UMAKI TWO・JOTTO TRANSITION'}),
+      }};
+  })(),
+  /* 下地島(RORS AD2.24-SID-1〜4)。滑走路は AD 2.12(165.50°/345.50°T)。SJE は VOR/DME・VAR 5°W。17 は 5.0%(500FT)
+     ANNIE SIX: 17 は 500FT → 右 HDG037° / 35 はそのまま で SJE R352 → ANNIE / BETTY SIX: 17 はそのまま / 35 は 500FT → 左 HDG127° で R172 → BETTY(高度は指定)
+     MIYAKOJIMA FOUR: 500FT → 旋回して MJC(3000)/ FREED TWO(RNAV): 17 は RS700 → FREED */
+  RORS:{
+    rwy:{'17':{end:[24.813764,125.148539],brgT:165.5,elev:54},'35':{end:[24.840044,125.141353],brgT:345.5,elev:15}},
+    nav:{SJE:{lat:24.821933,lng:125.143806,var:5},MJC:{lat:24.77739,lng:125.29341,var:5}},
+    pts:{RS700:[24.883472,125.2725]},
+    sids:{
+      ANNIE:{fix:'ANNIE',nav:'SJE',name:'ANNIE SIX',grad:{'17':{pct:5,to:500}},'17':[{climbTo:500},{turn:'R',hdg:37},{intercept:352}],'35':[{to:{rad:352,dme:3}}]},
+      BETTY:{fix:'BETTY',nav:'SJE',name:'BETTY SIX',grad:{'17':{pct:5,to:500}},'17':[{to:{rad:172,dme:3}}],'35':[{climbTo:500},{turn:'L',hdg:127},{intercept:172}]},
+      MIYAKOJIMA:{fix:'MJC',nav:'SJE',name:'MIYAKOJIMA FOUR',alt:3000,grad:{'17':{pct:5,to:500}},'17':[{climbTo:500},{to:'MJC',turn:'L'}],'35':[{climbTo:500},{to:'MJC',turn:'R'}]},
+      FREED:{fix:'FREED',nav:'SJE',name:'FREED TWO',grad:{'17':{pct:5,to:500}},'17':[{climbTo:500},{to:'RS700',turn:'L'},{to:'FREED'}],'35':[{climbTo:500},{to:'FREED',turn:'R'}]},
+    }
+  },
+  /* 多良間(RORT AD2.24-SID-1〜2)。滑走路は AD 2.12(172.78°/352.78°T)。局は無い(宮古の MJC で代用・VAR 5°W)。
+     GAHRA THREE(RNAV・GNSS): 500FT → 旋回して GAHRA(3000)。MIYAKO TRANSITION(GAHRA → MJC) */
+  RORT:{
+    rwy:{'18':{end:[24.647092,124.6764],brgT:172.78,elev:36},'36':{end:[24.660525,124.674539],brgT:352.78,elev:34}},
+    nav:{MJC:{lat:24.77739,lng:125.29341,var:5}},
+    sids:{
+      GAHRA:{fix:'GAHRA',nav:'MJC',name:'GAHRA THREE',alt:3000,'18':[{climbTo:500},{to:'GAHRA',turn:'L'}],'36':[{climbTo:500},{to:'GAHRA',turn:'R'}]},
+      'GAHRA MJC':{m:'GAHRA',fix:'MJC',nav:'MJC',name:'GAHRA THREE・MIYAKO TRANSITION',alt:3000,'18':[{climbTo:500},{to:'GAHRA',turn:'L'},{to:'MJC'}],'36':[{climbTo:500},{to:'GAHRA',turn:'R'},{to:'MJC'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -11725,6 +11768,36 @@ const IAC_DEF={
     mah:{'LOC RWY03':'DORIS','RNP RWY03':'DORIS'},iac:{
     'LOC RWY03':{DUFFY:[{at:'DUFFY'},{arc:17.9,to:207,dir:'L'}].concat(l03),DORIS:[{at:'DORIS'},{arc:17.9,to:207,dir:'R'}].concat(l03)},
     'RNP RWY03':{DUFFY:[{at:'DUFFY'}].concat(r03),DORIS:[{at:'DORIS'}].concat(r03),DECKS:[{at:'DECKS'}].concat(r03)}}};})(),
+  // 宮古(IAC-1〜5 2026-09-03)。ILS Z / LOC Z は MIBAI(IF・D9.5 IMY・待機)→ UTIMA(FAF)、ILS Y / LOC Y は MJC の待機から R058 → D11.0 以内で旋回 → UTIMA、
+  //   VOR RWY04 は MJC → R210 → D11.0 以内で旋回 → KOHMA(FAF)→ MAPt(MJC)、VOR RWY22 は MJC → R055 → SORYU(FAF)→ MAPt(MJC)、
+  //   RNP Z RWY04 は DANKE / GAHRA → KURIM(IF)→ PAINA。RNP Y / X(AR)は書かない
+  ROMY:(()=>{const r=[{to:'KURIM'},{to:'PAINA'},{thr:'04'}];
+    return {nav:{MJC:{lat:24.77739,lng:125.29341,var:5}},navId:'MJC',thr:{'04':[24.775736,125.289003],'22':[24.789906,125.301267]},
+    pts:{KURIM:[24.651347,125.181508],PAINA:[24.716961,125.238172]},
+    mah:{'ILS Z or LOC Z RWY22':'MJC','ILS Y or LOC Y RWY22':'MJC','VOR RWY04':'MJC','VOR RWY22':'MJC','RNP Z RWY04':'DANKE'},iac:{
+    'ILS Z or LOC Z RWY22':[{at:'MIBAI'},{to:'UTIMA'},{thr:'22'}],
+    'ILS Y or LOC Y RWY22':[{at:'MJC'},{to:{rd:[58,11]}},{to:'UTIMA'},{thr:'22'}],
+    'VOR RWY04':[{at:'MJC'},{to:{rd:[210,11]}},{to:'KOHMA'},{mapt:'MJC'}],
+    'VOR RWY22':[{at:'MJC'},{to:{rd:[55,11]}},{to:'SORYU'},{mapt:'MJC'}],
+    'RNP Z RWY04':{DANKE:[{at:'DANKE'}].concat(r),GAHRA:[{at:'GAHRA'}].concat(r)}}};})(),
+  // 下地島(IAC-1〜6 2026-04-01)。ILS Z / LOC Z は DIANA(IF・D10.0 ISB・待機)→ AYAGU(FAF)、ILS Y / LOC Y は SJE の待機から R336 → D11.0 以内で旋回 → AYAGU、
+  //   VOR RWY17 は SJE → R339 → YOJIL(FAF)→ MAPt(SJE)、VOR RWY35 は SJE → R184 → MIJIL(FAF)→ MAPt(SJE)、
+  //   RNP RWY17 は DIANA(IF)→ AYAGU、RNP RWY35 は DIANA → TAIKO → NUUSI → CHIMI(IF)→ PINZA → RS550(MAPt)
+  RORS:{nav:{SJE:{lat:24.821933,lng:125.143806,var:5}},navId:'SJE',thr:{'17':[24.840044,125.141353],'35':[24.813764,125.148539]},
+    pts:{AYAGU:[24.917,125.120294],NUUSI:[24.633367,125.084694],CHIMI:[24.657664,125.191167],PINZA:[24.738761,125.169033],RS550:[24.801503,125.151892]},
+    mah:{'ILS Z or LOC Z RWY17':'SJE','ILS Y or LOC Y RWY17':'SJE','VOR RWY17':'SJE','VOR RWY35':'SJE','RNP RWY17':'SJE','RNP RWY35':'SJE'},iac:{
+    'ILS Z or LOC Z RWY17':[{at:'DIANA'},{to:'AYAGU'},{thr:'17'}],
+    'ILS Y or LOC Y RWY17':[{at:'SJE'},{to:{rd:[336,11]}},{to:'AYAGU'},{thr:'17'}],
+    'VOR RWY17':[{at:'SJE'},{to:{rd:[339,11]}},{to:'YOJIL'},{mapt:'SJE'}],
+    'VOR RWY35':[{at:'SJE'},{to:{rd:[184,11]}},{to:'MIJIL'},{mapt:'SJE'}],
+    'RNP RWY17':[{at:'DIANA'},{to:'AYAGU'},{thr:'17'}],
+    'RNP RWY35':[{at:'DIANA'},{to:'TAIKO'},{to:'NUUSI'},{to:'CHIMI'},{to:'PINZA'},{mapt:'RS550'}]}},
+  // 多良間(IAC-1・2 2026-04-01)。RNP RWY18 は UMAKI → KROWA → MINNA(IF)→ RT851、RNP RWY36 は UMAKI → PANAP → YUGAP(IF)→ RT650
+  RORT:{nav:{MJC:{lat:24.77739,lng:125.29341,var:5}},navId:'MJC',thr:{'18':[24.660525,124.674539],'36':[24.647092,124.6764]},
+    pts:{KROWA:[24.779911,124.731822],MINNA:[24.771522,124.659147],RT851:[24.713467,124.6672],YUGAP:[24.536194,124.69175],RT650:[24.594253,124.683717]},
+    mah:{'RNP RWY18':'UMAKI','RNP RWY36':'UMAKI'},iac:{
+    'RNP RWY18':[{at:'UMAKI'},{to:'KROWA'},{to:'MINNA'},{to:'RT851'},{thr:'18'}],
+    'RNP RWY36':{UMAKI:[{at:'UMAKI'},{to:'PANAP'},{to:'YUGAP'},{to:'RT650'},{thr:'36'}]}}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
