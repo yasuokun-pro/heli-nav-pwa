@@ -1235,7 +1235,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-283';
+const VER_TAG='v6-284';
 const BUILD='2026-10-22';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8315,6 +8315,8 @@ function procOk(p,ac){
   if(rq==='RADAR')return {ok:0,why:'レーダー業務が要る(図の注記: 初期進入)'};
   // 図に "AUTHORIZATION REQUIRED"(RNP AR 相当。岩国 RNAV(RNP) Z RWY20)。名前に (AR) が無い図
   if(rq==='AR')return {ok:0,why:'RNP AR(特別の承認が要る)'};
+  // "LP ONLY" の図(天草 RNP X)は SBAS(LP)が要る。装備欄に SBAS が無いので使わない
+  if(/LP ONLY/.test(p.n||'')||rq==='SBAS')return {ok:0,why:'LP/LPV(SBAS)のみ'};   // 鹿児島 RNP RWY34 は図の名前に "(LPV only)"
   if(eq.includes('TACAN')&&!ac.tacan)return {ok:0,why:'TACAN(図の必要装備)'};
   if(eq.includes('DME')&&!(ac.dme||ac.tacan))return {ok:0,why:'DME(図の必要装備)'};
   if(eq.includes('VOR')&&!ac.vor)return {ok:0,why:'VOR(図の必要装備)'};
@@ -10184,6 +10186,55 @@ const SID_DEF={
         SOIGI:{fix:'KUE',nav:'SGE',name:'SOIGI TWO',grad:g,'11':[{climbTo:500},{to:'KUE',turn:'R'}],'29':[{climbTo:500},{to:'KUE',turn:'L'}]},
       }};
   })(),
+  /* 壱岐(RJDB AD2.24-SID-1〜4)。滑走路は AD 2.12(009.36°/189.36°T)。IKE は VOR/DME・VAR 8°W。02 は 6.7%(600FT まで)
+     FUKUOKA FIVE: 02 は 600FT → 右 HDG151° / 20 は左 HDG061° で R106 → DGC / IKI REVERSAL THREE: 02 は 1600FT・20 は 1500FT → 右旋回で IKE(4000)
+     AKNAG TWO(RNAV): 02 は 600FT → 右旋回(DB200 は図に座標が無いので省く)/ 20 は左旋回で AKNAG(7000) */
+  RJDB:{
+    rwy:{'02':{end:[33.754372, 129.786747],brgT:9.36,elev:52},'20':{end:[33.743697, 129.784639],brgT:189.36,elev:23}},
+    nav:{IKE:{lat:33.74751,lng:129.77685,var:8},DGC:{lat:33.67621,lng:130.38963,var:8}},
+    sids:{
+      FUKUOKA:{fix:'DGC',nav:'IKE',name:'FUKUOKA FIVE',grad:{'02':{pct:6.7,to:600}},'02':[{climbTo:600},{turn:'R',hdg:151},{intercept:106},{to:'DGC'}],'20':[{turn:'L',hdg:61},{intercept:106},{to:'DGC'}]},
+      'IKI REVERSAL':{fix:'IKE',nav:'IKE',name:'IKI REVERSAL THREE',alt:4000,grad:{'02':{pct:6.7,to:600}},'02':[{climbTo:1600},{to:'IKE',turn:'R'}],'20':[{climbTo:1500},{to:'IKE',turn:'R'}]},
+      AKNAG:{fix:'AKNAG',nav:'IKE',name:'AKNAG TWO',alt:7000,grad:{'02':{pct:6.7,to:600}},'02':[{climbTo:600},{to:'AKNAG',turn:'R'}],'20':[{climbTo:600},{to:'AKNAG',turn:'L'}]},
+    }
+  },
+  /* 天草(RJDA AD2.24-SID-1〜2)。滑走路は AD 2.12(124.55°/304.55°T)。AKE は VOR/DME・VAR 8°W。
+     AMAKUSA REVERSAL THREE: 13 は 800FT → 左 HDG051° / 31 は HDG322° 1100FT → 右 HDG141° で R096 → 4000FT → 右旋回で AKE。13 は 5.0%(1200FT)・31 は 6.0%(1100FT)
+     HABOH FOUR(RNAV): 13 は 800FT → 左・31 は 1400FT → 右に旋回して HABOH → FUGEN。NORTH(OMUTA 8000 → OSTEP → HONOK)・EAST(MISMI)TRANSITION */
+  RJDA:(()=>{
+    const hb={fix:'FUGEN',nav:'AKE',name:'HABOH FOUR',grad:{'13':{pct:3.5,to:800},'31':{pct:6.1,to:1400}},
+      '13':[{climbTo:800},{to:'HABOH',turn:'L'},{to:'FUGEN'}],'31':[{climbTo:1400},{to:'HABOH',turn:'R'},{to:'FUGEN'}]};
+    const ex=(x,o)=>Object.assign({},hb,{'13':hb['13'].concat(x),'31':hb['31'].concat(x)},o);
+    return {
+      rwy:{'13':{end:[32.479944, 130.16325],brgT:124.55,elev:330},'31':{end:[32.485058, 130.154486],brgT:304.55,elev:330}},
+      nav:{AKE:{lat:32.480236,lng:130.160967,var:8}},
+      sids:{
+        AMAKUSA:{fix:'AKE',nav:'AKE',name:'AMAKUSA REVERSAL THREE',grad:{'13':{pct:5,to:1200},'31':{pct:6,to:1100}},
+          '13':[{climbTo:800},{turn:'L',hdg:51},{intercept:96},{climbTo:4000},{to:'AKE',turn:'R'}],'31':[{climbTo:1100},{turn:'R',hdg:141},{intercept:96},{climbTo:4000},{to:'AKE',turn:'R'}]},
+        HABOH:hb,
+        'HABOH HONOK':ex([{to:'OMUTA'},{to:'OSTEP'},{to:'HONOK'}],{m:'HABOH',fix:'HONOK',name:'HABOH FOUR・NORTH TRANSITION',alt:8000}),
+        'HABOH MISMI':ex([{to:'MISMI'}],{m:'HABOH',fix:'MISMI',name:'HABOH FOUR・EAST TRANSITION'}),
+      }};
+  })(),
+  /* 鹿児島(RJFK AD2.24-SID-1〜4)。滑走路は AD 2.12(150°/330°T)。KGE(KAJIKI)は VOR/DME・VAR 7°W。
+     OVSID ONE: 16 は KGE 2.0DME → 左 HDG303° / 34 は 2000FT → 右旋回(会合針路は仮定)で R348 → OVSID(D10)。16 は 5.0%(1300FT)・34 は 5.0%(2000FT)
+       TRANSITION: KAJIKI(OVSID → KGE・7000)・SASIK(R348 → SASIK)・KAGOSHIMA(HKC R003 → HKC)
+     ATRUK / MIDAI / MIZOBE(RNAV)は図の注記に "RADAR service required" → 書かない(radar:1) */
+  RJFK:(()=>{
+    const ov={fix:'OVSID',nav:'KGE',name:'OVSID ONE',grad:{'16':{pct:5,to:1300},'34':{pct:5,to:2000}},
+      '16':[{dme:2},{turn:'L',hdg:303},{intercept:348}],'34':[{climbTo:2000},{turn:'R',hdg:20,assumed:1},{intercept:348}]};
+    const ex=(x,o)=>Object.assign({},ov,{'16':ov['16'].concat(x),'34':ov['34'].concat(x)},o);
+    return {
+      rwy:{'16':{end:[31.791686, 130.727328],brgT:150,elev:906},'34':{end:[31.815114, 130.711483],brgT:330,elev:859}},
+      nav:{KGE:{lat:31.797542,lng:130.726103,var:7},HKC:{lat:31.69722,lng:130.58294,var:7}},
+      sids:{
+        OVSID:ov,
+        'OVSID KGE':ex([{to:'OVSID'},{to:'KGE',turn:'L'}],{m:'OVSID',fix:'KGE',name:'OVSID ONE・KAJIKI TRANSITION',alt:7000}),
+        'OVSID SASIK':ex([{to:'OVSID'},{to:'SASIK'}],{m:'OVSID',fix:'SASIK',name:'OVSID ONE・SASIK TRANSITION'}),
+        'OVSID HKC':ex([{to:'OVSID'},{to:'HKC',turn:'L'}],{m:'OVSID',fix:'HKC',name:'OVSID ONE・KAGOSHIMA TRANSITION'}),
+        MIDAI:{fix:'SMIKO',nav:'KGE',name:'MIDAI (RNAV)',radar:1},ATRUK:{fix:'ATRUK',nav:'KGE',name:'ATRUK (RNAV)',radar:1},MIZOBE:{fix:'OVSID',nav:'KGE',name:'MIZOBE (RNAV)',radar:1},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -10960,6 +11011,32 @@ const IAC_DEF={
     'VOR A':[{at:'MILEP'},{to:'UGAMU'},{mapt:{rd:[194,1.2]}}],
     'VOR B':[{at:'MILEP'},{to:'UGAMU'},{to:'OHKOK'},{arc:9.3,to:250,dir:'R'},{to:'GATAL'},{to:'NEKKY'},{mapt:{rd:[250,1.3]}}],
     'VOR C':[{at:'SGE'},{to:{rd:[214,6]}},{to:{rd:[194,8]}},{mapt:{rd:[194,1.2]}}]}},
+  // 壱岐(IAC-1〜3・5 2023-06-15)。VOR RWY02 / RWY20 は IKE の待機から R165 / R017 → D8.0 / D7.0 で旋回 → SAORY / YUTAN。
+  //   RNP RWY02 は IKE(IAF)→ ARUTU → OMGAX → MAPNI(IF)、RNP RWY20 は IKE → EMREK → ISMOK → ASESU(IF)
+  RJDB:{nav:{IKE:{lat:33.74751,lng:129.77685,var:8}},navId:'IKE',thr:{'02':[33.743697, 129.784639],'20':[33.754372, 129.786747]},pts:{DB250:[33.727764,129.781494],DB050:[33.774147,129.790656]},
+    mah:{'VOR RWY02':'IKE','VOR RWY20':'IKE','RNP RWY02':'IKE','RNP RWY20':'IKE'},iac:{
+    'VOR RWY02':[{at:'IKE'},{to:{rd:[165,8]}},{to:'SAORY'},{mapt:{rd:[177,1.2]}}],
+    'VOR RWY20':[{at:'IKE'},{to:{rd:[17,7]}},{to:'YUTAN'},{mapt:{rd:[36,0.6]}}],
+    'RNP RWY02':[{at:'IKE'},{to:'ARUTU'},{to:'OMGAX'},{to:'MAPNI'},{to:'OLGAM'},{mapt:'DB250'}],
+    'RNP RWY20':[{at:'IKE'},{to:'EMREK'},{to:'ISMOK'},{to:'ASESU'},{to:'OSTUK'},{mapt:'DB050'}]}},
+  // 天草(IAC-1〜2・5 2025-12-01)。VOR RWY31 は AKE の待機から R114 → D11.0 で旋回 → SUMOT → MAPt(D0.9)。
+  //   RNP Z RWY13 は TSUJI(IAF)→ ITUWA → SAKIZ(IF)、RNP Z RWY31 は IRUKA(IAF・待機)→ DATEK(IF)。RNP X(LP ONLY)は SBAS が要るので書かない(procOk で外す)
+  RJDA:{nav:{AKE:{lat:32.480236,lng:130.160967,var:8}},navId:'AKE',thr:{'13':[32.485058, 130.154486],'31':[32.479944, 130.16325]},pts:{DZ150:[32.448108,130.217761],DZ151:[32.476539,130.169086]},
+    mah:{'VOR RWY31':'AKE','RNP Z RWY13':'FUGEN','RNP Z RWY31':'IRUKA'},iac:{
+    'VOR RWY31':[{at:'AKE'},{to:{rd:[114,11]}},{to:'SUMOT'},{mapt:{rd:[102,0.9]}}],
+    'RNP Z RWY13':[{at:'TSUJI'},{to:'ITUWA'},{to:'SAKIZ'},{to:'MIZKA'},{thr:'13'}],
+    'RNP Z RWY31':[{at:'IRUKA'},{to:'DATEK'},{to:'GOSKI'},{to:'DZ150'},{mapt:'DZ151'}]}},
+  // 鹿児島(IAC-1〜5・7 2024-01-25)。ILS Z / LOC Z は ZAIHO(IAF)→ SIMAZ(IF)→ RYUMO、ILS Y / LOC Y は KGE の待機から R141 → D11.0 で旋回 → MORII、
+  //   VOR RWY34 は KGE → R145 → D14 以内で旋回 → R340 → KGE(MAPt)、VOR A は HKC(IF・KGE R238 D9.5)→ TESAB → KGE(MAPt)、
+  //   RNP RWY16 は YUKSA / OIDON / OGOJO → WAZZE(IF)。RNP RWY34 は "(LPV only)" で SBAS が要るので書かない(req SBAS)
+  RJFK:(()=>{const r16=[{to:'WAZZE'},{to:'FK650'},{to:'YUSUI'},{to:'FK651'},{thr:'16'}];
+    return {nav:{KGE:{lat:31.797542,lng:130.726103,var:7},HKC:{lat:31.69722,lng:130.58294,var:7}},navId:'KGE',thr:{'34':[31.791686, 130.727328],'16':[31.815114, 130.711483]},pts:{FK650:[31.930817,130.633139],FK651:[31.864292,130.667097]},
+    mah:{'ILS Z or LOC Z RWY34':'HKC','ILS Y or LOC Y RWY34':'HKC','VOR RWY34':'HKC','VOR A':'KGE','RNP RWY16':'HKC'},req:{'RNP RWY34':'SBAS'},iac:{
+    'ILS Z or LOC Z RWY34':[{at:'ZAIHO'},{to:'SIMAZ'},{to:'RYUMO'},{thr:'34'}],
+    'ILS Y or LOC Y RWY34':[{at:'KGE'},{to:{rd:[141,11]}},{to:'MORII'},{thr:'34'}],
+    'VOR RWY34':[{at:'KGE'},{to:{rd:[145,12]}},{to:{rd:[160,8]}},{to:{rd:[160,6.5]}},{mapt:'KGE'}],
+    'VOR A':[{at:'HKC'},{to:'TESAB'},{mapt:'KGE'}],
+    'RNP RWY16':{YUKSA:[{at:'YUKSA'}].concat(r16),OIDON:[{at:'OIDON'}].concat(r16),OGOJO:[{at:'OGOJO'}].concat(r16)}}};})(),
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
