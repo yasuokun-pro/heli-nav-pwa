@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-288';
+const VER_TAG='v6-289';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -8406,7 +8406,8 @@ function procOk(p,ac){
   // 図に "AUTHORIZATION REQUIRED"(RNP AR 相当。岩国 RNAV(RNP) Z RWY20)。名前に (AR) が無い図
   if(rq==='AR')return {ok:0,why:'RNP AR(特別の承認が要る)'};
   // "LP ONLY" の図(天草 RNP X)は SBAS(LP)が要る。装備欄に SBAS が無いので使わない
-  if(/LP ONLY/.test(p.n||'')||rq==='SBAS')return {ok:0,why:'LP/LPV(SBAS)のみ'};   // 鹿児島 RNP RWY34 は図の名前に "(LPV only)"
+  // 中標津 RNP W RWY26 は索引名に "(LPV only)"(大小文字が違う)→ 名前でも外す
+  if(/\bLPV? ONLY\b/i.test(p.n||'')||rq==='SBAS')return {ok:0,why:'LP/LPV(SBAS)のみ'};   // 鹿児島 RNP RWY34 は図の名前に "(LPV only)"
   if(eq.includes('TACAN')&&!ac.tacan)return {ok:0,why:'TACAN(図の必要装備)'};
   if(eq.includes('DME')&&!(ac.dme||ac.tacan))return {ok:0,why:'DME(図の必要装備)'};
   if(eq.includes('VOR')&&!ac.vor)return {ok:0,why:'VOR(図の必要装備)'};
@@ -10498,6 +10499,58 @@ const SID_DEF={
         '16':[{climbTo:1600},{turn:'L',hdg:320},{intercept:5},{dme:8.5},{to:'AWE',turn:'R'}],'34':[{dme:2.3},{turn:'R',hdg:60,assumed:1},{intercept:5},{dme:8.5},{to:'AWE',turn:'R'}]},
     }
   },
+  /* 女満別(RJCM AD2.24-SID-1〜4)。滑走路は AD 2.12(174.66°/354.66°T)。TBE は VOR/DME・VAR 10°W。
+     MEMANBETSU REVERSAL FOUR: 18 は R188・36 は R001 で 5.0DME → 旋回して TBE(4000)。18 は 5.0%(300FT)
+     RNAV(GNSS): MENIB ONE(OSPIB / BUTUS → MENIB 6000)・NICOL ONE(7000・OLSIM / OLDUS TRANSITION 10000)・NULKI ONE(BISAK / AKNEP → NULKI 7000) */
+  RJCM:(()=>{
+    const ni={fix:'NICOL',nav:'TBE',name:'NICOL ONE',alt:7000,grad:{'36':{pct:5,to:600}},'18':[{climbTo:600},{to:'NICOL',turn:'R'}],'36':[{climbTo:600},{to:'NICOL',turn:'L'}]};
+    const ex=(x,o)=>Object.assign({},ni,{'18':ni['18'].concat(x),'36':ni['36'].concat(x)},o);
+    return {
+      rwy:{'18':{end:[43.869403,144.1655],brgT:174.66,elev:135},'36':{end:[43.891808,144.162606],brgT:354.66,elev:102}},
+      nav:{TBE:{lat:43.88491,lng:144.16618,var:10}},
+      sids:{
+        'MEMANBETSU REVERSAL':{fix:'TBE',nav:'TBE',name:'MEMANBETSU REVERSAL FOUR',alt:4000,grad:{'18':{pct:5,to:300}},'18':[{dme:5},{to:'TBE',turn:'L'}],'36':[{dme:5},{to:'TBE',turn:'R'}]},
+        MENIB:{fix:'MENIB',nav:'TBE',name:'MENIB ONE',alt:6000,grad:{'18':{pct:5,to:2300}},'18':[{climbTo:600},{to:'OSPIB',turn:'L'},{to:'MENIB'}],'36':[{climbTo:800},{to:'BUTUS',turn:'R'},{to:'MENIB'}]},
+        NICOL:ni,
+        'NICOL OLSIM':ex([{to:'OLSIM'}],{m:'NICOL',fix:'OLSIM',name:'NICOL ONE・OLSIM TRANSITION',alt:10000}),
+        'NICOL OLDUS':ex([{to:'OLDUS'}],{m:'NICOL',fix:'OLDUS',name:'NICOL ONE・OLDUS TRANSITION',alt:10000}),
+        NULKI:{fix:'NULKI',nav:'TBE',name:'NULKI ONE',alt:7000,grad:{'36':{pct:3.9,to:1500}},'18':[{climbTo:600},{to:'BISAK'},{to:'NULKI'}],'36':[{climbTo:1000},{to:'AKNEP',turn:'L'},{to:'NULKI'}]},
+      }};
+  })(),
+  /* 中標津(RJCN AD2.24-SID-1〜3)。滑走路は AD 2.12(071.02°/251.02°T)。NSE は VOR/DME・VAR 9°W。索引名は "MASHU, NAKASHIBETSU REVERSAL"
+     MASHU FIVE: 08 は 700FT → 右 HDG305° / 26 はそのまま で NSE R260 → MASHU(5000)
+     NAKASHIBETSU REVERSAL FOUR: 08 は R081・26 は R259 で 7.0DME → 旋回して NSE
+     NOKIK TWO(RNAV): 旋回して MAMIL → NOKIK(5000)。ENKAT(7000)/ NOMOX(6000)TRANSITION */
+  RJCN:(()=>{
+    const nk={fix:'NOKIK',nav:'NSE',name:'NOKIK TWO',alt:5000,'08':[{climbTo:700},{to:'MAMIL',turn:'R'},{to:'NOKIK'}],'26':[{climbTo:700},{to:'MAMIL',turn:'L'},{to:'NOKIK'}]};
+    const ex=(x,o)=>Object.assign({},nk,{'08':nk['08'].concat(x),'26':nk['26'].concat(x)},o);
+    return {
+      rwy:{'08':{end:[43.580353,144.9715],brgT:71.02,elev:212},'26':{end:[43.5745,144.948083],brgT:251.02,elev:233}},
+      nav:{NSE:{lat:43.57736,lng:144.9505,var:9}},
+      sids:{
+        MASHU:{fix:'MASHU',nav:'NSE',name:'MASHU FIVE',alt:5000,'08':[{climbTo:700},{turn:'R',hdg:305},{intercept:260}],'26':[{to:{rad:260,dme:3}}]},
+        'NAKASHIBETSU REVERSAL':{fix:'NSE',nav:'NSE',name:'NAKASHIBETSU REVERSAL FOUR','08':[{dme:7},{to:'NSE',turn:'R'}],'26':[{dme:7},{to:'NSE',turn:'L'}]},
+        NOKIK:nk,
+        'NOKIK ENKAT':ex([{to:'ENKAT'}],{m:'NOKIK',fix:'ENKAT',name:'NOKIK TWO・ENKAT TRANSITION',alt:7000}),
+        'NOKIK NOMOX':ex([{to:'NOMOX'}],{m:'NOKIK',fix:'NOMOX',name:'NOKIK TWO・NOMOX TRANSITION',alt:6000}),
+      }};
+  })(),
+  /* 紋別(RJEB AD2.24-SID-1〜2)。滑走路は AD 2.12(131.93°/311.93°T)。MVE は VOR/DME・VAR 9°W。
+     MONBETSU REVERSAL FIVE: 14 は 600FT → 左 HDG050° / 32 は 500FT → 右 HDG050° で 2500FT → 旋回して MVE(4000)。LUBEK TRANSITION(MVE R236 → LUBEK 8000)
+     LUBEK ONE(RNAV): 14 は 1400FT → 右旋回で LUBEK / 32 は 500FT → 右旋回で EB210 → EB211 → LUBEK(8000) */
+  RJEB:{
+    rwy:{'14':{end:[44.2979,143.41335],brgT:131.93,elev:72},'32':{end:[44.309925,143.394703],brgT:311.93,elev:80}},
+    nav:{MVE:{lat:44.30527,lng:143.39509,var:9}},
+    pts:{EB210:[44.330861,143.530306],EB211:[44.219917,143.498167]},
+    sids:{
+      'MONBETSU REVERSAL':{fix:'MVE',nav:'MVE',name:'MONBETSU REVERSAL FIVE',alt:4000,grad:{'14':{pct:5,to:900},'32':{pct:4.3,to:800}},
+        '14':[{climbTo:600},{turn:'L',hdg:50},{climbTo:2500},{to:'MVE',turn:'L'}],'32':[{climbTo:500},{turn:'R',hdg:50},{climbTo:2500},{to:'MVE',turn:'R'}]},
+      'MONBETSU REVERSAL LUBEK':{m:'MONBETSU REVERSAL',fix:'LUBEK',nav:'MVE',name:'MONBETSU REVERSAL FIVE・LUBEK TRANSITION',alt:8000,grad:{'14':{pct:5,to:900},'32':{pct:4.3,to:800}},
+        '14':[{climbTo:600},{turn:'L',hdg:50},{climbTo:2500},{to:'MVE',turn:'L'},{to:'LUBEK'}],'32':[{climbTo:500},{turn:'R',hdg:50},{climbTo:2500},{to:'MVE',turn:'R'},{to:'LUBEK'}]},
+      LUBEK:{fix:'LUBEK',nav:'MVE',name:'LUBEK ONE',alt:8000,grad:{'14':{pct:5,to:1400},'32':{pct:5,to:700}},
+        '14':[{climbTo:1400},{to:'LUBEK',turn:'R'}],'32':[{climbTo:500},{to:'EB210',turn:'R'},{to:'EB211'},{to:'LUBEK'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -11408,6 +11461,45 @@ const IAC_DEF={
     'VOR B':[{at:'AWE'},{to:{rd:[220,8.6]}},{arc:8.6,to:175,dir:'L'},{to:'ZELBU'},{mapt:'AWE'}],
     'VOR C':[{at:'AWE'},{to:{rd:[10,9.6]}},{to:'TOUSE'},{mapt:'AWE'}],
     'RNP Z RWY16':[{at:'OSOBA'},{to:'PIPPU'},{to:'YONKA'},{to:'TYUBE'},{thr:'16'}]}},
+  // 女満別(IAC-1〜3・5〜8・12 2024-04-18 / 2025-04-17 / 2026-02-19)。ILS Z / LOC Z は RAUSU / GINGA / OZORA → PONTO(IF)→ TEBES(FAF)(初期進入は RNP1・GNSS)、
+  //   ILS Y / LOC Y は TBE の待機から R020 → D11.0 以内で旋回 → POSID(FAF)、ILS X は GINGA / OZORA → KILOX → CM853(IF)→ RF → TEBES(RNP1 RF → GNSS)、
+  //   ILS or LOC RWY36 / VOR RWY36 は TSUKA / GINGA(D16 アーク)/ OZORA → MOHEA(IF・R186 D16)→ ROMNY / OSPOX(FAF)、VOR RWY18 は TBE → R018 → ABASI → MAPt(TBE)、
+  //   RNP Z RWY18 は RAUSU / GINGA / OZORA → PONTO → YOBIT、RNP RWY36 は TSUKA / GINGA → FUKJU → SALON(IF)/ OZORA → MOKOT → SALON → PIPOL。RNP Y(AR)は書かない。
+  //   ⚠ 索引の IAF が VOR RWY18 に RWY36 側の TSUKA/GINGA/OZORA が入っている → 入口をキーにした形で上書き
+  RJCM:(()=>{
+    const z=[{to:'PONTO'},{to:'TEBES'},{thr:'18'}],x=[{to:'KILOX'},{to:'CM853'},{to:'CM854'},{to:'CM855'},{to:'TEBES'},{thr:'18'}],rz=[{to:'PONTO'},{to:'YOBIT'},{thr:'18'}];
+    const t36=(f,end)=>({TSUKA:[{at:'TSUKA'},{to:{rd:[260,16]}},{arc:16,to:186,dir:'L'},{to:f}].concat(end),GINGA:[{at:'GINGA'},{to:{rd:[221,16]}},{arc:16,to:186,dir:'L'},{to:f}].concat(end),
+      OZORA:[{at:'OZORA'},{to:{rd:[186,16]}},{to:f}].concat(end)});
+    const r36=[{to:'SALON'},{to:'PIPOL'},{thr:'36'}];
+    return {nav:{TBE:{lat:43.88491,lng:144.16618,var:10}},navId:'TBE',thr:{'18':[43.891808,144.162606],'36':[43.869403,144.1655]},
+    pts:{CM853:[43.991619,144.033492],CM854:[44.033931,144.088322],CM855:[43.996083,144.1491]},
+    mah:{'ILS Z or LOC Z RWY18':'RAUSU','ILS Y or LOC Y RWY18':'RAUSU','ILS X RWY18':'RAUSU','ILS or LOC RWY36':'TSUKA','VOR RWY18':'RAUSU','VOR RWY36':'TSUKA','RNP Z RWY18':'RAUSU','RNP RWY36':'TSUKA'},
+    req:{'ILS Z or LOC Z RWY18':'GNSS','ILS X RWY18':'GNSS'},iac:{
+    'ILS Z or LOC Z RWY18':{RAUSU:[{at:'RAUSU'}].concat(z),GINGA:[{at:'GINGA'},{to:'NEPPU'}].concat(z),OZORA:[{at:'OZORA'},{to:'KIMUA'},{to:'NEPPU'}].concat(z)},
+    'ILS Y or LOC Y RWY18':[{at:'TBE'},{to:{rd:[20,11]}},{to:'POSID'},{thr:'18'}],
+    'ILS X RWY18':{GINGA:[{at:'GINGA'}].concat(x),OZORA:[{at:'OZORA'},{to:'KIMUA'}].concat(x)},
+    'ILS or LOC RWY36':t36('ROMNY',[{thr:'36'}]),
+    'VOR RWY18':{TBE:[{at:'TBE'},{to:{rd:[18,11]}},{to:'ABASI'},{mapt:'TBE'}]},
+    'VOR RWY36':t36('OSPOX',[{mapt:{rd:[186,0.9]}}]),
+    'RNP Z RWY18':{RAUSU:[{at:'RAUSU'}].concat(rz),GINGA:[{at:'GINGA'},{to:'NEPPU'}].concat(rz),OZORA:[{at:'OZORA'},{to:'KIMUA'},{to:'NEPPU'}].concat(rz)},
+    'RNP RWY36':{TSUKA:[{at:'TSUKA'},{to:'FUKJU'}].concat(r36),GINGA:[{at:'GINGA'},{to:'FUKJU'}].concat(r36),OZORA:[{at:'OZORA'},{to:'MOKOT'}].concat(r36)}}};})(),
+  // 中標津(IAC-1〜5・9 2024-04-18 / 2025-04-17 / 2026-03-19)。ILS Z / LOC Z は MASHU(IAF・待機)→ MEMUS(IF)→ DATZU(FAF)、ILS Y / LOC Y は NSE の待機から R244 → D12.0 以内で旋回 → DATZU、
+  //   VOR RWY08 は NSE → R236 → MARUH(FAF)→ MAPt(NSE)、VOR RWY26 は NSE → R101 → MOJAO(FAF・R084 D5.9)→ MAPt(D0.9)、RNP RWY08 は MASHU → MEMUS → TONEK、
+  //   RNP Y RWY26 は MASHU → NOBAT → BULDO → MENAN(IF)→ EPDEK。RNP Z / X(AR)は書かない。RNP W は "(LPV only)" で SBAS が要るので書かない(procOk で外す)
+  RJCN:{nav:{NSE:{lat:43.57736,lng:144.9505,var:9}},navId:'NSE',thr:{'08':[43.5745,144.948083],'26':[43.580353,144.9715]},pts:{CN850:[43.561167,144.894831]},
+    mah:{'ILS Z or LOC Z RWY08':'NSE','ILS Y or LOC Y RWY08':'NSE','VOR RWY08':'NSE','VOR RWY26':'NSE','RNP RWY08':'MASHU','RNP Y RWY26':'MASHU'},iac:{
+    'ILS Z or LOC Z RWY08':[{at:'MASHU'},{to:'MEMUS'},{to:'DATZU'},{thr:'08'}],
+    'ILS Y or LOC Y RWY08':[{at:'NSE'},{to:{rd:[244,12]}},{to:'DATZU'},{thr:'08'}],
+    'VOR RWY08':[{at:'NSE'},{to:{rd:[236,11]}},{to:'MARUH'},{mapt:'NSE'}],
+    'VOR RWY26':[{at:'NSE'},{to:{rd:[101,11]}},{to:'MOJAO'},{mapt:{rd:[84,0.9]}}],
+    'RNP RWY08':[{at:'MASHU'},{to:'MEMUS'},{to:'TONEK'},{to:'CN850'},{thr:'08'}],
+    'RNP Y RWY26':[{at:'MASHU'},{to:'NOBAT'},{to:'BULDO'},{to:'MENAN'},{to:'EPDEK'},{thr:'26'}]}},
+  // 紋別(IAC-1・6 2024-10-01)。ILS or LOC RWY32 は MVE の待機から R125 → D12.0 以内で旋回 → KOMKE(FAF)、VOR A は MVE → R008 → D11.0 以内で旋回 → GOMAF(FAF)→ MAPt(D1.0)。
+  //   ⚠ 索引の VOR A の IAF が LUBEK になっている(図は MVE の待機から)→ 入口をキーにした形で上書き。RNP(AR)は書かない
+  RJEB:{nav:{MVE:{lat:44.30527,lng:143.39509,var:9}},navId:'MVE',thr:{'14':[44.309925,143.394703],'32':[44.2979,143.41335]},pts:{},
+    mah:{'ILS or LOC RWY32':'MVE','VOR A':'MVE'},iac:{
+    'ILS or LOC RWY32':[{at:'MVE'},{to:{rd:[125,12]}},{to:'KOMKE'},{thr:'32'}],
+    'VOR A':{MVE:[{at:'MVE'},{to:{rd:[8,11]}},{to:'GOMAF'},{mapt:{rd:[352,1]}}]}}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
