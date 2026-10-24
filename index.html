@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-287';
+const VER_TAG='v6-288';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -10458,6 +10458,46 @@ const SID_DEF={
         KAGYA:{fix:'KINKO',nav:'TGE',name:'KAGYA TWO',alt:6000,'13':[{climbTo:1200},{to:'KAGYA',turn:'L'},{to:'FG801'},{to:'KINKO'}],'31':[{climbTo:1300},{to:'KAGYA',turn:'R'},{to:'FG801'},{to:'KINKO'}]},
       }};
   })(),
+  /* 屋久島(RJFC AD2.24-SID-1〜3)。滑走路は AD 2.12(133.87°/313.87°T)。YKE は VOR/DME・VAR 7°W。
+     NAKATANE FOUR: 14 は 560FT → 左 HDG014° / 32 は 520FT → 右 HDG104° で YKE R058(TGE R239)→ TGE(6000)
+     AMMON FOUR(RNAV): 旋回して KOUKI(6000)→ AMMON / SURF TWO(RNAV): 旋回して TGE */
+  RJFC:{
+    rwy:{'14':{end:[30.380889,130.664833],brgT:133.87,elev:124},'32':{end:[30.390261,130.653575],brgT:313.87,elev:112}},
+    nav:{YKE:{lat:30.379447,lng:130.662717,var:7},TGE:{lat:30.60216,lng:130.99153,var:7}},
+    sids:{
+      NAKATANE:{fix:'TGE',nav:'YKE',name:'NAKATANE FOUR',alt:6000,'14':[{climbTo:560},{turn:'L',hdg:14},{intercept:58}],'32':[{climbTo:520},{turn:'R',hdg:104},{intercept:58}]},
+      AMMON:{fix:'AMMON',nav:'YKE',name:'AMMON FOUR',alt:6000,'14':[{climbTo:560},{to:'KOUKI',turn:'L'},{to:'AMMON'}],'32':[{climbTo:520},{to:'KOUKI',turn:'R'},{to:'AMMON'}]},
+      SURF:{fix:'TGE',nav:'YKE',name:'SURF TWO','14':[{climbTo:560},{to:'TGE',turn:'L'}],'32':[{climbTo:520},{to:'TGE',turn:'R'}]},
+    }
+  },
+  /* 釧路(RJCK AD2.24-SID-1〜5)。滑走路は AD 2.12(158.96°/338.96°T)。TCE は VOR/DME・VAR 9°W。
+     KUSHIRO REVERSAL FIVE: 17 は 1000FT → 右旋回 / 35 は 1000FT → 左 HDG155° で TCE R200 → 3000FT → 左旋回で TCE(5000)
+     RNAV(GNSS): TANCHO ONE(YUDOH 10000)・HIDAKA ONE(OBE 9000)・RUGMO ONE(6000)・ENTOD ONE(10000) */
+  RJCK:{
+    rwy:{'17':{end:[43.030467,144.198494],brgT:158.96,elev:290},'35':{end:[43.051472,144.187478],brgT:338.96,elev:322}},
+    nav:{TCE:{lat:43.03605,lng:144.20076,var:9},OBE:{lat:42.73396,lng:143.22045,var:9}},
+    sids:{
+      'KUSHIRO REVERSAL':{fix:'TCE',nav:'TCE',name:'KUSHIRO REVERSAL FIVE',alt:5000,
+        '17':[{climbTo:1000},{intercept:200},{climbTo:3000},{to:'TCE',turn:'L'}],'35':[{climbTo:1000},{turn:'L',hdg:155},{intercept:200},{climbTo:3000},{to:'TCE',turn:'L'}]},
+      TANCHO:{fix:'YUDOH',nav:'TCE',name:'TANCHO ONE',alt:10000,'17':[{climbTo:700},{to:'YUDOH',turn:'R'}],'35':[{climbTo:800},{to:'YUDOH',turn:'L'}]},
+      HIDAKA:{fix:'OBE',nav:'TCE',name:'HIDAKA ONE',alt:9000,'17':[{climbTo:700},{to:'OBE',turn:'R'}],'35':[{climbTo:800},{to:'OBE',turn:'L'}]},
+      RUGMO:{fix:'RUGMO',nav:'TCE',name:'RUGMO ONE',alt:6000,'17':[{climbTo:700},{to:'RUGMO',turn:'R'}],'35':[{climbTo:800},{to:'RUGMO',turn:'L'}]},
+      ENTOD:{fix:'ENTOD',nav:'TCE',name:'ENTOD ONE',alt:10000,'17':[{climbTo:700},{to:'MULNA'},{to:'ENTOD'}],'35':[{climbTo:900},{to:'TASAB',turn:'L'},{to:'MUBLA'},{to:'ENTOD'}]},
+    }
+  },
+  /* 旭川(RJEC AD2.24-SID-1〜2)。滑走路は AD 2.12(154.17°/334.17°T)。AWE は VOR/DME・VAR 10°W。索引名は "KAGRA, ASAHIKAWA REVERSAL"
+     KAGRA FOUR: 16 は 1600FT → 左旋回 / 34 は R337 D2.3 → 右旋回で AWE(4000)→ R283 → KAGRA(5000)
+     ASAHIKAWA REVERSAL FIVE: 16 は 1600FT → 左 HDG320° / 34 は R337 D2.3 → 右旋回で R005 → D8.5 → 右旋回で AWE(5000・東行きは 8000) */
+  RJEC:{
+    rwy:{'16':{end:[43.660589,142.454331],brgT:154.17,elev:721},'34':{end:[43.680844,142.440822],brgT:334.17,elev:660}},
+    nav:{AWE:{lat:43.66726,lng:142.45685,var:10}},
+    sids:{
+      KAGRA:{fix:'KAGRA',nav:'AWE',name:'KAGRA FOUR',alt:5000,grad:{'16':{pct:5.3,to:1600},'34':{pct:5,to:1000}},
+        '16':[{climbTo:1600},{to:'AWE',turn:'L'},{to:'KAGRA'}],'34':[{dme:2.3},{to:'AWE',turn:'R'},{to:'KAGRA'}]},
+      'ASAHIKAWA REVERSAL':{fix:'AWE',nav:'AWE',name:'ASAHIKAWA REVERSAL FIVE',alt:5000,grad:{'16':{pct:5.3,to:1600},'34':{pct:5,to:1000}},
+        '16':[{climbTo:1600},{turn:'L',hdg:320},{intercept:5},{dme:8.5},{to:'AWE',turn:'R'}],'34':[{dme:2.3},{turn:'R',hdg:60,assumed:1},{intercept:5},{dme:8.5},{to:'AWE',turn:'R'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -11333,6 +11373,41 @@ const IAC_DEF={
     'VOR RWY 13':[{at:'TGE'},{to:{rd:[293,8]}},{to:'LUGNO'},{mapt:{rd:[316,0.6]}}],
     'RNP RWY 13':[{at:'KAGYA'},{to:'ASERO'},{to:'SEMDA'},{thr:'13'}],
     'RNP RWY 31':{KAGYA:[{at:'KAGYA'}].concat(r31),TEPPO:[{at:'TEPPO'}].concat(r31)}}};})(),
+  // 屋久島(IAC-1〜3・5 2023-06-15)。VOR RWY32 は CEDAR(R127 D8.0・待機)→ MAPt(D2.5)、VOR A は TOLOT(IF・R004 D9.9・待機)→ PUDOG(D4.9)→ MAPt(D1.9)、
+  //   RNP RWY32 は ONSKE → NOLIM(IF)/ TGE → IDIKO → NOLIM → MALOM、RNP RWY14 は ONSKE / TGE → SOTMA → PANRI(IF)→ OKEMI
+  RJFC:(()=>{const r32=[{to:'NOLIM'},{to:'MALOM'},{thr:'32'}],r14=[{to:'SOTMA'},{to:'PANRI'},{to:'OKEMI'},{thr:'14'}];
+    return {nav:{YKE:{lat:30.379447,lng:130.662717,var:7}},navId:'YKE',thr:{'14':[30.390261,130.653575],'32':[30.380889,130.664833]},pts:{},
+    mah:{'VOR RWY32':'CEDAR','VOR A':'TOLOT','RNP RWY32':'ONSKE','RNP RWY14':'ONSKE'},iac:{
+    'VOR RWY32':[{at:'CEDAR'},{mapt:{rd:[127,2.5]}}],
+    'VOR A':[{at:'TOLOT'},{to:{rd:[4,4.9]}},{mapt:{rd:[4,1.9]}}],
+    'RNP RWY32':{ONSKE:[{at:'ONSKE'}].concat(r32),TGE:[{at:'TGE'},{to:'IDIKO'}].concat(r32)},
+    'RNP RWY14':{ONSKE:[{at:'ONSKE'}].concat(r14),TGE:[{at:'TGE'}].concat(r14)}}};})(),
+  // 釧路(IAC-1〜3・5・6・11・13 2024-08-08 / 2025-04-17)。ILS Z / LOC Z は KANPO → ANLAP → ONAGA(IF)→ AKANN(FAF)(初期進入は RNP1・GNSS)、
+  //   ILS Y / LOC Y は TCE の待機から R148 → D10 → 北へ 332 → D12.0 以内で旋回 → OLTEN(FAF)、ILS X は AKESI → VAVLO → CK764(IF)→ RF → PONAP(RNP1 RF → GNSS)、
+  //   VOR RWY17 は TCE → R163 → D10 → 北へ 328 → D12.0 以内で旋回 → IKOKO → MAPt(D1.1)、VOR RWY35 は TCE → R345 → D10 → 南へ 165 → D11.0 以内で旋回 → IGNAM → MAPt、
+  //   RNP X RWY17 は KANPO → ANLAP → ONAGA → RIRMU、RNP RWY35 は CRANE → NOKKA(IF)→ NONNO。RNP Y / Z(AR)は書かない(procOk で外す)
+  RJCK:{nav:{TCE:{lat:43.03605,lng:144.20076,var:9}},navId:'TCE',thr:{'17':[43.051472,144.187478],'35':[43.030467,144.198494]},
+    pts:{CK764:[43.116686,144.033858],CK765:[43.159753,144.078981],CK766:[43.133897,144.144167]},
+    mah:{'ILS Z or LOC Z RWY17 (CAT III)':'LEKUP','ILS Y or LOC Y RWY17 (CAT III)':'TCE','ILS X RWY17 (CAT III)':'LEKUP','VOR RWY17':'TCE','VOR RWY35':'TCE','RNP X RWY17':'LEKUP','RNP RWY35':'LEKUP'},
+    req:{'ILS Z or LOC Z RWY17 (CAT III)':'GNSS','ILS X RWY17 (CAT III)':'GNSS'},iac:{
+    'ILS Z or LOC Z RWY17 (CAT III)':[{at:'KANPO'},{to:'ANLAP'},{to:'ONAGA'},{to:'AKANN'},{thr:'17'}],
+    'ILS Y or LOC Y RWY17 (CAT III)':[{at:'TCE'},{to:{rd:[148,10]}},{to:{rd:[332,12]}},{to:'OLTEN'},{thr:'17'}],
+    'ILS X RWY17 (CAT III)':[{at:'AKESI'},{to:'VAVLO'},{to:'CK764'},{to:'CK765'},{to:'CK766'},{to:'PONAP'},{thr:'17'}],
+    'VOR RWY17':[{at:'TCE'},{to:{rd:[163,10]}},{to:{rd:[328,12]}},{to:'IKOKO'},{mapt:{rd:[343,1.1]}}],
+    'VOR RWY35':[{at:'TCE'},{to:{rd:[345,10]}},{to:{rd:[165,11]}},{to:'IGNAM'},{mapt:{rd:[180,0.3]}}],
+    'RNP X RWY17':[{at:'KANPO'},{to:'ANLAP'},{to:'ONAGA'},{to:'RIRMU'},{thr:'17'}],
+    'RNP RWY35':[{at:'CRANE'},{to:'NOKKA'},{to:'NONNO'},{thr:'35'}]}},
+  // 旭川(IAC-1〜6 2024-04-18 / 2025-04-17 / 10-02)。ILS Z / LOC Z は ASIBE(IAF・R220 D15)→ D8.6 → D8.6 アーク → AOIKE(IF・R166)→ BOUZU(FAF)、
+  //   ILS Y / LOC Y は AWE の待機から R220 → D8.6 アーク → BOUZU、VOR A は ASIBE → D8.6 アーク → SILGA(IF・R175)→ ZELBU → MAPt(AWE)、VOR B は AWE → R220 → 同じ、
+  //   VOR C は AWE → R010 → D9.6 以内で旋回 → TOUSE(FAF)→ MAPt(AWE)、RNP Z RWY16 は OSOBA → PIPPU(IF)→ YONKA → TYUBE。RNP Y(AR)は書かない
+  RJEC:{nav:{AWE:{lat:43.66726,lng:142.45685,var:10}},navId:'AWE',thr:{'16':[43.680844,142.440822],'34':[43.660589,142.454331]},pts:{},
+    mah:{'ILS Z or LOC Z RWY34':'AWE','ILS Y or LOC Y RWY34':'AWE','VOR A':'AWE','VOR B':'AWE','VOR C':'AWE','RNP Z RWY16':'AWE'},iac:{
+    'ILS Z or LOC Z RWY34':[{at:'ASIBE'},{to:{rd:[220,8.6]}},{arc:8.6,to:166,dir:'L'},{to:'BOUZU'},{thr:'34'}],
+    'ILS Y or LOC Y RWY34':[{at:'AWE'},{to:{rd:[220,8.6]}},{arc:8.6,to:166,dir:'L'},{to:'BOUZU'},{thr:'34'}],
+    'VOR A':{ASIBE:[{at:'ASIBE'},{to:{rd:[220,8.6]}},{arc:8.6,to:175,dir:'L'},{to:'ZELBU'},{mapt:'AWE'}]},
+    'VOR B':[{at:'AWE'},{to:{rd:[220,8.6]}},{arc:8.6,to:175,dir:'L'},{to:'ZELBU'},{mapt:'AWE'}],
+    'VOR C':[{at:'AWE'},{to:{rd:[10,9.6]}},{to:'TOUSE'},{mapt:'AWE'}],
+    'RNP Z RWY16':[{at:'OSOBA'},{to:'PIPPU'},{to:'YONKA'},{to:'TYUBE'},{thr:'16'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
