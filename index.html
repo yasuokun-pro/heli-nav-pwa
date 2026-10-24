@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-294';
+const VER_TAG='v6-295';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -10775,6 +10775,31 @@ const SID_DEF={
       'CORCO SOUTH':{fix:'CORCO',nav:'MDE',name:'CORCO SOUTH ONE',alt:5000,'02':[{climbTo:600},{to:'CORCO',turn:'L'}],'20':[{climbTo:600},{to:'CORCO',turn:'R'}]},
     }
   },
+  /* 北大東(RORK AD2.24-SID-1〜2)。滑走路は AD 2.12(025.50°/205.50°T)。局は無い(南大東の MDE 基準・VAR 6°W)。
+     SOUTH SIX: 03 は 500FT → 右旋回 / 21 はそのまま MDE へ(2400)/ CORCO NORTH ONE(RNAV): 500FT → 旋回して CORCO(5000) */
+  RORK:{
+    rwy:{'03':{end:[25.950792,131.329969],brgT:25.5,elev:80},'21':{end:[25.938572,131.323525],brgT:205.5,elev:74}},
+    nav:{MDE:{lat:25.85448,lng:131.26379,var:6}},
+    sids:{
+      SOUTH:{fix:'MDE',nav:'MDE',name:'SOUTH SIX',alt:2400,'03':[{climbTo:500},{to:'MDE',turn:'R'}],'21':[{to:'MDE'}]},
+      'CORCO NORTH':{fix:'CORCO',nav:'MDE',name:'CORCO NORTH ONE',alt:5000,grad:{'03':{pct:4,to:500}},'03':[{climbTo:500},{to:'CORCO',turn:'L'}],'21':[{climbTo:500},{to:'CORCO',turn:'R'}]},
+    }
+  },
+  /* 硫黄島(RJAW AD2.24-SID-1〜3)。滑走路は AD 2.12(067.85°/247.86°T)。IJT は TACAN・VAR 4°W。TACAN の方式は tac:1
+     索引名 "IWO, NIKOP": IWO TWO は「管制の指示」で形なし。NIKOP ONE: 07 は 900FT → 左 HDG292° / 25 は 800FT → 右 HDG022° で R337 → NIKOP(D50)。VASHU TRANSITION(R337 D80.5)
+     KAGUN ONE: 07 は R094 / 25 は 800FT → 左 HDG049° で R094 → KAGUN(D42.3)/ VASKO THREE(RNAV・6000) */
+  RJAW:(()=>{
+    const nk={fix:'NIKOP',nav:'IJT',name:'NIKOP ONE',tac:1,'07':[{climbTo:900},{turn:'L',hdg:292},{intercept:337}],'25':[{climbTo:800},{turn:'R',hdg:22},{intercept:337}]};
+    return {
+      rwy:{'07':{end:[24.788658,141.334758],brgT:67.85,elev:419},'25':{end:[24.779653,141.310522],brgT:247.86,elev:395}},
+      nav:{IJT:{lat:24.78455,lng:141.31584,var:4}},
+      sids:{
+        NIKOP:nk,
+        'NIKOP VASHU':Object.assign({},nk,{m:'NIKOP',fix:'VASHU',name:'NIKOP ONE・VASHU TRANSITION','07':nk['07'].concat({to:'NIKOP'},{to:'VASHU'}),'25':nk['25'].concat({to:'NIKOP'},{to:'VASHU'})}),
+        KAGUN:{fix:'KAGUN',nav:'IJT',name:'KAGUN ONE',tac:1,'07':[{climbTo:900},{intercept:94}],'25':[{climbTo:800},{turn:'L',hdg:49},{intercept:94}]},
+        VASKO:{fix:'VASKO',nav:'IJT',name:'VASKO THREE',alt:6000,'07':[{climbTo:900},{to:'VASKO'}],'25':[{climbTo:800},{to:'VASKO',turn:'R'}]},
+      }};
+  })(),
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -11874,6 +11899,23 @@ const IAC_DEF={
     'VOR RWY20':[{at:'MDE'},{to:{rd:[7,8]}},{to:'NACKY'},{mapt:'MDE'}],
     'RNP Y RWY02':[{at:'WHALE'},{to:'SHIGE'},{to:'KOHJO'},{to:'JYUGO'},{thr:'02'}],
     'RNP Y RWY20':[{at:'WHALE'},{to:'KISHA'},{to:'GATAN'},{to:'GOTON'},{thr:'20'}]}},
+  // 北大東(IAC-1〜3 2026-04-01)。VOR Z RWY03 は MDE の待機から R241 → D8.0 以内で旋回 → MDE(FAF)→ MAPt(D5.2)、
+  //   VOR Y RWY03 は CORCO(R279 D15)→ D7.0 アーク(反時計回り)→ TUBAS(IF・R218)→ MDE → MAPt、RNP RWY03 は WHALE → EZAKI(IF)→ AKIBA
+  RORK:{nav:{MDE:{lat:25.85448,lng:131.26379,var:6}},navId:'MDE',thr:{'03':[25.938572,131.323525],'21':[25.950792,131.329969]},
+    pts:{EZAKI:[25.830425,131.266553],AKIBA:[25.892286,131.299128]},
+    mah:{'VOR Z RWY03':'MDE','VOR Y RWY03':'MDE','RNP RWY03':'MDE'},iac:{
+    'VOR Z RWY03':[{at:'MDE'},{to:{rd:[241,8]}},{to:'MDE'},{mapt:{rd:[38,5.2]}}],
+    'VOR Y RWY03':[{at:'CORCO'},{to:{rd:[279,7]}},{arc:7,to:218,dir:'L'},{to:'TUBAS'},{to:'MDE'},{mapt:{rd:[38,5.2]}}],
+    'RNP RWY03':[{at:'WHALE'},{to:'EZAKI'},{to:'AKIBA'},{thr:'03'}]}},
+  // 硫黄島(IAC-1〜4 2026-01-22)。TACAN RWY07 は TOPON(IF・D11.0 IJT・待機)→ SASGA(FAF)→ MAPt(D1.0)、TACAN RWY25 は IGORI(IF・D11.0・待機)→ IKELU(FAF)→ MAPt(D1.9)、
+  //   RNP RWY07 は ADMIK → AW752 → RURUG → IKOPO(IF)→ ENDON → AW753(MAPt)、RNP RWY25 は ADMIK(IF)→ ODODA → AW552(MAPt)
+  RJAW:{nav:{IJT:{lat:24.78455,lng:141.31584,var:4}},navId:'IJT',thr:{'07':[24.779653,141.310522],'25':[24.788658,141.334758]},
+    pts:{RURUG:[24.785489,141.132128],IKOPO:[24.723553,141.159831],ENDON:[24.748828,141.227658],AW752:[24.854958,141.318794],AW753:[24.775239,141.298644],ODODA:[24.818947,141.416394],AW552:[24.792439,141.344942]},
+    mah:{'TACAN RWY07':'IGORI','TACAN RWY25':'TOPON','RNP RWY07':'ADMIK','RNP RWY25':'ADMIK'},iac:{
+    'TACAN RWY07':[{at:'TOPON'},{to:'SASGA'},{mapt:{rd:[246,1]}}],
+    'TACAN RWY25':[{at:'IGORI'},{to:'IKELU'},{mapt:{rd:[75,1.9]}}],
+    'RNP RWY07':[{at:'ADMIK'},{to:'AW752'},{to:'RURUG'},{to:'IKOPO'},{to:'ENDON'},{mapt:'AW753'}],
+    'RNP RWY25':[{at:'ADMIK'},{to:'ODODA'},{mapt:'AW552'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
