@@ -1239,7 +1239,7 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-293';
+const VER_TAG='v6-294';
 const BUILD='2026-10-24';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
@@ -10734,6 +10734,47 @@ const SID_DEF={
       'GAHRA MJC':{m:'GAHRA',fix:'MJC',nav:'MJC',name:'GAHRA THREE・MIYAKO TRANSITION',alt:3000,'18':[{climbTo:500},{to:'GAHRA',turn:'L'},{to:'MJC'}],'36':[{climbTo:500},{to:'GAHRA',turn:'R'},{to:'MJC'}]},
     }
   },
+  /* 石垣(ROIG AD2.24-SID-1〜3・2026-09-03)。滑走路は AD 2.12(035.87°/215.87°T)。IGE は VOR/DME・VAR 5°W。
+     ISHIGAKI REVERSAL ONE: 04 は 800FT → 左旋回で R040 → 2000FT → 右旋回で IGE / 22 は 600FT → R214 D5.5 → 左旋回で IGE(4000)
+     RNAV(GNSS): GAHRA THREE(MIYAKOJIMA TRANSITION 8000)・AYAKA FOUR(04 は IG400 → IG401 → IG402 / 22 は IG200 → IG201 → IG202 → IG203 → AYAKA 5000) */
+  ROIG:(()=>{
+    const ga={fix:'GAHRA',nav:'IGE',name:'GAHRA THREE','04':[{climbTo:600},{to:'GAHRA',turn:'R'}],'22':[{climbTo:600},{to:'IG200'},{to:'GAHRA',turn:'L'}]};
+    return {
+      rwy:{'04':{end:[24.403775,124.2509],brgT:35.87,elev:110},'22':{end:[24.389142,124.239344],brgT:215.87,elev:126}},
+      nav:{IGE:{lat:24.39601,lng:124.23795,var:5},MJC:{lat:24.77739,lng:125.29341,var:5}},
+      pts:{IG200:[24.355028,124.212417],IG201:[24.293333,124.163806],IG202:[24.315389,123.9895],IG203:[24.348806,123.840472],IG400:[24.475194,124.307333],IG401:[24.525306,124.309778],IG402:[24.550028,124.231111]},
+      sids:{
+        'ISHIGAKI REVERSAL':{fix:'IGE',nav:'IGE',name:'ISHIGAKI REVERSAL ONE',alt:4000,'04':[{climbTo:800},{intercept:40},{climbTo:2000},{to:'IGE',turn:'R'}],'22':[{climbTo:600},{dme:5.5},{to:'IGE',turn:'L'}]},
+        GAHRA:ga,
+        'GAHRA MJC':Object.assign({},ga,{m:'GAHRA',fix:'MJC',name:'GAHRA THREE・MIYAKOJIMA TRANSITION',alt:8000,'04':ga['04'].concat({to:'MJC'}),'22':ga['22'].concat({to:'MJC'})}),
+        AYAKA:{fix:'AYAKA',nav:'IGE',name:'AYAKA FOUR',alt:5000,grad:{'04':{pct:4,to:2000}},'04':[{climbTo:600},{to:'IG400'},{to:'IG401'},{to:'IG402'},{to:'AYAKA'}],'22':[{climbTo:600},{to:'IG200'},{to:'IG201'},{to:'IG202'},{to:'IG203'},{to:'AYAKA'}]},
+      }};
+  })(),
+  /* 与那国(ROYN AD2.24-SID-1〜2)。滑走路は AD 2.12(075.27°/255.27°T)。YNE は VOR/DME・VAR 5°W。索引名は "TAKZO, ABASA"(1枚の図)。08 は 6.7%(700FT)
+     TAKZO TWO: 08 は 2.7DME → 左旋回 / 26 は 700FT → 右旋回で R022 → TAKZO / ABASA TWO: 08 は 2.7DME → 右旋回 / 26 は 700FT → 右旋回で R101 → ABASA
+     AYAKA ONE(RNAV): 08 は 700FT → 右旋回で AYAKA / 26 は 600FT → 右旋回で YN600 → AYAKA */
+  ROYN:{
+    rwy:{'08':{end:[24.469692,122.989317],brgT:75.27,elev:42},'26':{end:[24.465103,122.970239],brgT:255.27,elev:72}},
+    nav:{YNE:{lat:24.46492,lng:122.99774,var:5}},
+    pts:{YN600:[24.573472,122.953389]},
+    sids:{
+      TAKZO:{fix:'TAKZO',nav:'YNE',name:'TAKZO TWO',grad:{'08':{pct:6.7,to:700}},'08':[{dme:2.7},{intercept:22}],'26':[{climbTo:700},{intercept:22}]},
+      ABASA:{fix:'ABASA',nav:'YNE',name:'ABASA TWO',grad:{'08':{pct:6.7,to:700}},'08':[{dme:2.7},{to:{rad:101,dme:4},turn:'R'}],'26':[{climbTo:700},{to:{rad:101,dme:4},turn:'R'}]},
+      AYAKA:{fix:'AYAKA',nav:'YNE',name:'AYAKA ONE',grad:{'08':{pct:6.7,to:700}},'08':[{climbTo:700},{to:'AYAKA',turn:'R'}],'26':[{climbTo:600},{to:'YN600',turn:'R'},{to:'AYAKA'}]},
+    }
+  },
+  /* 南大東(ROMD AD2.24-SID-1〜3)。滑走路は AD 2.12(015.66°/195.66°T)。MDE は VOR/DME・VAR 6°W。索引名は "TOPAT, MINAMIDAITO"
+     TOPAT THREE: 02 は 600FT → 左 HDG234° / 20 は 600FT → 右 HDG324° で R279 → TOPAT(8000)/ MINAMIDAITO REVERSAL: 1000FT → 旋回して MDE(2000)
+     CORCO SOUTH ONE(RNAV): 600FT → 旋回して CORCO(5000) */
+  ROMD:{
+    rwy:{'02':{end:[25.853019,131.2655],brgT:15.66,elev:149},'20':{end:[25.839983,131.261461],brgT:195.66,elev:167}},
+    nav:{MDE:{lat:25.85448,lng:131.26379,var:6}},
+    sids:{
+      TOPAT:{fix:'TOPAT',nav:'MDE',name:'TOPAT THREE',alt:8000,'02':[{climbTo:600},{turn:'L',hdg:234},{intercept:279}],'20':[{climbTo:600},{turn:'R',hdg:324},{intercept:279}]},
+      MINAMIDAITO:{fix:'MDE',nav:'MDE',name:'MINAMIDAITO REVERSAL FOUR',alt:2000,'02':[{climbTo:1000},{to:'MDE',turn:'R'}],'20':[{climbTo:1000},{to:'MDE',turn:'L'}]},
+      'CORCO SOUTH':{fix:'CORCO',nav:'MDE',name:'CORCO SOUTH ONE',alt:5000,'02':[{climbTo:600},{to:'CORCO',turn:'L'}],'20':[{climbTo:600},{to:'CORCO',turn:'R'}]},
+    }
+  },
   RJTC:{
     rwy:{'01':{end:[35.71805,139.40328],brgT:0.2,elev:299},'19':{end:[35.70616,139.40322],brgT:180.2,elev:313}},
     nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},
@@ -11798,6 +11839,41 @@ const IAC_DEF={
     mah:{'RNP RWY18':'UMAKI','RNP RWY36':'UMAKI'},iac:{
     'RNP RWY18':[{at:'UMAKI'},{to:'KROWA'},{to:'MINNA'},{to:'RT851'},{thr:'18'}],
     'RNP RWY36':{UMAKI:[{at:'UMAKI'},{to:'PANAP'},{to:'YUGAP'},{to:'RT650'},{thr:'36'}]}}},
+  // 石垣(IAC-1〜3・5〜7・10 2026-09-03)。ILS Z / LOC Z は BANNA → VENAD / KOHAM → VENAD / MASAN → YAIMA → JOTTO(IF)→ BALAS(FAF)(初期進入は RNP1 → GNSS)、
+  //   ILS Y / LOC Y は IGE の待機から R201 → D11.0 以内で旋回 → BALAS、ILS X は MASAN → KIDAK → LAKUL(IF)→ IG451 → ENDEG(RNP1 RF → GNSS)、
+  //   VOR RWY04 は IGE → R191 → ANPAL → MAPt(D1.5)、VOR RWY22 は IGE → R064 → MARPE → MAPt(D2.1)、RNP Z RWY04 は ILS Z と同じ入口 → JOTTO → GOBIK、
+  //   RNP Z RWY22 は MASAN / DENSA → ELKIV(IF)→ ORION → IG250(MAPt)。RNP Y(AR)は書かない
+  ROIG:(()=>{const ent=e=>({BANNA:[{at:'BANNA'},{to:'VENAD'}].concat(e),KOHAM:[{at:'KOHAM'},{to:'VENAD'}].concat(e),MASAN:[{at:'MASAN'},{to:'YAIMA'}].concat(e)});
+    const z22=[{to:'ELKIV'},{to:'ORION'},{mapt:'IG250'}];
+    return {nav:{IGE:{lat:24.39601,lng:124.23795,var:5}},navId:'IGE',thr:{'04':[24.389142,124.239344],'22':[24.403775,124.2509]},
+    pts:{KIDAK:[24.336189,124.310186],LAKUL:[24.268442,124.256706],IG451:[24.317428,124.182764],GOBIK:[24.311694,124.178244],ELKIV:[24.558308,124.373133],ORION:[24.490592,124.319522],IG250:[24.421389,124.264814]},
+    mah:{'ILS Z or LOC Z RWY04':'IGE','ILS Y or LOC Y RWY04':'IGE','ILS X RWY04':'IGE','VOR RWY04':'IGE','VOR RWY22':'IGE','RNP Z RWY04':'IGE','RNP Z RWY22':'MASAN'},
+    req:{'ILS Z or LOC Z RWY04':'GNSS','ILS X RWY04':'GNSS'},iac:{
+    'ILS Z or LOC Z RWY04':ent([{to:'JOTTO'},{to:'BALAS'},{thr:'04'}]),
+    'ILS Y or LOC Y RWY04':[{at:'IGE'},{to:{rd:[201,11]}},{to:'BALAS'},{thr:'04'}],
+    'ILS X RWY04':[{at:'MASAN'},{to:'KIDAK'},{to:'LAKUL'},{to:'IG451'},{to:'ENDEG'},{thr:'04'}],
+    'VOR RWY04':[{at:'IGE'},{to:{rd:[191,11]}},{to:'ANPAL'},{mapt:{rd:[208,1.5]}}],
+    'VOR RWY22':[{at:'IGE'},{to:{rd:[64,11]}},{to:'MARPE'},{mapt:{rd:[48,2.1]}}],
+    'RNP Z RWY04':ent([{to:'JOTTO'},{to:'GOBIK'},{thr:'04'}]),
+    'RNP Z RWY22':{MASAN:[{at:'MASAN'}].concat(z22),DENSA:[{at:'DENSA'}].concat(z22)}}};})(),
+  // 与那国(IAC-1・2・7 2026-04-01)。LOC RWY26 は ISEKI(R022 D11)→ D11 アーク(時計回り)/ ABASA(R101 D14)→ D11 → D11 アーク(反時計回り)→ AGARI(IF・R078)→ YEELY(FAF)、
+  //   VOR RWY26 は同じ入口 → GOTOH(IF・R064)→ WADAH(FAF)→ MAPt(D2.0)、RNP Y RWY26 は ABASA → ANGAI(IF)→ YUUNA → YN650(MAPt)。RNP Z RWY26 / RWY08(AR)は書かない
+  ROYN:(()=>{const lz=[{to:'AGARI'},{to:'YEELY'},{thr:'26'}],vz=[{to:'GOTOH'},{to:'WADAH'},{mapt:{rd:[65,2]}}];
+    return {nav:{YNE:{lat:24.46492,lng:122.99774,var:5}},navId:'YNE',thr:{'08':[24.465103,122.970239],'26':[24.469692,122.989317]},
+    pts:{ANGAI:[24.519222,123.195961],YUUNA:[24.495128,123.095269],YN650:[24.473267,123.004192]},
+    mah:{'LOC RWY26':'ABASA','VOR RWY26':'ABASA','RNP Y RWY26':'ABASA'},iac:{
+    'LOC RWY26':{ISEKI:[{at:'ISEKI'},{arc:11,to:78,dir:'R'}].concat(lz),ABASA:[{at:'ABASA'},{to:{rd:[101,11]}},{arc:11,to:78,dir:'L'}].concat(lz)},
+    'VOR RWY26':{ISEKI:[{at:'ISEKI'},{arc:11,to:64,dir:'R'}].concat(vz),ABASA:[{at:'ABASA'},{to:{rd:[101,11]}},{arc:11,to:64,dir:'L'}].concat(vz)},
+    'RNP Y RWY26':[{at:'ABASA'},{to:'ANGAI'},{to:'YUUNA'},{mapt:'YN650'}]}};})(),
+  // 南大東(IAC-1・2・5・8 2026-04-01)。VOR RWY02 は MDE の待機から R219 → D8.0 以内で旋回 → SAYAK(FAF)→ MAPt(MDE)、VOR RWY20 は MDE → R007 → NACKY(FAF)→ MAPt(MDE)、
+  //   RNP Y RWY02 は WHALE → SHIGE → KOHJO(IF)→ JYUGO、RNP Y RWY20 は WHALE → KISHA → GATAN(IF)→ GOTON。RNP Z(AR)は書かない
+  ROMD:{nav:{MDE:{lat:25.85448,lng:131.26379,var:6}},navId:'MDE',thr:{'02':[25.839983,131.261461],'20':[25.853019,131.2655]},
+    pts:{SHIGE:[25.735839,131.152583],KOHJO:[25.717833,131.223664],JYUGO:[25.790256,131.246064],KISHA:[25.994133,131.232461],GATAN:[25.976081,131.303678],GOTON:[25.903672,131.281203]},
+    mah:{'VOR RWY02':'MDE','VOR RWY20':'MDE','RNP Y RWY02':'MDE','RNP Y RWY20':'MDE'},iac:{
+    'VOR RWY02':[{at:'MDE'},{to:{rd:[219,8]}},{to:'SAYAK'},{mapt:'MDE'}],
+    'VOR RWY20':[{at:'MDE'},{to:{rd:[7,8]}},{to:'NACKY'},{mapt:'MDE'}],
+    'RNP Y RWY02':[{at:'WHALE'},{to:'SHIGE'},{to:'KOHJO'},{to:'JYUGO'},{thr:'02'}],
+    'RNP Y RWY20':[{at:'WHALE'},{to:'KISHA'},{to:'GATAN'},{to:'GOTON'},{thr:'20'}]}},
   RJTC:{nav:{TNT:{lat:35.716569,lng:139.399494,var:8}},navId:'TNT',thr:{},pts:{},iac:{
     // 立川(IAC-1・2 2025-06-12)。どちらも IF から(CAT H / A・B)
     'TACAN RWY01':[{at:'ANOBU'},{to:'VALMO'},{mapt:{rd:[178,0.6]}}],
