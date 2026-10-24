@@ -638,3 +638,13 @@ hnav.ifrWind { d, s }   … 共通の風(前回値)   … 燃料・TASは飛行�
   索引の IAF が LUBEK になっている → 入口のキーで上書き)。RNP(AR)は書かない
 - `procOk`: 名前の "LP ONLY" に加えて "LPV only"(大小文字を問わない)も SBAS が要るとして外す(中標津 RNP W RWY26(LPV only))
 - 確認: 形のある飛行場の SID・進入(409本)の終点、24 経路で変化なし
+
+## v6-290 利尻・稚内の SID・進入の形
+- 利尻 RJER: RISHIRI REVERSAL THREE(RSE R035 → 4000 → RSE・8000)・LEDAX TWO / UBKUX ONE(RNAV・ER5xx/ER7xx は図の座標)。
+  LOC RWY25(ORISU / LEDAX → D12 アーク → ENRIT → MILPS)・VOR A(ORISU → D12 アーク → KANRO → RIPPU。索引の IAF の RSE は描かない)・
+  RNP RWY25(ORISU → ER550 / LEDAX・UBKUX → ER554 → ER551)・RNP Z RWY07(ORISU / LEDAX / UBKUX → ER773 → ER774)。RNP Y は "(LPV only)" で外す
+- 稚内 RJCW: PANKE TWO(R175 → PANKE 6000・URYU TRANSITION は WKE R175 D60 で 11000 → 与圧なしでは使わない)・RUMOI FIVE(R192)・
+  WAKKANAI REVERSAL ONE(R347 → 2500 → WKE・5000)・YOROI ONE(RNAV・9000)。ILS or LOC RWY08(WKE → R276 → HIGMA)・VOR RWY08(WKE → R273 → TALBA)・
+  VOR RWY26(WKE → R012 → D10 アーク → IKURA → UNIEY)・VOR A(WKE → R012 → LUIBE)。RNP(AR)は書かない。
+  ⚠ 10/29 の改正(ILS・VOR RWY08/26)は周回進入の制限と TALBA の高度制限だけで、形は 10/01 と同じ
+- 確認: 形のある飛行場の SID・進入(422本)の終点、24 経路で変化なし
