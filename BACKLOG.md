@@ -8,7 +8,8 @@ CLAUDE.mdから分離した「進行中・未着手タスク」。着手する�
 
 ## ★ 次にやること(2026-10-16 時点)
 1. **DIPS 本番: 2026-10-26 環境変更完了・10-27 設定通知書(R08-DRS-0228)受領**。`aip/_secrets/dips-vercel-env.txt` を本番の値(DIPS_ENV=prod)に更新済み・検証の値は `dips-vercel-env-stg.txt` に退避。
-   残り: 利用者が Vercel の中継に DIPS_ENV / DIPS_CLIENT_ID / DIPS_CLIENT_SECRET を入れて再デプロイ → 自分の DIPS アカウントでログイン・取得を確認。
+   ✅ **2026-10-27 Vercel(adsb-relay)の3変数を本番に差し替え・空コミットで再デプロイ → 本人の DIPS アカウントでログイン、計画・空域の取得を確認(本番で稼働)**。
+   残り: リフレッシュの実寿命の確認。検証の ID は DIPS 側でいずれ削除される
    (以下は経緯)**DIPS 本番の申請中**(2026-10-19 送信・10-20 回答: **本番の環境変更は 10/26(月)**、完了後に設定通知書。通報 API を本番で使わない旨は通知書に追記してくれる): 検証環境の動作確認完了報告+本番環境の新規申請(R08-DRS-0227 に記入・項4 は「同上」・
    本番では通報受付 API を使わないと本文に明記)。検証用の ID はしばらくして削除される。
    → 本番の Client ID/Secret が届いたら `aip/_secrets/dips-vercel-env.txt` を本番の値にして、Vercel の DIPS_ENV=prod・DIPS_CLIENT_ID・
