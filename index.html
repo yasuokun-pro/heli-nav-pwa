@@ -133,6 +133,7 @@
   .cell.fltbtns .btn:disabled{opacity:.38}
   .wp-pin{width:26px;height:26px;border-radius:50%;background:#fff;border:2.5px solid var(--mag);color:#8a0f7c;font-family:var(--mono);font-weight:700;font-size:13px;line-height:21px;text-align:center;box-shadow:0 1px 5px rgba(0,0,0,.55)}
   .wp-pin.dctOn{border-color:#0a7c8c;background:var(--cyn);color:#04222a}
+  .wp-pin.ldg{border-radius:6px;box-shadow:0 0 0 2px #38e07b,0 1px 5px rgba(0,0,0,.55)}   /* 一時着陸するポイント(ナビログの「着陸」) */
   .wp-pin.nextOn{border-color:#0e7c3d;background:var(--grn);color:#03270f;box-shadow:0 0 10px rgba(56,224,123,.9)}
   /* 移動できる状態(長押しで解錠)。触っただけでは動かないので、
      解錠したことが一目で分かるよう色と大きさを変える */
@@ -464,6 +465,8 @@
   .fav{background:none;border:1px solid var(--amb);color:var(--amb);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;margin-right:5px}
   .ins{background:none;border:1px solid var(--grn);color:var(--grn);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;margin-right:5px}
   .fav.on{background:var(--amb);color:#241500;opacity:1;cursor:default}
+  .ldgB{background:none;border:1px solid #38e07b;color:#38e07b;border-radius:4px;cursor:pointer;font-size:11px;padding:2px 7px;margin-right:5px}
+  .ldgB.on{background:#38e07b;color:#03270f;font-weight:600}
   /* 保存一覧は全画面(件数が千件を超えるのでポップアップでは見づらい)。IFR 計画と同じ作法 */
   #libModal{position:fixed;inset:0;z-index:2000;background:rgba(4,10,18,.85);display:none;align-items:stretch;justify-content:center}
   /* IMOC などの外部ページをアプリ内で開く全画面シート(v6-191) */
@@ -951,7 +954,7 @@
     <div class="emHd" id="dpHd"><b>DIPS ドローン飛行計画 <span class="emrFold">▾</span></b><span id="dpSum"></span><button id="dpOff">閉じる</button></div>
     <div id="dpBody">
       <div id="dpAuth"></div>
-      <div class="dpRow" id="dpQuery">範囲 <select id="dpWhere"><option value="rte">ルート沿い(±5NM)</option><option value="map">地図の表示範囲</option></select>
+      <div class="dpRow" id="dpQuery">範囲 <select id="dpWhere"><option value="land5">離着陸の周り 5NM</option><option value="land3">離着陸の周り 3NM</option><option value="land10">離着陸の周り 10NM</option><option value="rte">ルート沿い全部(±5NM)</option><option value="map">地図の表示範囲</option></select>
         時間 <select id="dpWhen"><option value="3">今から3時間</option><option value="today">今日</option><option value="tmr">明日</option></select>
         <button class="dpBtn main" id="dpGo">取得</button></div>
       <div id="dpMsg"></div>
@@ -1239,8 +1242,8 @@ const IMOC_AREA={"RJAA":2,"RJAF":4,"RJAH":2,"RJAI":2,"RJAK":2,"RJAM":3,"RJAN":3,
 /* データファイル(obst/sup)のキャッシュ更新用。sw.jsのVERと合わせて上げること。
    ⚠ 更新のたびに **sw.jsのVER / ここのVER_TAG / BUILD の3つ** を必ず一緒に直す。
      BUILD がずれると、フッターのクレジットが古い日付を出したままになる */
-const VER_TAG='v6-295';
-const BUILD='2026-10-24';
+const VER_TAG='v6-296';
+const BUILD='2026-10-27';
 
 /* ───────── PWA: Service Worker 登録と更新通知 ─────────
    ホーム画面に追加したアプリは、こちらが更新してもユーザーが気づけない
@@ -4120,9 +4123,25 @@ function dipsWindow(){
   const d0=dipsJst(new Date(now.getTime()+(v==='tmr'?86400e3:0))).slice(0,8);
   return {from:d0+' 0000',to:d0+' 2359'};
 }
-/* 探す範囲: ルート沿いは円を並べて左右5NMの帯を覆う(最大8円)。無ければ地図の表示範囲(半径27NMまで) */
+/* 探す範囲(v6-296・ユーザー要望):
+   既定は「離着陸の周り」= 出発・到着・途中の一時着陸(ナビログの「着陸」)の周り半径 3/5/10NM。
+   巡航中の低いドローンは影響が小さいので出さない。ただし経路沿い(±5NM)でも 150m(約500ft)以上を飛ぶ計画は出す
+   (離着陸の円の外は高い計画だけ残す → dipsKeep)。ルートが無ければ地図の表示範囲 */
+function dipsLandR(){const m=document.getElementById('dpWhere').value.match(/^land(\d+)$/);return m?+m[1]:0}
 function dipsCircles(){
-  if(document.getElementById('dpWhere').value==='rte'&&wps.length>=2){
+  const LR=dipsLandR();
+  if(LR&&wps.length){
+    const out=landPts().slice(0,8).map(w=>({lat:w.lat,lon:w.lng,r:LR,land:1}));
+    if(wps.length>=2)dipsRouteCircles().forEach(c=>out.push(c));   // 経路沿いの高い計画を拾うため
+    return out;
+  }
+  if(document.getElementById('dpWhere').value==='rte'&&wps.length>=2)return dipsRouteCircles();
+  const b=map.getBounds(),c=b.getCenter();
+  return [{lat:c.lat,lon:c.lng,r:Math.max(1,Math.min(27,distNM({lat:c.lat,lng:c.lng},{lat:b.getNorth(),lng:b.getEast()})))}];
+}
+/* 経路の左右5NMの帯を円で覆う(最大8円) */
+function dipsRouteCircles(){
+  {
     const seg=[];let L0=0;
     for(let i=0;i<wps.length-1;i++){const d=distNM(wps[i],wps[i+1]);seg.push([wps[i],wps[i+1],L0,d]);L0+=d}
     const n=Math.min(8,Math.max(2,Math.ceil(L0/8)+1)),step=L0/(n-1),r=Math.min(27,Math.sqrt(25+(step/2)**2));
@@ -4133,9 +4152,23 @@ function dipsCircles(){
     }
     return out;
   }
-  const b=map.getBounds(),c=b.getCenter();
-  return [{lat:c.lat,lon:c.lng,r:Math.max(1,Math.min(27,distNM({lat:c.lat,lng:c.lng},{lat:b.getNorth(),lng:b.getEast()})))}];
 }
+const DIPS_HI_M=150;   // 経路沿い(離着陸の円の外)でも出す高さ(m AGL)
+/* 計画が離着陸の円にかかるか(円の計画は半径ぶん、多角形は外接の大きさぶん広げて見る) */
+function dipsNearLand(x,LR){
+  const c=x.c?{lat:x.c[0],lng:x.c[1]}:L.polygon(x.p).getBounds().getCenter();
+  const ext=x.c?(x.r||0)/1852:(()=>{const b=L.polygon(x.p).getBounds();return distNM(b.getSouthWest(),b.getNorthEast())/2})();
+  return landPts().some(w=>distNM(c,w)-ext<=LR);
+}
+function dipsHigh(x){return (x.altM||0)>=DIPS_HI_M||(x.asp||[]).includes(2)}
+/* 表示する計画か: 離着陸モードでは円の中 or 高い計画だけ */
+function dipsKeep(x){const LR=dipsLandR();return !LR||!wps.length||dipsNearLand(x,LR)||dipsHigh(x)}
+/* ルートや一時着陸を変えたら、出していれば取り直す(連打を避けて少し待つ) */
+let dipsRtT=null;
+function dipsLandSig(){return dipsLandR()+'|'+landPts().map(w=>w.lat.toFixed(3)+','+w.lng.toFixed(3)).join(';')}
+function dipsRouteChanged(){
+  if(!dipsOn||!dipsLoggedIn()||!dipsLandR()||!dipsData||dipsData.sig===dipsLandSig())return;   // 離着陸の点が変わったときだけ
+  clearTimeout(dipsRtT);dipsRtT=setTimeout(dipsFetch,1500)}
 async function dipsCall(body){return relayPost('/api/dips',body)}
 async function dipsAccess(force){
   const t=dipsTok();if(!t)throw new Error('login');
@@ -4216,7 +4249,8 @@ async function dipsFetch(){
     const la=cs.reduce((s,c)=>s+c.lat,0)/cs.length,lo=cs.reduce((s,c)=>s+c.lon,0)/cs.length;
     const R=Math.min(27,Math.max(...cs.map(c=>distNM({lat:la,lng:lo},{lat:c.lat,lng:c.lon})+c.r)));
     areas=(await dipsApi({op:'areas',lat:la.toFixed(5),lon:lo.toFixed(5),r:R.toFixed(2),from:w.from,to:w.to})).areas||[];
-    dipsData={plans:[...plans.values()],areas,w,trunc};dipsAt=Date.now();
+    const all=[...plans.values()],keep=all.filter(dipsKeep);
+    dipsData={plans:keep,areas,w,trunc,hidden:all.length-keep.length,LR:dipsLandR(),sig:dipsLandSig(),lp:dipsLandR()&&wps.length?landPts().map(w=>[w.lat,w.lng]):[]};dipsAt=Date.now();
     dipsMsg(trunc?'⚠ 件数が多く一部だけ表示しています。範囲を狭めてください':'');
   }catch(e){dipsMsg(dipsErrText(e));if(!dipsTok())dipsData=null}
   finally{dipsBusy=false;dipsDraw();dipsRender()}
@@ -4239,6 +4273,8 @@ function dipsPlanPop(x){
 function dipsDraw(){
   dipsLayer.clearLayers();
   if(!dipsOn||!dipsData)return;
+  // 探した離着陸の円(どこを見たかが分かるように)
+  (dipsData.lp||[]).forEach(p=>L.circle(p,{radius:dipsData.LR*1852,color:'#c77dff',weight:1,dashArray:'2,6',fill:false,interactive:false}).addTo(dipsLayer));
   const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   dipsData.areas.forEach(a=>{
     const col=a.t===9?'#ff3b30':'#4dabf7',opt={color:col,weight:2,dashArray:a.t===9?null:'6,4',fillColor:col,fillOpacity:.1};
@@ -4275,12 +4311,12 @@ function dipsRender(){
   if(!li||!dipsData){sum.textContent='';list.innerHTML='';return}
   const P=dipsData.plans.slice().sort((a,b)=>(dipsTime(a.from)||0)-(dipsTime(b.from)||0));
   const nNow=P.filter(dipsPlanNow).length,ar=dipsData.areas;
-  sum.textContent=`計画 ${P.length}件`+(nNow?`(うち時間中 ${nNow})`:'')+(ar.length?` ・ 空域 ${ar.length}`:'')+
+  sum.textContent=`計画 ${P.length}件`+(nNow?`(うち時間中 ${nNow})`:'')+(dipsData.hidden?` ・ 巡航中の低い計画 ${dipsData.hidden}件は省略`:'')+(ar.length?` ・ 空域 ${ar.length}`:'')+
     ` ・ ${new Date(dipsAt).toTimeString().slice(0,5)}取得`;
   list.innerHTML=(ar.map((a,i)=>`<div class="dpIt" data-a="${i}"><span class="t">${dipsFmt(a.from)}〜</span>`+
       `<span style="color:${a.t===9?'#ff6b6b':'#74c0fc'}">${esc(a.tn)}: ${esc(a.nm)}</span><span></span></div>`).join('')+
     P.slice(0,60).map((x,i)=>`<div class="dpIt${dipsPlanNow(x)?' now':''}" data-p="${i}"><span class="t">${dipsFmt(x.from)}〜${dipsFmt(x.to).slice(-5)}</span>`+
-      `<span>${esc(x.nm||'(名称なし)')}<small style="color:var(--dim)"> ${esc((x.pur||[]).join('・'))}</small></span>`+
+      `<span>${dipsData.LR&&dipsData.lp.length&&!dipsNearLand(x,dipsData.LR)?'<small style="color:#ffb347">経路上・高い </small>':''}${esc(x.nm||'(名称なし)')}<small style="color:var(--dim)"> ${esc((x.pur||[]).join('・'))}</small></span>`+
       `<span class="a">${x.altM?Math.round(x.altM*3.281/10)*10+'ft':''}</span></div>`).join(''))||
     '<div style="color:var(--dim);font-size:12px;padding:6px 0">この範囲・時間に通報された計画はありません(DIPS に通報されたものの中では)</div>';
   list.querySelectorAll('.dpIt').forEach(el=>el.onclick=()=>{
@@ -4307,6 +4343,7 @@ document.getElementById('btnDips').onclick=()=>setDips(!dipsOn);
 document.getElementById('dpOff').onclick=e=>{e.stopPropagation();setDips(false)};
 document.getElementById('dpHd').addEventListener('click',e=>{if(e.target.id!=='dpOff')document.getElementById('dipsCard').classList.toggle('min')});
 document.getElementById('dpGo').onclick=dipsFetch;
+document.getElementById('dpWhere').onchange=()=>{if(dipsOn&&dipsLoggedIn())dipsFetch()};
 function openExtView(url,title){
   const v=document.getElementById('extView');
   document.getElementById('evTitle').textContent=title||'IMOC';
@@ -5498,18 +5535,26 @@ function bindWpPress(w){
   el.addEventListener('pointercancel',up);
 }
 function isSubWp(w){return /^\(.*\)$/.test((w&&w.name||'').trim())}   // 注記点(RCA等): 名前が (…)
-function wpIcon(num,on,next){return L.divIcon({className:'',html:`<div class="wp-pin${on?' dctOn':''}${next?' nextOn':''}">${num}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}
+function wpIcon(num,on,next,ldg){return L.divIcon({className:'',html:`<div class="wp-pin${on?' dctOn':''}${next?' nextOn':''}${ldg?' ldg':''}">${num}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}
 function syncWpIcons(){wps.forEach((w,k)=>{
   if(w.dragging)return; // ドラッグ中にsetIconすると要素が差し替わりドラッグが切れる
-  w.marker.setIcon(wpIcon(k+1,dctTarget===w,k===nextIdx));
+  w.marker.setIcon(wpIcon(k+1,dctTarget===w,k===nextIdx,!!w.ldg));
   w.armed=false;          // アイコンが作り直されるので解錠状態も戻す
   bindWpPress(w);         // ⚠ setIconで要素が差し替わりリスナーが消えるため必須
 })}
 
+/* ── ポイントの保存形式 [緯度,経度,名称(,区間距離の上書き(,一時着陸))] ──
+   5つ目の 1 = 途中で一時着陸するポイント(ナビログの「着陸」・DIPS をこの周りで出す)。古い形式(3〜4要素)もそのまま読める */
+function wpArr(w,rd){const a=[rd?+w.lat.toFixed(5):w.lat,rd?+w.lng.toFixed(5):w.lng,w.name];
+  if(w.dOv||w.ldg)a.push(w.dOv?(rd?+w.dOv.toFixed(1):w.dOv):0);if(w.ldg)a.push(1);return a}
+function wpFromArr(a){addWp(a[0],a[1],a[2]);const w=wps[wps.length-1];if(a[3])w.dOv=+a[3];if(a[4])w.ldg=true;return w}
+/* 離着陸するポイント: 出発・到着と、途中の一時着陸(w.ldg)。DIPS はこの周りだけ出す */
+function landPts(){return wps.filter((w,i)=>i===0||i===wps.length-1||w.ldg)}
+
 /* ── 元に戻す(ルート操作の履歴) ── */
 const undoStack=[];
 function pushUndo(){ // 変更前のルートを退避(追加/削除/移動/改名/並べ替え/読込/クリアの直前に呼ぶ)
-  const snap={wp:wps.map(w=>w.dOv?[w.lat,w.lng,w.name,w.dOv]:[w.lat,w.lng,w.name]),seq:wpSeq};
+  const snap={wp:wps.map(w=>wpArr(w)),seq:wpSeq};
   const top=undoStack[undoStack.length-1];
   // 変化が無いものは積まない(名称欄にフォーカスしただけ等で空振りが溜まる)
   if(top&&top.seq===snap.seq&&JSON.stringify(top.wp)===JSON.stringify(snap.wp))return;
@@ -5521,7 +5566,7 @@ function doUndo(){
   if(!undoStack.length)return;
   const s=undoStack.pop();
   clearDct();wps.forEach(w=>map.removeLayer(w.marker));wps.length=0;
-  s.wp.forEach(w=>{addWp(w[0],w[1],w[2]);if(w[3])wps[wps.length-1].dOv=+w[3]});
+  s.wp.forEach(wpFromArr);
   wpSeq=s.seq;nextIdx=0;redraw();
   const b=document.getElementById('btnUndo');if(b)b.disabled=!undoStack.length;
 }
@@ -5804,6 +5849,7 @@ function redraw(){
         <button class="dct${isDct?' on':''}">D→</button>
         <button class="fav${isFav(w.name)?' on':''}"${isFav(w.name)?' disabled':''}>★</button>
         ${i<wps.length-1?'<button class="ins" title="この区間に検索した地点を挿入">＋</button>':''}
+        ${i>0&&i<wps.length-1?`<button class="ldgB${w.ldg?' on':''}" title="ここで一時着陸する(DIPS のドローンをこの周りでも出す)">着陸</button>`:''}
         <button class="del">削除</button></td>`;
     // 下段: 名称 / FREQ / REMAIN類(残り値は右詰め)
     const b=document.createElement('tr');
@@ -5819,6 +5865,8 @@ function redraw(){
       if(dctTarget===w)clearDct();
       pushUndo();map.removeLayer(w.marker);wps.splice(i,1);redraw()};
     a.querySelector('.dct').onclick=()=>{dctTarget===w?clearDct():setDct(w)}; // 2回目で解除
+    const lb=a.querySelector('.ldgB');
+    if(lb)lb.onclick=()=>{pushUndo();w.ldg=!w.ldg;redraw()};
     const insBtn=a.querySelector('.ins');
     if(insBtn)insBtn.onclick=()=>openSearch(i); // 検索で選んだ地点をこの区間に挿入
     a.querySelector('.fav').onclick=function(){ // 確認なし・即強調(地図ポップアップと連動)
@@ -5844,6 +5892,7 @@ function redraw(){
   document.getElementById('dEte').textContent=(!anyBad&&totH>0)?fmtHM(totH):'--:--';
   rteTotH=(!anyBad&&totH>0)?totH:0;
   try{ntmRouteChanged()}catch(_){}                 // NOTAM の影響度を判定し直す(読み込み前は NTM が未定義で飛ばす)
+  try{dipsRouteChanged()}catch(_){}                // DIPS: 離着陸の点が変わったら取り直す
   document.getElementById('dEta').textContent=(!anyBad&&totH>0)?hm(new Date(Date.now()+totH*3600e3)):'--:--';
   const req=(!anyBad&&num('ff')>0)?totF:0;
   document.getElementById('dReq').innerHTML=req.toFixed(0)+' <small>lbs</small>';
@@ -5885,11 +5934,11 @@ document.getElementById('btnClear').onclick=()=>{ // 誤消去防止のため確
 document.getElementById('btnRev').onclick=()=>{
   if(wps.length<2){alert('ポイントが2つ以上必要です');return}
   pushUndo();
-  const snap=wps.map(w=>[w.lat,w.lng,w.name]).reverse();
+  const snap=wps.map(w=>[w.lat,w.lng,w.name,0,w.ldg?1:0]).reverse();
   const dctName=dctTarget&&dctTarget.isWp?dctTarget.name:null;
   clearDct();
   wps.forEach(w=>map.removeLayer(w.marker));wps.length=0;
-  snap.forEach(s=>addWp(s[0],s[1],s[2]));
+  snap.forEach(wpFromArr);
   nextIdx=0;                       // 復路の先頭から案内し直す
   if(dctName){const t=wps.find(w=>w.name===dctName);if(t)setDct(t)}
   redraw();
@@ -6381,14 +6430,15 @@ function routeObj(){
   return {v:1,
     set:{tas:num('tas'),wDir:num('wDir'),wSpd:num('wSpd'),varW:num('varW'),ff:num('ff'),fob:num('fob')},
     // 4つ目は区間距離の上書き(SIDの経路長など。IFR計画の「地図に反映」が入れる)。無ければ直線距離
-    wp:wps.map(w=>w.dOv?[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name,+w.dOv.toFixed(1)]:[+w.lat.toFixed(5),+w.lng.toFixed(5),w.name])};
+    // 5つ目は途中の一時着陸(1)
+    wp:wps.map(w=>wpArr(w,true))};
 }
 function saveState(){store.set('hnav.route',routeObj())}
 function loadRouteObj(o,fit){
   if(!o||!Array.isArray(o.wp))throw new Error('bad');
   if(wps.length)pushUndo();
   clearAllWp();
-  o.wp.forEach(w=>{addWp(w[0],w[1],w[2]);if(w[3])wps[wps.length-1].dOv=+w[3]});
+  o.wp.forEach(wpFromArr);
   if(o.set){['tas','wDir','wSpd','varW','ff','fob'].forEach(k=>{
     if(k==='varW'&&varAuto)return; // AUTO時は保存値を使わずルート位置から推定する
     if(o.set[k]!==undefined)document.getElementById(k).value=o.set[k]})}
