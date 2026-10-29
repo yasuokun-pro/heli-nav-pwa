@@ -11,6 +11,8 @@ OVERRIDE で正確な形状に補正する(natl_ctr.json は素材データ)。
 その後  python3 tools/gen_asp.py --splice で index.html に反映。
 """
 import re, glob, os, json, subprocess, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from aip_pick import pick
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -54,7 +56,7 @@ def main():
             for mm in re.finditer(r"n:'([^']+)',icao:'([A-Z]{4})'", m.group(1)):
                 names[mm.group(2)] = mm.group(1)
     rows = []
-    for pdf in sorted(glob.glob(d + '/*.pdf')):
+    for pdf in pick(glob.glob(d + '/*.pdf')):   # 飛行場ごとに1版
         icao = os.path.basename(pdf).split('__')[0]
         if icao in KANTO: continue
         txt = subprocess.run(['pdftotext','-layout',pdf,'-'], capture_output=True, text=True).stdout

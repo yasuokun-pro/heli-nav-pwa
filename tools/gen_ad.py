@@ -24,6 +24,8 @@
 AIRAC更新のたびに再実行して件数の差分を見る。
 """
 import re, os, sys, glob, json, subprocess
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from aip_pick import pick
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -168,7 +170,7 @@ def main():
     for k, v in gen24_names(base).items(): jp.setdefault(k, v)
     out, seen = [], set()
     for sec, sub in ((2, 'AD2_Combine'), (3, 'AD3')):
-        for pdf in sorted(glob.glob(os.path.join(base, sub, '*.pdf'))):
+        for pdf in pick(glob.glob(os.path.join(base, sub, '*.pdf'))):   # 飛行場ごとに1版
             r = parse(pdf, sec)
             if not r or r['icao'] in seen: continue
             seen.add(r['icao'])

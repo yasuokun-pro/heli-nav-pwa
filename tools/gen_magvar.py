@@ -14,6 +14,8 @@ index.html の MAGV_C に手で貼り替える(数値6個だけなので自動�
 AIRAC更新で偏差がずれてきたら再実行して係数を更新する(年あたり数分角ずつ動く)。
 """
 import re, glob, os, json, subprocess, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from aip_pick import pick
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -30,7 +32,7 @@ def main():
     if not base:
         print('AD2_Combine が見つかりません', file=sys.stderr); sys.exit(1)
     pts = []
-    for pdf in sorted(glob.glob(base + '/*.pdf')):
+    for pdf in pick(glob.glob(base + '/*.pdf')):   # 飛行場ごとに1版
         icao = os.path.basename(pdf).split('__')[0]
         txt = subprocess.run(['pdftotext', '-layout', pdf, '-'], capture_output=True, text=True).stdout
         a = re.search(r'ARP coordinates.*?(\d{6}(?:\.\d+)?)N[ /]*(\d{7}(?:\.\d+)?)E', txt)

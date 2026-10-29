@@ -22,7 +22,9 @@ ILS の最終進入経路 生成 (ils.json)
 出力: {eff, src, ils:[{icao, rwy, id, f, ang, rdh, elev, crs(真方位・進入機の向き), thr:[lat,lng], loc:[lat,lng], gpOff(m)}]}
 使い方: python3 tools/gen_ils.py
 """
-import os, re, json, glob, subprocess, math
+import os, re, sys, json, glob, subprocess, math
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from aip_pick import pick
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AIP_ROOT = os.path.normpath(os.path.join(HERE, '..', 'aip'))   # ⚠ .gitignore 済み・公開リポジトリには入れない
@@ -37,7 +39,7 @@ def pdfs():
     f = sorted(glob.glob(AIP_ROOT + '/1_AIP (PDF)/*/AD2_Combine/*.pdf'))
     if not f: return [], ''
     latest = max(os.path.basename(os.path.dirname(os.path.dirname(x))) for x in f)
-    return [x for x in f if os.path.basename(os.path.dirname(os.path.dirname(x))) == latest], latest
+    return pick([x for x in f if os.path.basename(os.path.dirname(os.path.dirname(x))) == latest]), latest   # 飛行場ごとに1版
 
 
 def dms(v, is_lon):

@@ -1364,7 +1364,7 @@ function num(id){return parseFloat(document.getElementById(id).value)||0}
    日本域(北緯24-46/東経123-146)で最大誤差1.1°・RMS0.39°。
    AIP値自体が1°刻みの丸めなので実用上は十分だが、正確な値は必ずAIP/チャートで確認すること。
    AIRAC更新時に大きくずれてきたら係数を再フィットする(tools/gen_magvar.py) */
-const MAGV_C=[8.212986,-0.072554,0.277882,-0.007383,-0.006804,0.008722];
+const MAGV_C=[8.212731,-0.073258,0.278445,-0.007520,-0.006615,0.008663];
 function magVarAt(lat,lng){
   const x=lng-137.0,y=lat-36.0,c=MAGV_C;
   return c[0]+c[1]*x+c[2]*y+c[3]*x*x+c[4]*x*y+c[5]*y*y;
