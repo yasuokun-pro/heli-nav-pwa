@@ -72,7 +72,8 @@ def main():
         o = next((x for x in R['f'] if x['n'] == f['n'] or re.sub(r'\s*\([^)]*\)\s*$', '', x['n']) == f['n']), f)
         if (o['up'], o['lo']) != (f['up'], f['lo']): print('  上下限が変わる:', f['n'], (o['lo'], o['up']), '→', (f['lo'], f['up']))
     if '--write' in sys.argv:
-        R['f'] = out; R['src'] = R.get('src', '') + ' + 形状は SWIM AIP データ配信(AIXM 5.1.1) ' + D['src'].replace('.xml', '')
+        # 回すたびに出典が継ぎ足されないよう、前の「+ 形状は…」を落としてから付ける
+        R['f'] = out; R['src'] = R.get('src', '').split(' + 形状は')[0] + ' + 形状は SWIM AIP データ配信(AIXM 5.1.1) ' + D['src'].replace('.xml', '')
         json.dump(R, open(os.path.join(ROOT, 'res.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
         print('res.json を更新')
 

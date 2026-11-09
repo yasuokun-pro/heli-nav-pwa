@@ -69,8 +69,9 @@ def main():
     at = (sys.argv[sys.argv.index('--at') + 1] if '--at' in sys.argv else datetime.date.today().isoformat()) + 'T00:00:00Z'
     src = sorted(glob.glob(os.path.join(ROOT, 'aip', 'aixm_dist', 'AIXM_ALL_*.xml')))[-1]
     cache = os.path.join(ROOT, 'aip', 'aixm_dist', 'obst_aixm.json')
-    if os.path.exists(cache) and os.path.getmtime(cache) > os.path.getmtime(src) and '--fresh' not in sys.argv:
-        O = json.load(open(cache))['o']; kinds = {}
+    c = json.load(open(cache)) if os.path.exists(cache) and '--fresh' not in sys.argv else {}
+    if c.get('src') == os.path.basename(src) and c.get('at') == at:  # 同じ全件・同じ日の版のときだけ使い回す
+        O = c['o']; kinds = {}
     else:
         O, kinds = extract(src, at)
         json.dump({'src': os.path.basename(src), 'at': at, 'o': O}, open(cache, 'w'), separators=(',', ':'))

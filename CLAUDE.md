@@ -534,7 +534,12 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
    AIXM の差分が VM に届いていれば: scp で `aip/aixm_dist/` へ → `aixm_extract.py` → `--at <発効日>` を付けて
    `gen_aca_aixm --write` / `gen_asp_aixm --splice`(gen_asp の後)/ `gen_civ_aixm --write` / `gen_tra_aixm --write` / `gen_res_aixm --write` / `gen_jsdfa_aixm --write`
    「AIP に関する地図表示用データ」(Shapefile・AIRAC ごとにメールで案内)を `aip/geo/<日付>/` に展開してあれば `gen_geo`(geo.json)
-   ⚠ 今は**初回全件しか無い**。差分(PERMDELTA)を全件に当てる処理は未実装(差分が届いたら作る)。それまでは全件の BASELINE の日付で切り替わる
+   **差分(AIXM_DIFF_*)は `tools/aixm_apply_diff.py` で全件に当ててから**回す(v6-298・2026-11-09)。VM の zip をそのまま `aip/aixm_dist/` に置けば中の xml を取り出し、
+   差分の地物で全件の同じ地物を丸ごと置き換えて `AIXM_ALL_<差分の日時>.xml` を作る(生成器は最新の AIXM_ALL を読む)。差分の地物は**全部の版を持ち直している**
+   (前の BASELINE の終わりも書き換わる)のでプロパティ単位の継ぎ足しは要らない。最初の差分 AIXM_DIFF_20261014044829 は 10/29 と 11/26 の両方の改正を含む
+   (10/29: 中部・関西 ACA・高高度訓練空域 H・障害物 +14(福井の風車12基ほか)/ 11/26: FIX 19点・ISK の LOC・航空路12区間など)。**`--at` で発効日を必ず指定**
+   ⚠⚠ **VM の受信は黙って止まることがある**(10/14〜11/9。TCP は ESTAB のまま何も来なかった。再起動した瞬間に届いた)。AIP 発行の配信日(発効の2週間前)を過ぎても
+   届いていなければ `sudo systemctl restart aipdist`
    ⚠ `gen_proc`/`gen_tomin` は日付フォルダをまたいで glob していて**2サイクル分が混ざった**。最新フォルダだけに直した
    ⚠ `gen_aca`(aca.json)と `gen_tca` は図の読み取り結果を固定で持っているので回さない。
      AD 2.17 の**添付図**が変わったかは目視で確認する(本文の差分は下の方法で機械的に出せる)
