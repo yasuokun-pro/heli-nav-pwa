@@ -539,7 +539,11 @@ Maps JS APIは月1万ロードまで無料)。ユーザーは当面地理院タ�
    (前の BASELINE の終わりも書き換わる)のでプロパティ単位の継ぎ足しは要らない。最初の差分 AIXM_DIFF_20261014044829 は 10/29 と 11/26 の両方の改正を含む
    (10/29: 中部・関西 ACA・高高度訓練空域 H・障害物 +14(福井の風車12基ほか)/ 11/26: FIX 19点・ISK の LOC・航空路12区間など)。**`--at` で発効日を必ず指定**
    ⚠⚠ **VM の受信は黙って止まることがある**(10/14〜11/9。TCP は ESTAB のまま何も来なかった。再起動した瞬間に届いた)。AIP 発行の配信日(発効の2週間前)を過ぎても
-   届いていなければ `sudo systemctl restart aipdist`
+   届いていなければ `sudo systemctl restart aipdist`。
+   → **見張り `tools/aip-dist/watch.py`(VM の systemd timer・3時間ごと)が自動でやる**(2026-11-09): 24時間ごとにつなぎ直し、次の発効日の12日前を過ぎて
+   その版(publication = 発効の前日 15:00Z)が無ければ再起動して通知、受信プログラムの停止・エラーも通知、新しい版が届いたら通知。
+   通知は ntfy.sh(無料・登録不要)。トピック名は VM の /etc/aipdist/env の AIPD_NTFY だけ(**リポジトリに書かない**)。利用者は iPhone の ntfy アプリで購読。
+   入れ方は `setup-watch.sh`。状態は `/var/lib/aipdist/watch.json`、手動確認は `sudo aipdist-watch`(`--test` で試験通知)
    ⚠ `gen_proc`/`gen_tomin` は日付フォルダをまたいで glob していて**2サイクル分が混ざった**。最新フォルダだけに直した
    ⚠ `gen_aca`(aca.json)と `gen_tca` は図の読み取り結果を固定で持っているので回さない。
      AD 2.17 の**添付図**が変わったかは目視で確認する(本文の差分は下の方法で機械的に出せる)
