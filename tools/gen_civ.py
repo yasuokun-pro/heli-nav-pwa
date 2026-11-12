@@ -25,6 +25,7 @@
 AIRAC更新のたびに再実行し、区画数と上限高度の差分を確認すること。
 """
 import re, os, sys, glob, subprocess, json, math
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from aip_pick import part  # noqa: E402
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -184,7 +185,7 @@ def main():
     for pat in (AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf',
                 AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
-        if f: pdf = f[-1]; break
+        if f: pdf = part(f); break
     if not pdf:
         print('ENRのPDFが見つかりません', file=sys.stderr); sys.exit(1)
     txt = subprocess.run(['pdftotext', '-layout', pdf, '-'],

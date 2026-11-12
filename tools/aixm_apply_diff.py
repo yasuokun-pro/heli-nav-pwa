@@ -43,8 +43,10 @@ def unzip_new():
             zf = zipfile.ZipFile(z)
         except zipfile.BadZipFile:
             continue
-        for n in zf.namelist():
-            b = os.path.basename(n)
+        for i in zf.infolist():
+            n, b = i.filename, os.path.basename(i.filename)
+            if i.flag_bits & 1:  # SWIM のダウンロードに入っている全件はパスワード付き(SD 利用者限定)。VM で受けたもので足りる
+                continue
             if re.match(r'AIXM_(ALL|DIFF)_\d{14}\.xml$', b) and not os.path.exists(os.path.join(DIR, b)):
                 print('取り出し', os.path.basename(z), '→', b)
                 with zf.open(n) as s, open(os.path.join(DIR, b), 'wb') as d:

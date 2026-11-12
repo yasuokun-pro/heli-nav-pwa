@@ -32,6 +32,7 @@
     ⚠ "← 6000 5000 →" は方向別 MEA。大きい方を mea にして rmk に両方残す
 """
 import os, re, sys, json, glob, subprocess
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from aip_pick import part  # noqa: E402
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -46,7 +47,7 @@ def find_pdf():
     iss = sys.argv[sys.argv.index('--airac') + 1] if '--airac' in sys.argv else '*'
     for pat in (AIP_ROOT + f'/1_AIP (PDF)/{iss}/ENR_*.pdf',):
         f = sorted(glob.glob(os.path.expanduser(pat)))
-        if f: return f[-1]
+        if f: return part(f)
     return None
 
 
@@ -122,18 +123,39 @@ def parse_31(L):
                 if span[j] == PAGE: break
                 if trk(span[j]) is not None: seg['rmag'] = trk(span[j]); break
         pb = False
+        # ⚠ 表の桁はページごとに違う。'----'(方位の区切り)の桁はふつう 33〜36 で、距離はその 5〜10 桁右。
+        #   20261126 版は表が5桁右にずれたページがあり('----' が桁 38)、固定の 38〜46 では
+        #   ①方位(239/056)が距離に足され(A590 PASRO–PUGAL 330 → 625) ②桁 47 の距離を落とした。
+        #   ページ(PAGE で区切った塊)ごとに '----' の桁から距離の列を決め、'----' と同じ桁の3桁の数(方位)は距離にしない
+        def dash_of(ls):
+            for l in ls:
+                if l != PAGE and '----' in l[28:47]: return l.index('----', 28)
+            return None
+        chunks, c = [], []
         for l in lines:
-            if l == PAGE: pb = True; continue
+            if l == PAGE: chunks.append(c); c = []
+            else: c.append(l)
+        chunks.append(c)
+        d0 = dash_of(span)
+        dash_at = []
+        for c in chunks: dash_at.append(dash_of(c) if dash_of(c) is not None else d0)
+        ci = 0
+        for l in lines:
+            if l == PAGE: pb = True; ci += 1; continue
+            dc = dash_at[ci]
+            # '----' が見当たらない区間(点の名前の行に乗っている A590 ONASU–OYAMA の 83 は桁 47)は 38〜47
+            dlo, dhi = (dc + 5, dc + 10) if dc is not None else (38, 47)
             for tok in re.finditer(r'\bFL(\d{2,3})\b|(?<![\d.])(\d{1,5}(?:\.\d)?)(?![\d.°\'])', l):
                 col = tok.start()
                 if tok.group(1):
                     if 50 <= col <= 68: seg.setdefault('mea', 'FL'+tok.group(1))
                 else:
                     v = float(tok.group(2))
+                    if dc is not None and '----' not in l and re.fullmatch(r'\d{3}', tok.group(2)) and abs(col - dc) <= 1: continue
                     if v >= 1000 and 52 <= col <= 68 and 'mea' not in seg: seg['mea'] = int(v)
-                    # ⚠ 距離の列は桁 40〜45。桁 48〜50 は CHANGE-OVER POINT(COP)の距離("113 ---- 80")で、
-                    #   以前は 40〜52 で拾って COP を区間距離にしていた(V31 AZUMI–OWARI)
-                    elif v < 400 and 38 <= col <= 46:
+                    # ⚠ 距離の列は '----' の 5〜10 桁右(ふつう桁 40〜45)。その右(桁 48〜50)は CHANGE-OVER POINT(COP)の距離
+                    #   ("113 ---- 80")で、以前は 40〜52 で拾って COP を区間距離にしていた(V31 AZUMI–OWARI)
+                    elif v < 400 and dlo <= col <= dhi:
                         # ⚠ 区間がページをまたぐと同じ距離が両方のページに載る(A1 KAGOSHIMA–KAZAN 31 / 31)。足さない
                         if not (pb and seg.get('_dc') and seg['_dc'][-1] == v): seg.setdefault('_dc', []).append(v)
                         pb = False
@@ -459,6 +481,14 @@ def main():
     pdf = find_pdf()
     if not pdf: print('ENRのPDFが無い', file=sys.stderr); sys.exit(1)
     txt = subprocess.run(['pdftotext', '-layout', pdf, '-'], capture_output=True, text=True).stdout
+    # ⚠ 20261126 版の ENR 3.1 は座標の数字の間に空白が入る("33 2651.87N/135 4740.18E"・"301557.15N/127 4 2 2 4 .9 5 E")。
+    #   読めずに 29経路が空になり、ほかにも 50点ほど落ちた。1文字ずつの空白を許して拾い、詰めて座標の形になるものだけ直す。
+    #   詰めた分の空白は座標の後ろに回す(後ろの欄の桁をずらさない)
+    def _join(m):
+        s = m.group(0); j = s.replace(' ', '')
+        if not re.fullmatch(r'\d{6}(?:\.\d+)?N/\d{7}(?:\.\d+)?E', j): return s
+        return j + ' ' * (len(s) - len(j))
+    txt = re.sub(r'(?<![\d.])\d(?: ?[\d.]){5,9} ?N/\d(?: ?[\d.]){6,10} ?E', _join, txt)
     L31 = cut(txt, r'ENR 3\.1 LOWER ATS ROUTES', r'ENR 3\.2 UPPER ATS ROUTES')
     L33 = cut(txt, r'ENR 3\.3 RNAV', r'ENR 3\.4 HELICOPTER')
     L35 = cut(txt, r'ENR 3\.5 OTHER ROUTES', r'2\. Oceanic Transition routes')
