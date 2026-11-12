@@ -29,6 +29,7 @@
 使い方: python3 tools/gen_res.py
 """
 import re, os, sys, math, glob, json, subprocess
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from aip_pick import part  # noqa: E402
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -91,7 +92,7 @@ def latest():
     for pat in (AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf',
                 AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'):
         f = sorted(glob.glob(os.path.expanduser(pat)))
-        if f: return f[-1]
+        if f: return part(f)
     return None
 
 def cut(t, a, b):

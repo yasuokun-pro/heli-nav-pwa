@@ -25,7 +25,8 @@ AIRAC更新のたびに再実行して件数の差分を見る。
 """
 import re, os, sys, glob, json, subprocess
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from aip_pick import pick
+from aip_pick import pick, part
+
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -41,7 +42,7 @@ def gen24_names(base):
        AD2/AD3は英名しか持たないので、ここが唯一のまとまった和名源"""
     f = glob.glob(os.path.join(base, 'GEN_*.pdf'))
     if not f: return {}
-    t = subprocess.run(['pdftotext', '-layout', f[0], '-'],
+    t = subprocess.run(['pdftotext', '-layout', part(f), '-'],
                        capture_output=True, text=True).stdout
     m = {}
     for ln in t.split('\n'):

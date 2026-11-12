@@ -31,3 +31,18 @@ def pick(files):
         ok = [x for x in v if x[0] <= iss]
         out.append((ok[-1] if ok else v[0])[1])
     return out
+
+
+def part(files):
+    """ENR_/GEN_/AD1_ のような「部」の PDF(1発行に1つ)を選ぶ。**一番新しい日付フォルダ**の中で、ファイル名の日付 ≤ フォルダの日付 の最新
+    ⚠ 20261126 版には ENR_20261126 と ENR_20261201(12/1 から有効)が並ぶ(20261029 版の GEN_20261101 も同じ)。
+      sorted()[-1] だと**未来の版**を読む。glob の f[0] は並びが保証されない"""
+    by = {}
+    for f in files:
+        m = re.search(r'/(\d{8})/[^/]*?_(\d{8})\.pdf$', f.replace(os.sep, '/'))
+        if m: by.setdefault(m.group(1), []).append((m.group(2), f))
+    if not by: return sorted(files)[-1] if files else None
+    iss = max(by)
+    v = sorted(by[iss])
+    ok = [x for x in v if x[0] <= iss]
+    return (ok[-1] if ok else v[0])[1]

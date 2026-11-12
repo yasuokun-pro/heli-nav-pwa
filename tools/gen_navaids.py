@@ -16,6 +16,7 @@ AIRAC更新時: 新PDFで ENR 4.1 を pdftotext -layout し、下の PDF/範囲�
 同一IDのVOR+DMEは VOR/DME に統合する。
 """
 import re, json, sys, os, subprocess, glob
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from aip_pick import part  # noqa: E402
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -24,7 +25,7 @@ def find_pdf():
     for base in (AIP_ROOT + '/1_AIP (PDF)',AIP_ROOT + '/1_AIP (PDF)'):
         cands+=sorted(glob.glob(os.path.expanduser(base)+'/*/ENR_*.pdf'))
     cands=sorted(cands,key=os.path.basename)
-    return cands[-1] if cands else None
+    return part(cands) if cands else None
 
 def dms(v):
     # 度分秒は小数点が無い表記(例: 352644N)もあるため \d+(\.\d+)? で両対応する

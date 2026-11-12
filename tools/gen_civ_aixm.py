@@ -15,6 +15,7 @@
 import os, sys, json, re, glob, datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from aixm_geom import active, sections, rings_ll
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from aip_pick import part  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 RG = {'HK': '北海道', 'TH': '東北', 'KK': '関東/甲信越', 'CK': '中部/近畿', 'CS': '中国/四国', 'KS': '九州', 'SM': '下地島'}
@@ -34,7 +35,7 @@ def pdf_fac():
     pdfs = sorted(glob.glob(os.path.join(ROOT, 'aip', '1_AIP (PDF)', '*', 'ENR_*.pdf')))
     if not pdfs: return {}
     out = {}
-    with pdfplumber.open(pdfs[-1]) as pdf:
+    with pdfplumber.open(part(pdfs)) as pdf:
         for pg in pdf.pages:
             if 'ENR 5.3-' not in (pg.extract_text() or '')[:80]: continue
             for t in pg.extract_tables():

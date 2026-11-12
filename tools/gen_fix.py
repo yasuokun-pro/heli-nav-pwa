@@ -24,6 +24,7 @@ FIX(重要地点) 生成 (fix.json)
   - 見出しの POINT(REPORTING POINT) や AIP/Civil/ENR の行は名前ではないので除く
 """
 import os, re, sys, json, glob, subprocess, collections
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from aip_pick import part  # noqa: E402
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -57,7 +58,7 @@ def find_pdf():
     want = sys.argv[sys.argv.index('--airac')+1] if '--airac' in sys.argv else None
     f = sorted(glob.glob(AIP_ROOT + '/1_AIP (PDF)/*/ENR_*.pdf'))
     if want: f = [x for x in f if want in x]
-    return f[-1] if f else None
+    return part(f) if f else None
 
 
 def dms(v, is_lon):

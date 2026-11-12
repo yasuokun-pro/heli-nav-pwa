@@ -21,6 +21,7 @@ ICAO位置指示記号を持たないので `ad.json`(AD2/AD3)には入らない
 使い方: python3 tools/gen_hp.py
 """
 import re, os, sys, glob, json, subprocess
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from aip_pick import part  # noqa: E402
 # AIP一式の置き場(SWIMから落としたもの)。⚠ .gitignore 済み・公開リポジトリには入れない
 AIP_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aip'))
 
@@ -31,7 +32,7 @@ def dms(la, lo):
 
 def latest(pat):
     f = sorted(glob.glob(os.path.expanduser(pat)))
-    return f[-1] if f else None
+    return part(f) if f else None
 
 
 def txt(pdf):
